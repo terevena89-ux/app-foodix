@@ -9,7 +9,7 @@ const CACHE = "foodix-v0.1.0";
 // Fichiers de l'appli à garder dès l'installation
 const FICHIERS = [
   "./", "index.html", "style.css", "app.js", "pixel.js", "excel-style.js", "firebase-config.js",
-  "manifest.json", "icones/icone.svg", "icones/icone-maskable.svg"
+  "manifest.json", "icones/icone.svg", "icones/icone-192.png", "icones/icone-512.png"
 ];
 
 // IMPORTANT : GitHub autorise le téléphone à garder chaque fichier 10 minutes

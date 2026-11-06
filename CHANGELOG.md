@@ -8,4 +8,4 @@ Première version (squelette), reconstruite à partir du prototype « Carnet de 
 - Fiche recette en mini pop-up : étiquettes, prix / difficulté / temps / maîtrise, ingrédients, bouton Favori.
 - Réglages : thème Auto / Clair / Sombre, animations Complètes / Simples, export / import Excel, compte, synchro, version.
 - Mode démo (adresse finissant par `?demo`) pour tester sans toucher aux vraies données.
-- Icône provisoire (bol pixel art + tampon).
+- Icône provisoire (bol pixel art + tampon), en SVG et PNG pour Android.
