@@ -1,0 +1,178 @@
+/* =========================================================
+   Foodix — apparence « B · Compact » :
+   onglets en haut, lignes serrées, petites icônes, fiche au centre.
+   Les couleurs sont des « variables » (--fond, --encre…) :
+   le thème sombre ne fait que les redéfinir.
+   ========================================================= */
+
+:root {
+  --fond: #FAFAF7;       /* fond de l'écran */
+  --carte: #FFFFFF;      /* fiches, champs */
+  --creux: #F0F1EC;      /* zones légèrement enfoncées */
+  --encre: #1F2420;      /* texte */
+  --discret: #6A716B;    /* texte secondaire */
+  --trait: #E4E6DF;      /* traits fins */
+  --accent: #2D6A4C;     /* vert basilic */
+  --accent-encre: #FFFFFF;
+  --accent-doux: #E2EEE5;
+  --fav: #C8691C;        /* carotte : favoris */
+  --fav-doux: #F8E6D4;
+  --danger: #B3261E;
+  --voile: rgb(10 20 14 / .45);
+  --titres: "Bricolage Grotesque", system-ui, sans-serif;
+  --texte: "Nunito Sans", system-ui, sans-serif;
+  color-scheme: light;
+}
+/* Sombre « ardoise + pastel » commun à mes applis */
+:root[data-theme="sombre"] {
+  --fond: #171C24;
+  --carte: #1F2531;
+  --creux: #262D3B;
+  --encre: #DFE4EC;
+  --discret: #8B95A7;
+  --trait: #2B3342;
+  --accent: #A3BD7C;
+  --accent-encre: #1A2A0C;
+  --accent-doux: #28332A;
+  --fav: #D9A08A;
+  --fav-doux: #3A2B26;
+  --danger: #F2B8B5;
+  --voile: rgb(5 8 12 / .6);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0 auto; max-width: 640px; min-height: 100vh;
+  background: var(--fond); color: var(--encre);
+  font: 14px/1.35 var(--texte);
+  -webkit-tap-highlight-color: transparent;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.px { image-rendering: pixelated; display: block; flex-shrink: 0; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- En-tête et onglets ---------- */
+header {
+  position: sticky; top: 0; z-index: 2; background: var(--fond);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 6px; }
+.titre { min-width: 0; }
+.hd h1 { font: 800 18px/1.15 var(--titres); margin: 0; letter-spacing: -.01em; }
+.sub { font-size: 12px; color: var(--discret); }
+.sub:empty { display: none; }
+.ib { border: 0; background: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; color: var(--discret); flex-shrink: 0; }
+.ib:active { background: var(--creux); }
+.tabs { display: flex; gap: 2px; margin: 0 12px 8px; background: var(--creux); padding: 3px; border-radius: 9px; }
+.tabs button { flex: 1; border: 0; background: none; padding: 6px 0; border-radius: 7px; font-weight: 700; font-size: 13px; color: var(--discret); display: flex; align-items: center; justify-content: center; gap: 5px; }
+.tabs button.on { background: var(--carte); color: var(--encre); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.tabs .ic { width: 15px; height: 15px; }
+
+main { padding: 0 12px calc(24px + env(safe-area-inset-bottom, 0px)); }
+.vide { text-align: center; color: var(--discret); padding: 48px 16px; }
+.vide .btn { margin-top: 14px; }
+
+/* ---------- Boutons, pastilles, champs ---------- */
+.btn { border: 1px solid var(--trait); background: var(--carte); border-radius: 7px; height: 32px; padding: 0 12px; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-encre); }
+.btn:disabled { opacity: .55; }
+.btn .ic { width: 16px; height: 16px; }
+.chip { border: 1px solid var(--trait); background: var(--carte); border-radius: 7px; height: 28px; padding: 0 8px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--discret); flex-shrink: 0; }
+.chip .ic { width: 14px; height: 14px; }
+.chip.on { background: var(--accent-doux); border-color: var(--accent); color: var(--accent); }
+/* Liste déroulante habillée en pastille */
+select.chip { appearance: none; -webkit-appearance: none; padding-right: 22px; field-sizing: content; max-width: 160px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 11px center, right 7px center; background-size: 4px 4px; background-repeat: no-repeat; }
+.defile { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px 8px; padding: 2px 12px 4px; }
+.defile::-webkit-scrollbar { display: none; }
+.cherche { display: flex; align-items: center; gap: 8px; border: 1px solid var(--trait); background: var(--carte); border-radius: 7px; padding: 0 10px; height: 34px; color: var(--discret); margin-bottom: 8px; }
+.cherche input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--encre); height: 100%; }
+.cherche button { border: 0; background: none; color: var(--discret); display: grid; place-items: center; padding: 0; }
+
+/* ---------- Petites étiquettes ---------- */
+.tg { display: flex; flex-wrap: wrap; gap: 4px; }
+.t { font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: var(--creux); color: var(--discret); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.t .ic { width: 11px; height: 11px; stroke-width: 2.2; }
+.t.fav { background: var(--fav-doux); color: var(--fav); }
+.t.acc { background: var(--accent-doux); color: var(--accent); }
+
+/* ---------- Liste des recettes ---------- */
+.ligne { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-bottom: 1px solid var(--trait); background: none; padding: 5px 0; text-align: left; min-height: 40px; }
+.ligne .nm { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ligne .ri { display: flex; gap: 3px; color: var(--discret); }
+.ligne .ri .ic { width: 14px; height: 14px; }
+.ri .fav { color: var(--fav); }
+.ri .acc { color: var(--accent); }
+.ligne:active { background: var(--creux); }
+
+/* ---------- Pop-up (fiche, réglages) ---------- */
+.voile { position: fixed; inset: 0; z-index: 5; background: var(--voile); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.fiche { background: var(--carte); width: 100%; max-width: 480px; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow: auto; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 32px rgb(0 0 0 / .25); }
+.fi-hd { display: flex; gap: 10px; align-items: center; }
+.fi-hd .txt { flex: 1; min-width: 0; }
+.fi-hd h2 { font: 800 19px/1.15 var(--titres); margin: 0 0 5px; }
+.fi-hd .ib { align-self: flex-start; margin: -4px -4px 0 0; }
+.dish { background: var(--creux); border-radius: 8px; padding: 3px; box-sizing: content-box; }
+.ligne .dish { background: none; padding: 0; }
+.faits { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.faits div { display: flex; gap: 4px; align-items: baseline; padding: 2px 7px; border-radius: 6px; background: var(--creux); }
+.faits dt { font-size: 10.5px; text-transform: uppercase; color: var(--discret); font-weight: 800; }
+.faits dd { margin: 0; font-weight: 800; font-size: 12px; white-space: nowrap; }
+.h4 { font: 800 11.5px var(--texte); text-transform: uppercase; letter-spacing: .07em; color: var(--discret); display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.h4 i { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.ings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; margin: 0; padding: 0; list-style: none; }
+.ings li { display: flex; align-items: center; gap: 6px; font-size: 13px; min-width: 0; line-height: 1.25; }
+.notes { font-size: 13px; white-space: pre-wrap; margin: 0; }
+.lien { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-weight: 700; font-size: 13px; text-decoration: none; }
+.gros { display: flex; gap: 8px; }
+.gros .btn { flex: 1; height: 38px; font-size: 14px; }
+.btn.fav-on { background: var(--fav-doux); border-color: var(--fav); color: var(--fav); }
+.btn.fav-on .ic { fill: currentColor; }
+
+/* Réglages */
+.fiche h2.titre-r { font: 800 18px var(--titres); margin: 0; }
+.sect { font: 800 11px var(--texte); text-transform: uppercase; letter-spacing: .07em; color: var(--discret); margin: 6px 0 -4px; }
+.reg { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 40px; padding: 6px 10px; border: 1px solid var(--trait); border-radius: 8px; background: var(--fond); text-align: left; }
+.reg .val { color: var(--discret); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.seg { display: flex; gap: 2px; background: var(--creux); padding: 2px; border-radius: 7px; }
+.seg button { border: 0; background: none; padding: 4px 9px; border-radius: 5px; font-size: 12.5px; font-weight: 700; color: var(--discret); }
+.seg button.on { background: var(--carte); color: var(--encre); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.retour { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 700; text-align: left; align-self: flex-start; }
+.choix { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid var(--trait); border-radius: 8px; background: var(--fond); text-align: left; }
+.choix .rond { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--discret); flex-shrink: 0; display: grid; place-items: center; }
+.choix.on { border-color: var(--accent); }
+.choix.on .rond { border-color: var(--accent); }
+.choix.on .rond::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.choix small { display: block; color: var(--discret); font-size: 12px; }
+.sync { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 12.5px; }
+.sync.ok { color: var(--accent); }
+.sync.attente { color: var(--fav); }
+.sync.horsligne { color: var(--discret); }
+.sync .ic { width: 15px; height: 15px; }
+.infos { font-size: 13px; background: var(--creux); border-radius: 8px; padding: 8px 10px; }
+.version { text-align: center; color: var(--discret); font-size: 12px; }
+.pied { display: flex; justify-content: flex-end; }
+
+/* Message en bas (« Enregistré », « Annuler »…) */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 9;
+  background: var(--encre); color: var(--fond); padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: 13.5px;
+  display: flex; gap: 12px; align-items: center; max-width: calc(100vw - 32px); }
+.toast button { border: 0; background: none; color: var(--fav-doux); font-weight: 800; padding: 0; }
+
+/* ---------- Animations (« Complètes » par défaut, « Simples » dans Réglages) ---------- */
+.voile { animation: apparait .15s ease-out; }
+.fiche { animation: monte .18s ease-out; }
+@keyframes apparait { from { opacity: 0; } }
+@keyframes monte { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+.chip, .btn, .tabs button { transition: background .15s, border-color .15s, color .15s; }
+:root[data-anim="simples"] *, :root[data-anim="simples"] *::before, :root[data-anim="simples"] *::after { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

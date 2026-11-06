@@ -1,0 +1,17 @@
+{
+  "name": "Foodix",
+  "short_name": "Foodix",
+  "description": "Mes recettes, le menu de la semaine et la liste de courses.",
+  "lang": "fr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAFAF7",
+  "theme_color": "#2D6A4C",
+  "icons": [
+    { "src": "icones/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icones/icone-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
