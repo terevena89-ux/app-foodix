@@ -17,7 +17,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, setDoc, writeBatch
+  collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
@@ -25,7 +25,7 @@ import { norm, parseItem, ingImg, dishImg } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -77,6 +77,10 @@ function ecrireRecette(r) {
   r.maj = Date.now();
   if (MODE_DEMO) return sauverDemo();
   setDoc(doc(collRecettes(), r.id), r).catch(erreurEcriture);
+}
+function effacerRecette(id) {
+  if (MODE_DEMO) return sauverDemo();
+  deleteDoc(doc(collRecettes(), id)).catch(erreurEcriture);
 }
 // Plusieurs recettes d'un coup (import) : par paquets de 400 (Firestore en accepte 500)
 function ecrireRecettes(liste) {
@@ -204,7 +208,8 @@ function rerendre() {
   const a = document.activeElement;
   if (a && a.id === "q") { majListe(); return; }
   render();
-  if ($("#modal").dataset.recette) ouvrirFiche($("#modal").dataset.recette); // la fiche ouverte suit les changements
+  // la fiche ouverte suit les changements (mais on ne touche jamais au formulaire en cours de saisie)
+  if ($("#modal").dataset.recette && !$("#modal").dataset.form) ouvrirFiche($("#modal").dataset.recette);
 }
 
 function render() {
@@ -244,7 +249,8 @@ function filtrees() {
 
 function renderRecettes() {
   if (!S.recettes.length) {
-    $("#main").innerHTML = `<div class="vide">Aucune recette pour l’instant.<div><button class="btn pri" data-act="reglages">Importer un fichier Excel</button></div></div>`;
+    $("#main").innerHTML = `<div class="vide">Aucune recette pour l’instant.<div class="pied2" style="justify-content:center;margin-top:14px">
+      <button class="btn" data-act="reglages">Importer un fichier Excel</button><button class="btn pri" data-act="nouvelle">${icone("plus")}Ajouter</button></div></div>`;
     return;
   }
   const f = S.f;
@@ -253,8 +259,9 @@ function renderRecettes() {
     <option value="">${tous}</option>${valeurs(k === "cat" ? "categorie" : "proteine").map(v => `<option ${v === f[k] ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>`;
   const bascule = (k, ic, txt) => `<button class="chip ${f[k] ? "on" : ""}" data-bascule="${k}">${ic ? icone(ic) : ""}${txt}</button>`;
   $("#main").innerHTML = `
-    <label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
+    <div class="srow"><label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
       ${f.q ? `<button data-act="effacer-q" aria-label="Effacer">${icone("x")}</button>` : ""}</label>
+      <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>
     <div class="defile">${liste("cat", "Catégorie")}${liste("prot", "Protéine")}
       ${bascule("fav", "star", "Favoris")}${bascule("vege", "leaf", "Végé")}${bascule("saison", "sun", "De saison")}
       ${bascule("avance", "box", "À l'avance")}${bascule("invites", "glass", "Invités")}</div>
@@ -284,9 +291,15 @@ function ouvrirFiche(id) {
     `<div><dt>${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</dt><dd>${NIVEAUX[k][r[k] - 1]}</dd></div>`).join("");
   const ings = (r.ingredients || []).map(t => { const it = parseItem(t); return `<li>${ingImg(it ? it.name : t, 18)}<span>${esc(t)}</span></li>`; }).join("");
   $("#modal").dataset.recette = id;
+  delete $("#modal").dataset.form;
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
     <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2><div class="tg">${tags.join("")}</div></div>
+      <button class="ib" data-act="menu3" aria-label="Plus d'actions">${icone("more")}</button>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="menu3" id="menu3" hidden>
+      <button data-act="modifier">${icone("pen")}Modifier</button>
+      <button data-act="dupliquer">${icone("copy")}Dupliquer</button>
+      <button class="danger" data-act="supprimer">${icone("trash")}Supprimer</button></div>
     ${faits ? `<dl class="faits">${faits}</dl>` : ""}
     <div><div class="h4">Ingrédients <i>pour ${r.portions || 2}${r.ingredientsSource === "suggestion" ? " · suggérés" : ""}</i></div>
       ${ings ? `<ul class="ings">${ings}</ul>` : `<div class="sub">Aucun ingrédient.</div>`}</div>
@@ -307,6 +320,251 @@ function basculerFavori() {
 function fermer() {
   $("#modal").innerHTML = "";
   delete $("#modal").dataset.recette;
+  delete $("#modal").dataset.form;
+}
+
+// Supprime tout de suite, avec « Annuler » pendant quelques secondes
+function supprimer() {
+  const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
+  if (!r) return;
+  S.recettes = S.recettes.filter(x => x !== r);
+  effacerRecette(r.id);
+  fermer(); render();
+  toast("Recette supprimée", () => {
+    S.recettes.push(r);
+    ecrireRecette(r);
+    render();
+  });
+}
+
+/* ---------- 6 bis. Formulaire (ajouter, modifier, dupliquer) ---------- */
+// Le formulaire travaille sur un brouillon : rien n'est enregistré avant « Enregistrer ».
+// Les pastilles et les cases changent juste leur allure à l'écran ; au moment
+// d'enregistrer, on relit tout le formulaire d'un coup (lireFormulaire).
+
+// Valeurs proposées en pastilles : celles déjà utilisées, les plus fréquentes d'abord
+function valeursDe(k, actuelle) {
+  const n = {};
+  S.recettes.forEach(r => { if (r[k]) n[r[k]] = (n[r[k]] || 0) + 1; });
+  const liste = Object.keys(n).sort((a, b) => n[b] - n[a] || a.localeCompare(b, "fr"));
+  // la valeur déjà choisie passe en tête, pour être visible sans faire défiler
+  return actuelle ? [actuelle, ...liste.filter(v => v !== actuelle)] : liste;
+}
+const SAISONS = ["Annuel", "Été", "Hiver"];
+
+function ouvrirFormulaire(brouillon, titre) {
+  const r = brouillon;
+  const pastilles = (k, defile, liste) => `<div class="pastilles ${defile ? "defile" : ""}" data-champ="${k}">
+    ${(liste || valeursDe(k, r[k])).map(v => `<button type="button" class="chip ${v === r[k] ? "on" : ""}" data-pastille>${esc(v)}</button>`).join("")}
+    <button type="button" class="chip autre" data-act="autre">${icone("plus")}Autre…</button></div>`;
+  const cases = [["vege", "leaf", "Végé"], ["favori", "star", "Favori"], ["prep", "box", "À l'avance"], ["date", "glass", "Invités"]]
+    .map(([k, i, t]) => `<button type="button" class="chip ${r[k] ? "on" : ""}" data-case="${k}">${icone(i)}${t}</button>`).join("");
+  const niveaux = Object.keys(NIVEAUX).map(k => `<div class="niv"><span class="lbl">${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</span>
+    <span class="seg" data-niv="${k}">${NIVEAUX[k].map((l, i) => `<button type="button" class="${r[k] === i + 1 ? "on" : ""}" data-v="${i + 1}">${l}</button>`).join("")}</span></div>`).join("");
+  const m = $("#modal");
+  m.dataset.form = "1";
+  if (r.id) m.dataset.recette = r.id; else delete m.dataset.recette;
+  m.innerHTML = `<div class="voile"><div class="fiche form" role="dialog" aria-label="${titre}">
+    <div class="fi-hd"><h2 class="titre-r" style="flex:1">${titre}</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="champ"><label for="f-nom">Nom</label><input class="saisie" id="f-nom" value="${esc(r.nom)}" autocomplete="off"></div>
+    <div class="champ"><span class="lbl">Catégorie</span>${pastilles("categorie")}</div>
+    <div class="champ"><span class="lbl">Protéine</span>${pastilles("proteine", true)}</div>
+    <div class="cases">${cases}</div>
+    <div class="champ"><span class="lbl">Ingrédients <i>· pour <span id="f-pour">${r.portions || 2}</span></i></span>
+      <div class="ingl" id="f-ings">${(r.ingredients || []).map(ligneIngredient).join("")}</div>
+      <button type="button" class="btn ajout" data-act="ajout-ing">${icone("plus")}Ajouter un ingrédient</button></div>
+    <button type="button" class="plus" data-act="plus" aria-expanded="false">${icone("down")}<span>Plus : saison, origine, prix, notes…</span></button>
+    <div id="f-plus" hidden>
+      <div class="champ"><span class="lbl">Saison</span>${pastilles("saison", false, SAISONS.includes(r.saison) || !r.saison ? SAISONS : [...SAISONS, r.saison])}</div>
+      <div class="champ"><span class="lbl">Origine</span>${pastilles("origine", true)}</div>
+      <div class="champ"><span class="lbl">Préparation</span>${pastilles("preparation", true)}</div>
+      ${niveaux}
+      <div class="duo"><div class="champ"><span class="lbl">Portions</span><span class="pas">
+          <button type="button" data-act="portions" data-v="-1" aria-label="Moins">−</button><b id="f-portions">${r.portions || 2}</b><button type="button" data-act="portions" data-v="1" aria-label="Plus">+</button></span></div>
+        <div class="champ"><label for="f-lien">Lien</label><input class="saisie" id="f-lien" type="url" placeholder="https://…" value="${esc(r.lien)}"></div></div>
+      <div class="champ"><label for="f-notes">Notes</label><textarea class="saisie" id="f-notes" rows="2">${esc(r.notes)}</textarea></div>
+    </div>
+    <div class="pied2"><button type="button" class="btn" data-act="fermer">Annuler</button><button type="button" class="btn pri" data-act="enregistrer">Enregistrer</button></div>
+  </div></div>`;
+  m.brouillon = r; // gardé à côté du formulaire jusqu'à l'enregistrement
+  rendreTriable($("#f-ings"), ".li", $(".form"));
+  if (!r.id) $("#f-nom").focus();
+}
+
+// Une ligne d'ingrédient : poignée pour glisser, dessin, texte, croix
+const ligneIngredient = (txt = "") => `<div class="li"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
+  ${dessinIng(txt)}<input value="${esc(txt)}" placeholder="ex. 250 g pâtes" autocomplete="off"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
+function dessinIng(txt) {
+  const it = parseItem(txt);
+  return ingImg(it ? it.name : (txt || "sachet"), 18);
+}
+function ajouterIngredient(apres) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = ligneIngredient();
+  const ligne = tmp.firstElementChild;
+  if (apres) apres.after(ligne); else $("#f-ings").appendChild(ligne);
+  ligne.querySelector("input").focus();
+}
+
+// Relit tout le formulaire et renvoie la recette complète
+function lireFormulaire() {
+  const r = Object.assign({}, $("#modal").brouillon);
+  r.nom = $("#f-nom").value.trim();
+  document.querySelectorAll("[data-champ]").forEach(g => {
+    const autre = g.querySelector("input.autre");
+    const on = g.querySelector(".chip.on[data-pastille]");
+    const v = autre && autre.value.trim() ? autre.value.trim() : on ? on.textContent.trim() : "";
+    if (v) r[g.dataset.champ] = v; else delete r[g.dataset.champ];
+  });
+  document.querySelectorAll("[data-case]").forEach(b => { r[b.dataset.case] = b.classList.contains("on"); });
+  document.querySelectorAll("[data-niv]").forEach(g => {
+    const on = g.querySelector("button.on");
+    if (on) r[g.dataset.niv] = +on.dataset.v; else delete r[g.dataset.niv];
+  });
+  r.portions = +$("#f-portions").textContent || 2;
+  const ings = [...document.querySelectorAll("#f-ings input")].map(i => i.value.trim()).filter(Boolean);
+  // Ingrédients touchés : ce ne sont plus des « suggestions »
+  if (ings.join("|") !== (r.ingredients || []).join("|")) r.ingredientsSource = "app";
+  r.ingredients = ings;
+  const lien = $("#f-lien").value.trim(), notes = $("#f-notes").value.trim();
+  if (lien) r.lien = lien; else delete r.lien;
+  if (notes) r.notes = notes; else delete r.notes;
+  return r;
+}
+
+function enregistrer() {
+  const r = lireFormulaire();
+  if (!r.nom) { toast("Il faut un nom"); $("#f-nom").focus(); return; }
+  if (!r.id) {
+    // Nouvelle recette : identifiant tiré du nom, sans doublon
+    let id = idDe(r.nom), n = 2;
+    while (S.recettes.some(x => x.id === id)) id = idDe(r.nom) + "-" + n++;
+    r.id = id;
+    S.recettes.push(r);
+  } else {
+    S.recettes = S.recettes.map(x => x.id === r.id ? r : x);
+  }
+  ecrireRecette(r);
+  render();
+  ouvrirFiche(r.id);
+  toast("Enregistré");
+}
+
+function nouvelle() {
+  ouvrirFormulaire({ nom: "", categorie: "Plat complet", vege: false, favori: false, prep: false, date: false, portions: 2, ingredients: [], ingredientsSource: "app" }, "Nouvelle recette");
+}
+function modifier() {
+  const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
+  if (r) ouvrirFormulaire(JSON.parse(JSON.stringify(r)), "Modifier");
+}
+function dupliquer() {
+  const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
+  if (!r) return;
+  const copie = JSON.parse(JSON.stringify(r));
+  delete copie.id; delete copie.maj;
+  copie.nom = r.nom + " (copie)";
+  ouvrirFormulaire(copie, "Nouvelle recette");
+}
+
+// Clics à l'intérieur du formulaire qui ne font que changer l'allure des boutons
+function clicFormulaire(t) {
+  const pastille = t.closest("[data-pastille]");
+  if (pastille) {
+    const g = pastille.parentElement, etait = pastille.classList.contains("on");
+    g.querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+    const autre = g.querySelector("input.autre"); if (autre) autre.value = "";
+    if (!etait) pastille.classList.add("on"); // retoucher la pastille choisie la décoche
+    return true;
+  }
+  const cas = t.closest("[data-case]");
+  if (cas) { cas.classList.toggle("on"); return true; }
+  const niv = t.closest("[data-niv] button");
+  if (niv) {
+    const etait = niv.classList.contains("on");
+    niv.parentElement.querySelectorAll("button").forEach(b => b.classList.remove("on"));
+    if (!etait) niv.classList.add("on");
+    return true;
+  }
+  return false;
+}
+// « Autre… » : la pastille devient une petite case où taper une nouvelle valeur
+function pastilleAutre(btn) {
+  const g = btn.parentElement;
+  g.querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+  const champ = document.createElement("input");
+  champ.className = "chip autre on";
+  champ.placeholder = "Autre…";
+  champ.size = 10;
+  btn.replaceWith(champ);
+  champ.focus();
+}
+
+/* ---------- Glisser-déposer qui suit le doigt (modèle : Stuff to go) ----------
+   On attrape une ligne par sa poignée : elle suit le doigt pixel par pixel,
+   et les autres lignes s'écartent en douceur pour lui faire de la place. */
+function rendreTriable(conteneur, selecteur, zoneDefile) {
+  conteneur.addEventListener("pointerdown", e => {
+    const prise = e.target.closest(".poignee");
+    const ligne = prise && prise.closest(selecteur);
+    if (!ligne) return;
+    e.preventDefault();
+    const doigt = e.pointerId; // on ne suit que ce doigt-là
+    // Où le doigt a attrapé la ligne : on garde ce décalage pour qu'elle reste « collée » au doigt
+    const prisA = e.clientY - ligne.getBoundingClientRect().top;
+    let decalage = 0, dernierY = e.clientY;
+    ligne.classList.add("glisse");
+    ligne.style.pointerEvents = "none"; // pour « voir » la ligne qui est sous le doigt
+    ligne.style.transition = "box-shadow .12s";
+    const suivre = () => {
+      const vraieHaut = ligne.getBoundingClientRect().top - decalage;
+      decalage = dernierY - prisA - vraieHaut;
+      ligne.style.transform = `translateY(${decalage}px) scale(1.03)`;
+    };
+    // Change la ligne de place et fait glisser en douceur celles qui bougent
+    // (technique « FLIP » : on note où elles étaient, on déplace, on anime depuis l'ancienne place)
+    const deplacer = action => {
+      const avant = new Map([...conteneur.querySelectorAll(selecteur)].filter(x => x !== ligne).map(x => [x, x.getBoundingClientRect().top]));
+      action();
+      for (const [x, haut] of avant) {
+        const ecart = haut - x.getBoundingClientRect().top;
+        if (ecart && x.animate) x.animate([{ transform: `translateY(${ecart}px)` }, { transform: "none" }], { duration: 160, easing: "ease-out" });
+      }
+      suivre();
+    };
+    const bouger = ev => {
+      if (ev.pointerId !== doigt) return;
+      ev.preventDefault();
+      dernierY = ev.clientY;
+      // Défilement automatique près des bords de la fiche
+      const z = zoneDefile.getBoundingClientRect();
+      if (ev.clientY < z.top + 50) zoneDefile.scrollBy(0, -10);
+      else if (ev.clientY > z.bottom - 50) zoneDefile.scrollBy(0, 10);
+      suivre();
+      const sous = document.elementFromPoint(ev.clientX, ev.clientY);
+      const cible = sous && sous.closest(selecteur);
+      if (!cible || cible === ligne || !conteneur.contains(cible)) return;
+      const r = cible.getBoundingClientRect();
+      const apres = ev.clientY > r.top + r.height / 2;
+      if (apres && cible.nextElementSibling !== ligne) deplacer(() => cible.after(ligne));
+      else if (!apres && cible.previousElementSibling !== ligne) deplacer(() => cible.before(ligne));
+    };
+    const lacher = ev => {
+      if (ev.pointerId !== doigt) return;
+      document.removeEventListener("pointermove", bouger);
+      document.removeEventListener("pointerup", lacher);
+      document.removeEventListener("pointercancel", lacher);
+      // La ligne se « pose » en douceur à sa nouvelle place
+      ligne.style.transition = "transform .15s ease-out";
+      ligne.style.transform = "translateY(0) scale(1)";
+      setTimeout(() => {
+        ligne.classList.remove("glisse");
+        ligne.style.transform = ligne.style.transition = ligne.style.pointerEvents = "";
+      }, 160);
+    };
+    document.addEventListener("pointermove", bouger, { passive: false });
+    document.addEventListener("pointerup", lacher);
+    document.addEventListener("pointercancel", lacher);
+  });
 }
 
 /* ---------- 7. Réglages, thème, Excel ---------- */
@@ -488,9 +746,34 @@ document.addEventListener("click", e => {
   if (ligne) return ouvrirFiche(ligne.dataset.fiche);
   const bascule = t.closest("[data-bascule]");
   if (bascule) { const k = bascule.dataset.bascule; S.f[k] = !S.f[k]; return renderRecettes(); }
+  if ($("#modal").dataset.form && clicFormulaire(t)) return;
   const el = t.closest("[data-act]");
+  // Menu ⋯ ouvert : un clic n'importe où ailleurs le referme
+  const m3 = $("#menu3");
+  if (m3 && !m3.hidden && (!el || el.dataset.act !== "menu3")) m3.hidden = true;
   if (!el) return;
   switch (el.dataset.act) {
+    case "nouvelle": nouvelle(); break;
+    case "menu3": $("#menu3").hidden = !$("#menu3").hidden; break;
+    case "modifier": modifier(); break;
+    case "dupliquer": dupliquer(); break;
+    case "supprimer": supprimer(); break;
+    case "enregistrer": enregistrer(); break;
+    case "autre": pastilleAutre(el); break;
+    case "ajout-ing": ajouterIngredient(); break;
+    case "retirer-ing": el.closest(".li").remove(); break;
+    case "plus": {
+      const ouvert = $("#f-plus").hidden;
+      $("#f-plus").hidden = !ouvert;
+      el.setAttribute("aria-expanded", ouvert);
+      el.innerHTML = ouvert ? `${icone("up")}<span>Moins</span>` : `${icone("down")}<span>Plus : saison, origine, prix, notes…</span>`;
+      break;
+    }
+    case "portions": {
+      const n = Math.min(12, Math.max(1, +$("#f-portions").textContent + +el.dataset.v));
+      $("#f-portions").textContent = n; $("#f-pour").textContent = n;
+      break;
+    }
     case "connexion": seConnecter(el); break;
     case "deconnexion": fermer(); S.pret = false; signOut(auth); break;
     case "reglages": ouvrirReglages(); break;
@@ -512,8 +795,17 @@ document.addEventListener("change", e => {
 });
 document.addEventListener("input", e => {
   if (e.target.id === "q") { S.f.q = e.target.value; majListe(); }
+  // En tapant un ingrédient, son petit dessin se met à jour
+  const li = e.target.closest && e.target.closest("#f-ings .li");
+  if (li) li.querySelector("img").outerHTML = dessinIng(e.target.value);
 });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal").innerHTML) fermer(); });
+document.addEventListener("keydown", e => {
+  // Entrée dans un ingrédient : nouvelle ligne juste en dessous (comme une liste au clavier)
+  const li = e.target.closest && e.target.closest("#f-ings .li");
+  if (li && e.key === "Enter") { e.preventDefault(); ajouterIngredient(li); return; }
+  // Échap ferme une fiche, mais pas le formulaire (pour ne pas perdre une saisie)
+  if (e.key === "Escape" && $("#modal").innerHTML && !$("#modal").dataset.form) fermer();
+});
 
 // Le « gardien » hors ligne (service worker) : garde une copie des fichiers de l'appli
 // et installe tout seul les nouvelles versions.

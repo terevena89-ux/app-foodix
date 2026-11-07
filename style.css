@@ -176,3 +176,46 @@ select.chip { appearance: none; -webkit-appearance: none; padding-right: 22px; f
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Formulaire d'une recette (v0.2.0) ---------- */
+.srow { display: flex; gap: 6px; margin-bottom: 8px; }
+.srow .cherche { flex: 1; min-width: 0; margin-bottom: 0; }
+.fab { width: 34px; height: 34px; border-radius: 7px; border: 0; background: var(--accent); color: var(--accent-encre); display: grid; place-items: center; flex-shrink: 0; }
+.pied2 { display: flex; gap: 8px; }
+.pied2 .btn { flex: 1; height: 38px; font-size: 14px; }
+.fiche { position: relative; }
+.form { gap: 9px; }
+.champ { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.champ > label, .champ > .lbl { font: 800 11px var(--texte); text-transform: uppercase; letter-spacing: .07em; color: var(--discret); }
+.champ .lbl i { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.saisie { border: 1px solid var(--trait); background: var(--fond); border-radius: 7px; height: 34px; padding: 0 10px; width: 100%; min-width: 0; }
+textarea.saisie { height: auto; padding: 7px 10px; resize: vertical; line-height: 1.4; }
+.pastilles { display: flex; flex-wrap: wrap; gap: 5px; }
+.pastilles.defile { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 2px 12px 3px; }
+.pastilles.defile::-webkit-scrollbar { display: none; }
+.chip.autre { border-style: dashed; }
+input.chip.autre { border-style: solid; color: var(--encre); outline: none; width: 110px; }
+.cases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.cases .chip { justify-content: center; padding: 0 4px; }
+.plus { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 4px 0; color: var(--accent); font-weight: 800; font-size: 13px; text-align: left; }
+#f-plus { display: flex; flex-direction: column; gap: 9px; }
+.niv { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 6px; }
+.niv .lbl { font-size: 12.5px; color: var(--discret); font-weight: 700; }
+.niv .seg button { flex: 1; padding: 4px 2px; }
+.duo { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+.pas { display: inline-flex; align-items: center; border: 1px solid var(--trait); border-radius: 7px; height: 34px; background: var(--fond); }
+.pas button { border: 0; background: none; width: 30px; height: 32px; font-weight: 800; color: var(--discret); }
+.pas b { min-width: 20px; text-align: center; }
+.ingl { display: flex; flex-direction: column; gap: 4px; }
+.ingl .li { display: flex; align-items: center; gap: 6px; border: 1px solid var(--trait); background: var(--fond); border-radius: 7px; height: 34px; padding: 0 2px 0 4px; }
+.ingl .li input { flex: 1; min-width: 0; border: 0; background: none; height: 100%; outline: none; }
+.ingl .li .ib { width: 28px; height: 28px; }
+.ingl .li .ib .ic { width: 15px; height: 15px; }
+.poignee { color: var(--discret); display: grid; place-items: center; width: 22px; height: 30px; cursor: grab; touch-action: none; flex-shrink: 0; }
+.li.glisse { position: relative; z-index: 2; background: var(--carte); box-shadow: 0 6px 16px rgb(0 0 0 / .22); cursor: grabbing; }
+.btn.ajout { justify-content: flex-start; color: var(--accent); border-style: dashed; height: 34px; background: none; }
+/* Menu ⋯ de la fiche */
+.menu3 { position: absolute; right: 10px; top: 50px; z-index: 6; background: var(--carte); border: 1px solid var(--trait); border-radius: 9px; box-shadow: 0 8px 24px rgb(0 0 0 / .2); display: flex; flex-direction: column; padding: 4px; min-width: 160px; }
+.menu3 button { display: flex; align-items: center; gap: 9px; border: 0; background: none; padding: 8px 10px; border-radius: 6px; text-align: left; font-weight: 700; }
+.menu3 button:active { background: var(--creux); }
+.menu3 .danger { color: var(--danger); }
