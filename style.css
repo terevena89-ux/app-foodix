@@ -219,3 +219,29 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .menu3 button { display: flex; align-items: center; gap: 9px; border: 0; background: none; padding: 8px 10px; border-radius: 6px; text-align: left; font-weight: 700; }
 .menu3 button:active { background: var(--creux); }
 .menu3 .danger { color: var(--danger); }
+
+/* ---------- Menu : la « livraison » de N repas (v0.3.0) ---------- */
+.ctl { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.ctl .spacer { flex: 1; }
+.pas .l { display: flex; align-items: center; padding-left: 8px; color: var(--discret); }
+.pas .l .ic { width: 15px; height: 15px; }
+.repas { display: flex; flex-direction: column; }
+.rp { display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--trait); min-height: 46px; }
+.rp .cb { width: 22px; height: 22px; border: 1.8px solid var(--discret); border-radius: 6px; display: grid; place-items: center; flex-shrink: 0; background: none; padding: 0; color: var(--accent-encre); }
+.rp.fait .cb { background: var(--accent); border-color: var(--accent); }
+.rp .cb .ic { width: 14px; height: 14px; stroke-width: 3; }
+.rp-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; border: 0; background: none; padding: 6px 0; text-align: left; }
+.rp-btn .txt { flex: 1; min-width: 0; }
+.rp-btn .nm { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.rp-btn .side { font-size: 12.5px; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.rp-btn .ri { display: flex; gap: 3px; color: var(--discret); }
+.rp-btn .ri .ic { width: 14px; height: 14px; }
+.rp-btn .chev { color: var(--discret); display: flex; }
+.rp.fait .nm { text-decoration: line-through; color: var(--discret); }
+.rp.fait img { opacity: .45; }
+/* Petit menu d'un repas et « Choisir… » */
+.actions { display: flex; flex-direction: column; gap: 6px; }
+.act { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid var(--trait); background: var(--fond); border-radius: 8px; padding: 0 12px; height: 42px; font-weight: 700; text-align: left; }
+.act .ic { color: var(--discret); }
+.act.danger, .act.danger .ic { color: var(--danger); }
+.choix-l { display: flex; flex-direction: column; max-height: 60vh; overflow: auto; }

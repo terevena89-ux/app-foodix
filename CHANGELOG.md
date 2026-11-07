@@ -1,5 +1,15 @@
 # Foodix — journal des nouveautés
 
+## 0.3.0 — 2026-11-07
+Le menu, façon « livraison » de N repas (sans jours ni semaines).
+- « Nouveau menu » tire N plats au sort (5 par défaut, 1 à 14), avec « Annuler ».
+- Tirage pondéré repris du prototype : favoris plus souvent, plats des 3 menus précédents beaucoup moins, protéines variées, plats « Principal » avec un accompagnement de saison.
+- Pastilles : Végé et Rapide (seulement ceux-là), À l'avance et Invités (plus souvent).
+- Case à cocher pour les repas déjà cuisinés.
+- Toucher un repas : Remplacer, Choisir…, Changer l'accompagnement, Voir la recette, Retirer (avec Annuler).
+- Fiche recette : bouton « Au menu ».
+- Nombre de personnes réglable (servira à la liste de courses).
+
 ## 0.2.0 — 2026-11-07
 Édition des recettes.
 - Bouton + à côté de la recherche : ajouter une recette.

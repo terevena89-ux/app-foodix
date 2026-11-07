@@ -25,7 +25,7 @@ import { norm, parseItem, ingImg, dishImg } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -52,22 +52,44 @@ const COLONNES = [
 const MODE_DEMO = new URLSearchParams(location.search).has("demo");
 
 // État de l'appli : tout ce qui est affiché vient d'ici
+// Réglages du tirage, communs au téléphone et au PC (synchronisés)
+const PREFS_DEFAUT = { nb: 5, pers: 2, vege: false, rapide: false, avance: false, invites: false };
+
 const S = {
   recettes: [], pret: false, compte: "",
-  onglet: lireLocal("fx-onglet", "recettes"),
+  menus: [],                              // toutes les « livraisons », la plus récente = le menu en cours
+  prefs: Object.assign({}, PREFS_DEFAUT),
+  onglet: lireLocal("fx-onglet", "menu"),
   // filtres de l'écran Recettes
   f: { q: "", cat: "", prot: "", fav: false, vege: false, saison: false, avance: false, invites: false }
 };
 
 /* ---------- 2. Stockage : Firebase ---------- */
 // Rangement dans Firestore :
-//   users/{mon uid}/app-foodix/donnees                  -> réglages communs (plus tard)
+//   users/{mon uid}/app-foodix/donnees                  -> réglages du tirage (prefs)
 //   users/{mon uid}/app-foodix/donnees/recettes/{id}    -> une recette par document
+//   users/{mon uid}/app-foodix/donnees/menus/{id}       -> un menu (« livraison ») par document
 // Un document par recette : deux appareils qui modifient deux recettes différentes
 // ne se gênent pas. Si les deux modifient la même : la dernière modification gagne.
 
 let db = null, auth = null, uid = null, arrets = [];
 const collRecettes = () => collection(db, "users", uid, NOM_APPLI, "donnees", "recettes");
+const collMenus = () => collection(db, "users", uid, NOM_APPLI, "donnees", "menus");
+const refDonnees = () => doc(db, "users", uid, NOM_APPLI, "donnees");
+
+function ecrireMenu(m) {
+  m.maj = Date.now();
+  if (MODE_DEMO) return sauverDemo();
+  setDoc(doc(collMenus(), m.id), m).catch(erreurEcriture);
+}
+function effacerMenu(id) {
+  if (MODE_DEMO) return sauverDemo();
+  deleteDoc(doc(collMenus(), id)).catch(erreurEcriture);
+}
+function sauverPrefs() {
+  if (MODE_DEMO) return sauverDemo();
+  setDoc(refDonnees(), { prefs: S.prefs }, { merge: true }).catch(erreurEcriture);
+}
 
 function erreurEcriture(err) { console.error(err); toast("Échec de l’enregistrement"); }
 
@@ -94,12 +116,14 @@ function ecrireRecettes(liste) {
 
 // Mode démo : tout est recopié dans le navigateur après chaque modification
 function sauverDemo() {
-  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes })); } catch (e) { /* plein ou bloqué */ }
+  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs })); } catch (e) { /* plein ou bloqué */ }
 }
 function demarrerDemo() {
   let d = {};
   try { d = JSON.parse(localStorage.getItem("fx-demo")) || {}; } catch (e) { /* rien de gardé */ }
   S.recettes = Array.isArray(d.recettes) ? d.recettes : [];
+  S.menus = Array.isArray(d.menus) ? d.menus : [];
+  S.prefs = Object.assign({}, PREFS_DEFAUT, d.prefs);
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
   S.pret = true;
@@ -128,6 +152,14 @@ function ecouter() {
     if (JSON.stringify(recu) !== JSON.stringify(S.recettes)) { S.recettes = recu; rerendre(); }
     if (!S.pret) { S.pret = true; render(); }
   }, err => { console.error(err); toast("Accès refusé aux données"); }));
+  arrets.push(onSnapshot(collMenus(), snap => {
+    const recu = snap.docs.map(d => d.data()).sort((a, b) => a.cree - b.cree);
+    if (JSON.stringify(recu) !== JSON.stringify(S.menus)) { S.menus = recu; rerendre(); }
+  }, err => console.error(err)));
+  arrets.push(onSnapshot(refDonnees(), snap => {
+    const p = Object.assign({}, PREFS_DEFAUT, snap.exists() && snap.data().prefs);
+    if (JSON.stringify(p) !== JSON.stringify(S.prefs)) { S.prefs = p; rerendre(); }
+  }, err => console.error(err)));
 }
 
 function demarrerFirebase() {
@@ -183,17 +215,7 @@ function toast(msg, annuler) {
   clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, annuler ? 6000 : 2800);
 }
 
-// Semaine ISO (lundi -> dimanche) et saison : d'avril à septembre = Été, sinon Hiver
-function semaine(d = new Date()) {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const jour = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - jour);
-  const y = t.getUTCFullYear();
-  const n = Math.ceil(((t - Date.UTC(y, 0, 1)) / 864e5 + 1) / 7);
-  const lundi = new Date(d); lundi.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  const dimanche = new Date(lundi); dimanche.setDate(lundi.getDate() + 6);
-  return { n, cle: `${y}-S${String(n).padStart(2, "0")}`, lundi, dimanche };
-}
+// Saison : d'avril à septembre = Été, sinon Hiver
 const SAISON = (() => { const m = new Date().getMonth() + 1; return m >= 4 && m <= 9 ? "ete" : "hiver"; })();
 function deSaison(r) {
   const s = norm(r.saison);
@@ -213,9 +235,9 @@ function rerendre() {
 }
 
 function render() {
-  const sem = semaine();
+  const m = menuEnCours();
   const titres = {
-    menu: ["Semaine " + sem.n, `${sem.lundi.getDate()} – ${sem.dimanche.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${SAISON === "ete" ? "Été" : "Hiver"}`],
+    menu: ["Menu", m ? "Livraison du " + new Date(m.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""],
     courses: ["Courses", ""],
     recettes: ["Recettes", ""]
   };
@@ -224,7 +246,8 @@ function render() {
   $("#sub").textContent = sous;
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.onglet));
   if (S.onglet === "recettes") renderRecettes();
-  else $("#main").innerHTML = `<div class="vide">${S.onglet === "menu" ? "Le menu de la semaine" : "La liste de courses"} arrive dans une prochaine version.</div>`;
+  else if (S.onglet === "menu") renderMenu();
+  else $("#main").innerHTML = `<div class="vide">La liste de courses arrive dans une prochaine version.</div>`;
 }
 
 function renderConnexion() {
@@ -232,6 +255,198 @@ function renderConnexion() {
   $("#sub").textContent = "";
   $("#main").innerHTML = `<div class="vide">Connecte-toi pour retrouver tes recettes<br>sur le téléphone et le PC.
     <div><button class="btn pri" data-act="connexion">Se connecter avec Google</button></div></div>`;
+}
+
+/* ---------- 4 bis. Menu : la « livraison » de N repas ---------- */
+// Pas de jours ni de semaines : un menu est une liste de repas tirée quand on le décide
+// (comme une box repas). On coche les repas déjà cuisinés.
+// Un repas = { id: recette, side: accompagnement ou null, fait: true/false }.
+
+const menuEnCours = () => S.menus[S.menus.length - 1] || null;
+const recette = id => S.recettes.find(r => r.id === id);
+const estPlat = r => /plat complet|principal/.test(norm(r.categorie));
+const estAccomp = r => /accompagnement/.test(norm(r.categorie));
+const veutAccomp = r => /principal/.test(norm(r.categorie));
+
+// Les plats que le tirage peut proposer (de saison, et selon Végé / Rapide)
+function candidats() {
+  const p = S.prefs;
+  return S.recettes.filter(r => estPlat(r) && deSaison(r) && (!p.vege || r.vege) && (!p.rapide || !r.temps || r.temps <= 1));
+}
+// Plats servis dans les 3 menus précédents : ils sortiront moins souvent
+function recents() {
+  const ids = new Set();
+  S.menus.slice(-4, -1).forEach(m => m.repas.forEach(x => { ids.add(x.id); if (x.side) ids.add(x.side); }));
+  return ids;
+}
+// Tirage au sort « pondéré » : chaque plat a un poids, plus il est lourd, plus il a de chances de sortir
+function poids(r, deja, recent) {
+  const p = S.prefs;
+  let w = 1;
+  if (r.favori) w *= 2.5;                                    // favoris : plus souvent
+  if (recent.has(r.id)) w *= 0.12;                           // servi récemment : beaucoup moins
+  if (r.proteine && deja.some(id => norm(recette(id)?.proteine) === norm(r.proteine))) w *= 0.45; // varier les protéines
+  if (p.avance && r.prep) w *= 2.5;                          // pastille « À l'avance »
+  if (p.invites && r.date) w *= 2.5;                         // pastille « Invités »
+  return w;
+}
+function tirer(liste, poidsDe) {
+  if (!liste.length) return null;
+  const ws = liste.map(poidsDe), total = ws.reduce((a, b) => a + b, 0);
+  let x = Math.random() * total;
+  for (let i = 0; i < liste.length; i++) { x -= ws[i]; if (x <= 0) return liste[i]; }
+  return liste[liste.length - 1];
+}
+// Un plat de plus, différent de ceux déjà dans le menu
+function tirerPlat(deja) {
+  const recent = recents();
+  return tirer(candidats().filter(r => !deja.includes(r.id)), r => poids(r, deja, recent));
+}
+// Un accompagnement de saison (favoris ×2), différent de ceux déjà pris
+function tirerAccomp(exclus = []) {
+  const r = tirer(S.recettes.filter(x => estAccomp(x) && deSaison(x) && !exclus.includes(x.id)), x => x.favori ? 2 : 1);
+  return r ? r.id : null;
+}
+function nouveauRepas(r, m) {
+  return { id: r.id, side: veutAccomp(r) ? tirerAccomp(m ? m.repas.map(x => x.side).filter(Boolean) : []) : null, fait: false };
+}
+
+// « Nouveau menu » : une nouvelle livraison ; l'ancienne reste dans l'historique
+function nouveauMenu() {
+  const m = { id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [] };
+  for (let i = 0; i < S.prefs.nb; i++) {
+    const r = tirerPlat(m.repas.map(x => x.id));
+    if (!r) break;
+    m.repas.push(nouveauRepas(r, m));
+  }
+  if (!m.repas.length) return toast("Aucun plat ne correspond");
+  S.menus.push(m);
+  ecrireMenu(m);
+  render();
+  toast("Nouveau menu", () => { S.menus = S.menus.filter(x => x !== m); effacerMenu(m.id); render(); });
+}
+
+// Nombre de repas : + tire un plat de plus, − retire le dernier
+function changerNombre(d) {
+  const m = menuEnCours();
+  const n = Math.min(14, Math.max(1, (m ? m.repas.length : S.prefs.nb) + d));
+  S.prefs.nb = n; sauverPrefs();
+  if (m) {
+    if (d > 0 && m.repas.length < 14) {
+      const r = tirerPlat(m.repas.map(x => x.id));
+      if (r) m.repas.push(nouveauRepas(r, m)); else toast("Plus d'autre plat disponible");
+    }
+    if (d < 0 && m.repas.length > 1) m.repas.pop();
+    ecrireMenu(m);
+  }
+  render();
+}
+function changerPersonnes(d) {
+  S.prefs.pers = Math.min(12, Math.max(1, S.prefs.pers + d)); sauverPrefs();
+  const m = menuEnCours();
+  if (m) { m.pers = S.prefs.pers; ecrireMenu(m); }
+  render();
+}
+
+function renderMenu() {
+  const m = menuEnCours(), p = S.prefs;
+  const pastille = (k, ic, txt) => `<button class="chip ${p[k] ? "on" : ""}" data-pref="${k}">${icone(ic)}${txt}</button>`;
+  const haut = `<div class="ctl">
+      <span class="pas"><span class="l">${icone("utensils")}</span><button data-act="nb" data-v="-1" aria-label="Moins de repas">−</button><b class="num">${m ? m.repas.length : p.nb}</b><button data-act="nb" data-v="1" aria-label="Plus de repas">+</button></span>
+      <span class="pas"><span class="l">${icone("users")}</span><button data-act="pers" data-v="-1" aria-label="Moins de personnes">−</button><b class="num">${p.pers}</b><button data-act="pers" data-v="1" aria-label="Plus de personnes">+</button></span>
+      <span class="spacer"></span><button class="btn pri" data-act="nouveau-menu">${icone("shuffle")}Nouveau menu</button></div>
+    <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "À l'avance")}${pastille("invites", "glass", "Invités")}</div>`;
+  if (!S.recettes.length) { $("#main").innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
+  if (!m) { $("#main").innerHTML = haut + `<div class="vide">Pas encore de menu.</div>`; return; }
+  const lignes = m.repas.map((x, i) => {
+    const r = recette(x.id), s = x.side && recette(x.side);
+    if (!r) return ""; // recette supprimée entre-temps
+    return `<div class="rp ${x.fait ? "fait" : ""}">
+      <button class="cb" data-act="fait" data-i="${i}" aria-label="${x.fait ? "Pas encore cuisiné" : "Cuisiné"}">${x.fait ? icone("check") : ""}</button>
+      <button class="rp-btn" data-repas="${i}">${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s.nom)}</span>` : ""}</span>
+        <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span><span class="chev">${icone("right")}</span></button></div>`;
+  }).join("");
+  $("#main").innerHTML = haut + `<div class="repas">${lignes}</div>`;
+}
+
+function cocherFait(i) {
+  const m = menuEnCours(); if (!m || !m.repas[i]) return;
+  m.repas[i].fait = !m.repas[i].fait;
+  ecrireMenu(m); render();
+}
+
+// Petit menu d'un repas : gros boutons
+function ouvrirRepas(i) {
+  const m = menuEnCours(), x = m && m.repas[i];
+  const r = x && recette(x.id);
+  if (!r) return;
+  const s = x.side && recette(x.side);
+  const md = $("#modal");
+  md.dataset.rep = i; delete md.dataset.recette; delete md.dataset.form;
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
+    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>${s ? `<div class="sub">+ ${esc(s.nom)}</div>` : ""}</div>
+      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="actions">
+      <button class="act" data-act="remplacer">${icone("refresh")}Remplacer (au hasard)</button>
+      <button class="act" data-act="choisir">${icone("search")}Choisir…</button>
+      ${veutAccomp(r) ? `<button class="act" data-act="accomp">${icone("refresh")}Changer l'accompagnement</button>` : ""}
+      <button class="act" data-act="voir">${icone("book")}Voir la recette</button>
+      <button class="act danger" data-act="retirer">${icone("trash")}Retirer du menu</button>
+    </div></div></div>`;
+}
+const repasOuvert = () => { const m = menuEnCours(), i = +$("#modal").dataset.rep; return m && m.repas[i] ? { m, i } : null; };
+
+function remplacer() {
+  const o = repasOuvert(); if (!o) return;
+  const r = tirerPlat(o.m.repas.map(x => x.id));
+  if (!r) return toast("Plus d'autre plat disponible");
+  o.m.repas[o.i] = nouveauRepas(r, o.m);
+  ecrireMenu(o.m); render(); ouvrirRepas(o.i);
+}
+function changerAccomp() {
+  const o = repasOuvert(); if (!o) return;
+  const x = o.m.repas[o.i];
+  x.side = tirerAccomp([x.side, ...o.m.repas.map(y => y.side)].filter(Boolean)) || x.side;
+  ecrireMenu(o.m); render(); ouvrirRepas(o.i);
+}
+function retirer() {
+  const o = repasOuvert(); if (!o) return;
+  const [x] = o.m.repas.splice(o.i, 1);
+  ecrireMenu(o.m); fermer(); render();
+  toast("Retiré du menu", () => { o.m.repas.splice(o.i, 0, x); ecrireMenu(o.m); render(); });
+}
+
+// « Choisir… » : liste des plats avec recherche ; i = place du repas à remplacer (ou absent = ajouter)
+function ouvrirChoix(i) {
+  const md = $("#modal");
+  md.dataset.choix = i ?? ""; delete md.dataset.recette;
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Choisir un plat">
+    <div class="fi-hd"><h2 class="titre-r" style="flex:1">Choisir un plat</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <label class="cherche" style="margin:0">${icone("search")}<input id="q-choix" type="search" placeholder="Chercher…" autocomplete="off"></label>
+    <div class="choix-l" id="choix-l"></div></div></div>`;
+  majChoix();
+}
+function majChoix() {
+  const q = norm($("#q-choix").value);
+  const l = S.recettes.filter(r => estPlat(r) && (!q || norm(r.nom + " " + (r.ingredients || []).join(" ")).includes(q))).sort(parNom);
+  $("#choix-l").innerHTML = l.map(r => `<button class="ligne" data-choisi="${esc(r.id)}">${dishImg(r, 28)}<span class="nm">${esc(r.nom)}</span>
+    <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span></button>`).join("") || `<div class="vide">Aucun plat.</div>`;
+}
+function choisirPlat(id) {
+  const r = recette(id); if (!r) return;
+  const i = $("#modal").dataset.choix;
+  let m = menuEnCours();
+  if (!m) { m = { id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [] }; S.menus.push(m); }
+  const x = nouveauRepas(r, m);
+  if (i !== "" && m.repas[+i]) m.repas[+i] = x; else m.repas.push(x);
+  ecrireMenu(m); fermer(); render();
+  toast("Au menu");
+}
+// Bouton « Au menu » de la fiche recette : ajouté à la fin du menu en cours
+function auMenu() {
+  const id = $("#modal").dataset.recette;
+  $("#modal").dataset.choix = "";
+  choisirPlat(id);
 }
 
 /* ---------- 5. Écran Recettes ---------- */
@@ -290,8 +505,8 @@ function ouvrirFiche(id) {
   const faits = Object.keys(NIVEAUX).filter(k => r[k]).map(k =>
     `<div><dt>${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</dt><dd>${NIVEAUX[k][r[k] - 1]}</dd></div>`).join("");
   const ings = (r.ingredients || []).map(t => { const it = parseItem(t); return `<li>${ingImg(it ? it.name : t, 18)}<span>${esc(t)}</span></li>`; }).join("");
+  ["form", "rep", "choix"].forEach(k => delete $("#modal").dataset[k]);
   $("#modal").dataset.recette = id;
-  delete $("#modal").dataset.form;
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
     <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2><div class="tg">${tags.join("")}</div></div>
       <button class="ib" data-act="menu3" aria-label="Plus d'actions">${icone("more")}</button>
@@ -305,7 +520,10 @@ function ouvrirFiche(id) {
       ${ings ? `<ul class="ings">${ings}</ul>` : `<div class="sub">Aucun ingrédient.</div>`}</div>
     ${r.notes ? `<p class="notes">${esc(r.notes)}</p>` : ""}
     ${/^https?:\/\//.test(r.lien || "") ? `<a class="lien" href="${esc(r.lien)}" target="_blank" rel="noopener">${icone("link")}Voir la recette en ligne</a>` : ""}
-    <div class="gros"><button class="btn ${r.favori ? "fav-on" : ""}" data-act="favori">${icone("star")}${r.favori ? "Favori" : "Mettre en favori"}</button></div>
+    <div class="gros"><button class="btn ${r.favori ? "fav-on" : ""}" data-act="favori">${icone("star")}${r.favori ? "Favori" : "Mettre en favori"}</button>
+      ${menuEnCours() && menuEnCours().repas.some(x => x.id === r.id)
+        ? `<button class="btn" disabled>${icone("check")}Au menu</button>`
+        : `<button class="btn pri" data-act="au-menu">${icone("plus")}Au menu</button>`}</div>
   </div></div>`;
 }
 
@@ -319,8 +537,7 @@ function basculerFavori() {
 
 function fermer() {
   $("#modal").innerHTML = "";
-  delete $("#modal").dataset.recette;
-  delete $("#modal").dataset.form;
+  ["recette", "form", "rep", "choix"].forEach(k => delete $("#modal").dataset[k]);
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -744,6 +961,12 @@ document.addEventListener("click", e => {
   if (onglet) { S.onglet = onglet.dataset.tab; ecrireLocal("fx-onglet", S.onglet); if (S.pret) render(); window.scrollTo(0, 0); return; }
   const ligne = t.closest("[data-fiche]");
   if (ligne) return ouvrirFiche(ligne.dataset.fiche);
+  const repas = t.closest("[data-repas]");
+  if (repas) return ouvrirRepas(+repas.dataset.repas);
+  const choisi = t.closest("[data-choisi]");
+  if (choisi) return choisirPlat(choisi.dataset.choisi);
+  const pref = t.closest("[data-pref]");
+  if (pref) { const k = pref.dataset.pref; S.prefs[k] = !S.prefs[k]; sauverPrefs(); return renderMenu(); }
   const bascule = t.closest("[data-bascule]");
   if (bascule) { const k = bascule.dataset.bascule; S.f[k] = !S.f[k]; return renderRecettes(); }
   if ($("#modal").dataset.form && clicFormulaire(t)) return;
@@ -753,6 +976,16 @@ document.addEventListener("click", e => {
   if (m3 && !m3.hidden && (!el || el.dataset.act !== "menu3")) m3.hidden = true;
   if (!el) return;
   switch (el.dataset.act) {
+    case "nouveau-menu": nouveauMenu(); break;
+    case "nb": changerNombre(+el.dataset.v); break;
+    case "pers": changerPersonnes(+el.dataset.v); break;
+    case "fait": cocherFait(+el.dataset.i); break;
+    case "remplacer": remplacer(); break;
+    case "choisir": ouvrirChoix($("#modal").dataset.rep); break;
+    case "accomp": changerAccomp(); break;
+    case "voir": { const o = repasOuvert(); if (o) ouvrirFiche(o.m.repas[o.i].id); break; }
+    case "retirer": retirer(); break;
+    case "au-menu": auMenu(); break;
     case "nouvelle": nouvelle(); break;
     case "menu3": $("#menu3").hidden = !$("#menu3").hidden; break;
     case "modifier": modifier(); break;
@@ -795,6 +1028,7 @@ document.addEventListener("change", e => {
 });
 document.addEventListener("input", e => {
   if (e.target.id === "q") { S.f.q = e.target.value; majListe(); }
+  if (e.target.id === "q-choix") majChoix();
   // En tapant un ingrédient, son petit dessin se met à jour
   const li = e.target.closest && e.target.closest("#f-ings .li");
   if (li) li.querySelector("img").outerHTML = dessinIng(e.target.value);
@@ -831,6 +1065,6 @@ if ("serviceWorker" in navigator && !MODE_DEMO && location.protocol === "https:"
 }
 
 // Mode démo uniquement : accès pour les tests automatiques (préparer et vérifier un fichier Excel)
-if (MODE_DEMO) window.foodixTest = { S, classeurRecettes, lireRecettes, fusion, render };
+if (MODE_DEMO) window.foodixTest = { S, classeurRecettes, lireRecettes, fusion, render, candidats };
 
 if (MODE_DEMO) demarrerDemo(); else demarrerFirebase();
