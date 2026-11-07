@@ -1,5 +1,14 @@
 # Foodix — journal des nouveautés
 
+## 0.4.0 — 2026-11-07
+La liste de courses.
+- Ingrédients des repas pas encore cuisinés (plats + accompagnements), quantités additionnées et mises à l'échelle du nombre de personnes.
+- Rangée par rayon (fruits et légumes, boucherie, crèmerie, boulangerie, épicerie) ; « Sans doute au placard » replié en bas.
+- Case à cocher par article ; sous chaque article, les recettes qui l'utilisent.
+- Ajouts à la main : gardés d'un menu à l'autre tant qu'ils ne sont pas cochés, × pour retirer (avec Annuler).
+- Réglages › Courses › « Toujours dans la liste » : articles remis à chaque nouveau menu.
+- Correctif : le bœuf n'est plus dessiné comme un œuf.
+
 ## 0.3.0 — 2026-11-07
 Le menu, façon « livraison » de N repas (sans jours ni semaines).
 - « Nouveau menu » tire N plats au sort (5 par défaut, 1 à 14), avec « Annuler ».

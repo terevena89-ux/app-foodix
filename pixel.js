@@ -112,7 +112,7 @@ const ING_SPR=[
  [/peche/,"pomme",{r:"o",R:"O"}],[/pomme|grenade/,"pomme"],[/citron vert/,"citron",{y:"g",Y:"G"}],[/citron/,"citron"],[/avocat/,"avocat"],
  [/chou-fleur|chou fleur/,"salade",{g:"w",G:"W"}],[/salade|roquette|epinard|chou|romaine/,"salade"],[/navet/,"oignon",{t:"w",b:"u"}],
  [/persil|basilic|coriandre|menthe|ciboulette|aneth|estragon|sauge|thym|herbe|bouquet/,"herbe"],[/pousse|vermicelle/,"pates",{t:"w",Y:"W"}],
- [/oeuf/,"oeuf"],[/mozzarella|feta|tofu|chevre/,"fromage",{y:"w",Y:"W",c:"W"}],[/fromage blanc|yaourt|creme/,"pot",{y:"w",B:"l"}],
+ [/(^| )oeuf/,"oeuf"],[/mozzarella|feta|tofu|chevre/,"fromage",{y:"w",Y:"W",c:"W"}],[/fromage blanc|yaourt|creme/,"pot",{y:"w",B:"l"}],
  [/lait de coco/,"boite",{r:"w"}],[/lait/,"lait"],[/beurre de cacah/,"pot",{y:"b"}],[/beurre/,"beurre"],
  [/gruyere|parmesan|cheddar|fromage|roquefort|bleu|reblochon/,"fromage"],[/crevette/,"crevette"],[/saumon/,"poisson",{s:"p",S:"P"}],
  [/thon/,"boite",{r:"l"}],[/poisson|morue|cabillaud/,"poisson"],[/surimi/,"saucisse",{P:"w",p:"r",R:"r"}],[/poulet|dinde|cordon|nugget/,"poulet"],

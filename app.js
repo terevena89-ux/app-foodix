@@ -21,11 +21,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
-import { norm, parseItem, ingImg, dishImg } from "./pixel.js";
+import { norm, parseItem, keyOf, aisleOf, aisleLabel, AISLE_ORDER, fmtQty, ingImg, dishImg } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -59,6 +59,7 @@ const S = {
   recettes: [], pret: false, compte: "",
   menus: [],                              // toutes les « livraisons », la plus récente = le menu en cours
   prefs: Object.assign({}, PREFS_DEFAUT),
+  toujours: [],                           // articles ajoutés à chaque nouveau menu (Réglages › Toujours)
   onglet: lireLocal("fx-onglet", "menu"),
   // filtres de l'écran Recettes
   f: { q: "", cat: "", prot: "", fav: false, vege: false, saison: false, avance: false, invites: false }
@@ -90,6 +91,10 @@ function sauverPrefs() {
   if (MODE_DEMO) return sauverDemo();
   setDoc(refDonnees(), { prefs: S.prefs }, { merge: true }).catch(erreurEcriture);
 }
+function sauverToujours() {
+  if (MODE_DEMO) return sauverDemo();
+  setDoc(refDonnees(), { toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
+}
 
 function erreurEcriture(err) { console.error(err); toast("Échec de l’enregistrement"); }
 
@@ -116,7 +121,7 @@ function ecrireRecettes(liste) {
 
 // Mode démo : tout est recopié dans le navigateur après chaque modification
 function sauverDemo() {
-  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs })); } catch (e) { /* plein ou bloqué */ }
+  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours })); } catch (e) { /* plein ou bloqué */ }
 }
 function demarrerDemo() {
   let d = {};
@@ -124,6 +129,7 @@ function demarrerDemo() {
   S.recettes = Array.isArray(d.recettes) ? d.recettes : [];
   S.menus = Array.isArray(d.menus) ? d.menus : [];
   S.prefs = Object.assign({}, PREFS_DEFAUT, d.prefs);
+  S.toujours = Array.isArray(d.toujours) ? d.toujours : [];
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
   S.pret = true;
@@ -158,7 +164,8 @@ function ecouter() {
   }, err => console.error(err)));
   arrets.push(onSnapshot(refDonnees(), snap => {
     const p = Object.assign({}, PREFS_DEFAUT, snap.exists() && snap.data().prefs);
-    if (JSON.stringify(p) !== JSON.stringify(S.prefs)) { S.prefs = p; rerendre(); }
+    const tj = (snap.exists() && snap.data().toujours) || [];
+    if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours)) { S.prefs = p; S.toujours = tj; rerendre(); }
   }, err => console.error(err)));
 }
 
@@ -247,7 +254,7 @@ function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.onglet));
   if (S.onglet === "recettes") renderRecettes();
   else if (S.onglet === "menu") renderMenu();
-  else $("#main").innerHTML = `<div class="vide">La liste de courses arrive dans une prochaine version.</div>`;
+  else renderCourses();
 }
 
 function renderConnexion() {
@@ -311,9 +318,19 @@ function nouveauRepas(r, m) {
   return { id: r.id, side: veutAccomp(r) ? tirerAccomp(m ? m.repas.map(x => x.side).filter(Boolean) : []) : null, fait: false };
 }
 
+// Une livraison vide. Les ajouts à la main la suivent : ceux pas encore achetés
+// (pas cochés) passent au menu suivant, et la liste « Toujours » s'y rajoute.
+function creerMenu() {
+  const avant = menuEnCours();
+  const restants = avant ? (avant.ajouts || []).filter(a => !(avant.coches || {})[cleAjout(a)]) : [];
+  const ajouts = [...restants];
+  S.toujours.forEach(a => { if (!ajouts.some(x => norm(x) === norm(a))) ajouts.push(a); });
+  return { id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [], ajouts, coches: {} };
+}
+
 // « Nouveau menu » : une nouvelle livraison ; l'ancienne reste dans l'historique
 function nouveauMenu() {
-  const m = { id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [] };
+  const m = creerMenu();
   for (let i = 0; i < S.prefs.nb; i++) {
     const r = tirerPlat(m.repas.map(x => x.id));
     if (!r) break;
@@ -436,7 +453,7 @@ function choisirPlat(id) {
   const r = recette(id); if (!r) return;
   const i = $("#modal").dataset.choix;
   let m = menuEnCours();
-  if (!m) { m = { id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [] }; S.menus.push(m); }
+  if (!m) { m = creerMenu(); S.menus.push(m); }
   const x = nouveauRepas(r, m);
   if (i !== "" && m.repas[+i]) m.repas[+i] = x; else m.repas.push(x);
   ecrireMenu(m); fermer(); render();
@@ -447,6 +464,84 @@ function auMenu() {
   const id = $("#modal").dataset.recette;
   $("#modal").dataset.choix = "";
   choisirPlat(id);
+}
+
+/* ---------- 4 ter. Liste de courses ---------- */
+// Additionne les ingrédients des repas pas encore cuisinés (plats + accompagnements),
+// à l'échelle du nombre de personnes, puis les range par rayon du magasin.
+// Clé d'un article = nom simplifié (sans accents, sans pluriel) + unité :
+// « 2 oignons » et « 1 oignon » deviennent « 3 oignons ».
+
+const cleAjout = a => "perso|" + norm(a);
+
+function articles(m) {
+  const map = new Map();
+  m.repas.filter(x => !x.fait).forEach(x => [x.id, x.side].filter(Boolean).forEach(id => {
+    const r = recette(id); if (!r) return;
+    const k = (m.pers || 2) / (r.portions || 2);       // ex. recette pour 2, on est 4 : ×2
+    (r.ingredients || []).forEach(txt => {
+      const it = parseItem(txt); if (!it) return;
+      const cle = it.key + "|" + it.unit;
+      const e = map.get(cle) || { cle, nom: it.name, unite: it.unit, qte: null, recettes: [], rayon: aisleOf(it.name) };
+      if (it.qty != null) e.qte = (e.qte || 0) + it.qty * k;
+      if (!e.recettes.includes(r.nom)) e.recettes.push(r.nom);
+      map.set(cle, e);
+    });
+  }));
+  // « sel » sans quantité rejoint « 5 g sel » s'il existe
+  for (const e of [...map.values()]) if (e.qte == null) {
+    const autre = [...map.values()].find(o => o !== e && o.cle.split("|")[0] === e.cle.split("|")[0] && o.qte != null);
+    if (autre) { e.recettes.forEach(n => { if (!autre.recettes.includes(n)) autre.recettes.push(n); }); map.delete(e.cle); }
+  }
+  (m.ajouts || []).forEach(a => map.set(cleAjout(a), { cle: cleAjout(a), nom: a, unite: "", qte: null, recettes: [], rayon: "perso", ajout: true }));
+  return [...map.values()];
+}
+
+function renderCourses() {
+  const m = menuEnCours();
+  const ajout = `<div class="srow"><label class="cherche">${icone("plus")}<input id="ajout-art" placeholder="Ajouter un article" autocomplete="off" enterkeyhint="done"></label>
+    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div>`;
+  if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Pas encore de menu.</div>`; return; }
+  const coches = m.coches || {};
+  const groupes = {};
+  articles(m).forEach(e => (groupes[e.rayon] ??= []).push(e));
+  const ligne = e => `<div class="it ${coches[e.cle] ? "fait" : ""}">
+      <button class="cb" data-coche="${esc(e.cle)}" aria-label="${coches[e.cle] ? "Pas encore pris" : "Pris"}">${coches[e.cle] ? icone("check") : ""}</button>
+      ${ingImg(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span>
+      <span class="q num">${esc(fmtQty(e.qte, e.unite))}</span>
+      ${e.ajout ? `<button class="ib" data-retirer-art="${esc(e.nom)}" aria-label="Retirer">${icone("x")}</button>` : ""}</div>`;
+  const tri = l => l.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  let html = "";
+  AISLE_ORDER.filter(a => a !== "placard" && groupes[a]).forEach(a => {
+    html += `<div class="rayon"><h3>${aisleLabel(a)}</h3>${tri(groupes[a]).map(ligne).join("")}</div>`;
+  });
+  // Ce qu'on a sans doute déjà : replié tout en bas
+  if (groupes.placard) html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Sans doute au placard (${groupes.placard.length})</summary>${tri(groupes.placard).map(ligne).join("")}</details>`;
+  $("#main").innerHTML = ajout + (html || `<div class="vide">Rien à acheter.</div>`);
+}
+
+function cocher(cle) {
+  const m = menuEnCours(); if (!m) return;
+  m.coches = m.coches || {};
+  if (m.coches[cle]) delete m.coches[cle]; else m.coches[cle] = true;
+  ecrireMenu(m); renderCourses();
+}
+function ajouterArticle() {
+  const champ = $("#ajout-art"), v = champ.value.trim();
+  if (!v) return champ.focus();
+  let m = menuEnCours();
+  if (!m) { m = creerMenu(); S.menus.push(m); }
+  m.ajouts = m.ajouts || [];
+  if (!m.ajouts.some(a => norm(a) === norm(v))) m.ajouts.push(v);
+  ecrireMenu(m); renderCourses();
+  $("#ajout-art").focus(); // on peut enchaîner les ajouts au clavier
+}
+function retirerArticle(nom) {
+  const m = menuEnCours(); if (!m) return;
+  const i = (m.ajouts || []).indexOf(nom); if (i < 0) return;
+  m.ajouts.splice(i, 1);
+  ecrireMenu(m); renderCourses();
+  toast("Article retiré", () => { m.ajouts.splice(i, 0, nom); ecrireMenu(m); renderCourses(); });
 }
 
 /* ---------- 5. Écran Recettes ---------- */
@@ -807,7 +902,9 @@ function ouvrirReglages() {
     <div class="reg"><span>Animations</span><span class="seg">
       <button class="${anim === "completes" ? "on" : ""}" data-act="anim" data-v="completes">Complètes</button>
       <button class="${anim === "simples" ? "on" : ""}" data-act="anim" data-v="simples">Simples</button></span></div>
-    ${uid ? `<div class="sect">Excel</div>
+    ${uid ? `<div class="sect">Courses</div>
+    <button class="reg" data-act="toujours"><span>Toujours dans la liste</span><span class="val">${S.toujours.length} ›</span></button>
+    <div class="sect">Excel</div>
     <div class="reg" style="justify-content:flex-start"><button class="btn" data-act="exporter">Exporter</button>
       <label class="btn">Importer<input type="file" id="fichier" accept=".xlsx" hidden></label></div>
     <div id="imp"></div>
@@ -817,6 +914,32 @@ function ouvrirReglages() {
     <div class="version">Version ${VERSION}</div>
   </div></div>`;
   majSynchro();
+}
+
+// « Toujours dans la liste » : articles remis à chaque nouveau menu (lait, pain…)
+function ouvrirToujours() {
+  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Toujours dans la liste">
+    <button class="retour" data-act="reglages">‹ Réglages</button>
+    <h2 class="titre-r">Toujours dans la liste</h2>
+    <div class="ingl">${S.toujours.map((a, i) => `<div class="li"><span class="tj-nm">${ingImg(a, 18)}${esc(a)}</span>
+      <button class="ib" data-act="retirer-toujours" data-i="${i}" aria-label="Retirer">${icone("x")}</button></div>`).join("")}</div>
+    <div class="srow" style="margin:0"><label class="cherche">${icone("plus")}<input id="ajout-tj" placeholder="ex. 1 L lait" autocomplete="off" enterkeyhint="done"></label>
+      <button class="fab" data-act="ajouter-toujours" aria-label="Ajouter">${icone("check")}</button></div>
+  </div></div>`;
+}
+function ajouterToujours() {
+  const v = $("#ajout-tj").value.trim();
+  if (!v) return $("#ajout-tj").focus();
+  if (!S.toujours.some(a => norm(a) === norm(v))) {
+    S.toujours.push(v); sauverToujours();
+    // et tout de suite dans la liste en cours
+    const m = menuEnCours();
+    if (m) { m.ajouts = m.ajouts || []; if (!m.ajouts.some(a => norm(a) === norm(v))) { m.ajouts.push(v); ecrireMenu(m); } }
+  }
+  ouvrirToujours(); $("#ajout-tj").focus();
+}
+function retirerToujours(i) {
+  S.toujours.splice(i, 1); sauverToujours(); ouvrirToujours();
 }
 
 function ouvrirThemes() {
@@ -961,6 +1084,10 @@ document.addEventListener("click", e => {
   if (onglet) { S.onglet = onglet.dataset.tab; ecrireLocal("fx-onglet", S.onglet); if (S.pret) render(); window.scrollTo(0, 0); return; }
   const ligne = t.closest("[data-fiche]");
   if (ligne) return ouvrirFiche(ligne.dataset.fiche);
+  const coche = t.closest("[data-coche]");
+  if (coche) return cocher(coche.dataset.coche);
+  const retArt = t.closest("[data-retirer-art]");
+  if (retArt) return retirerArticle(retArt.dataset.retirerArt);
   const repas = t.closest("[data-repas]");
   if (repas) return ouvrirRepas(+repas.dataset.repas);
   const choisi = t.closest("[data-choisi]");
@@ -977,6 +1104,10 @@ document.addEventListener("click", e => {
   if (!el) return;
   switch (el.dataset.act) {
     case "nouveau-menu": nouveauMenu(); break;
+    case "ajouter-art": ajouterArticle(); break;
+    case "toujours": ouvrirToujours(); break;
+    case "ajouter-toujours": ajouterToujours(); break;
+    case "retirer-toujours": retirerToujours(+el.dataset.i); break;
     case "nb": changerNombre(+el.dataset.v); break;
     case "pers": changerPersonnes(+el.dataset.v); break;
     case "fait": cocherFait(+el.dataset.i); break;
@@ -1037,6 +1168,8 @@ document.addEventListener("keydown", e => {
   // Entrée dans un ingrédient : nouvelle ligne juste en dessous (comme une liste au clavier)
   const li = e.target.closest && e.target.closest("#f-ings .li");
   if (li && e.key === "Enter") { e.preventDefault(); ajouterIngredient(li); return; }
+  if (e.key === "Enter" && e.target.id === "ajout-art") { e.preventDefault(); ajouterArticle(); return; }
+  if (e.key === "Enter" && e.target.id === "ajout-tj") { e.preventDefault(); ajouterToujours(); return; }
   // Échap ferme une fiche, mais pas le formulaire (pour ne pas perdre une saisie)
   if (e.key === "Escape" && $("#modal").innerHTML && !$("#modal").dataset.form) fermer();
 });
@@ -1068,3 +1201,6 @@ if ("serviceWorker" in navigator && !MODE_DEMO && location.protocol === "https:"
 if (MODE_DEMO) window.foodixTest = { S, classeurRecettes, lireRecettes, fusion, render, candidats };
 
 if (MODE_DEMO) demarrerDemo(); else demarrerFirebase();
+
+// Le placard replié/ouvert reste comme on l'a laissé quand la liste se redessine
+document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("placard")) S.placardOuvert = e.target.open; }, true);

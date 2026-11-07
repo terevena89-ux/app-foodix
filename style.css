@@ -245,3 +245,24 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .act .ic { color: var(--discret); }
 .act.danger, .act.danger .ic { color: var(--danger); }
 .choix-l { display: flex; flex-direction: column; max-height: 60vh; overflow: auto; }
+
+/* ---------- Liste de courses (v0.4.0) ---------- */
+.rayon { margin-bottom: 10px; }
+.rayon h3 { margin: 0 0 2px; padding-bottom: 4px; border-bottom: 1px solid var(--trait); font: 800 11.5px var(--texte); text-transform: uppercase; letter-spacing: .07em; color: var(--discret); }
+.it { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-height: 34px; }
+.it .cb { width: 20px; height: 20px; border: 1.8px solid var(--discret); border-radius: 5px; display: grid; place-items: center; flex-shrink: 0; background: none; padding: 0; color: var(--accent-encre); }
+.it.fait .cb { background: var(--accent); border-color: var(--accent); }
+.it .cb .ic { width: 13px; height: 13px; stroke-width: 3; }
+.it .w { flex: 1; min-width: 0; }
+.it .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.it .for { font-size: 11.5px; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.it .q { font-weight: 800; white-space: nowrap; }
+.it .ib { width: 28px; height: 28px; margin-right: -6px; }
+.it .ib .ic { width: 15px; height: 15px; }
+.it.fait .nm, .it.fait .q { text-decoration: line-through; color: var(--discret); }
+.it.fait img { opacity: .45; }
+.placard summary { list-style: none; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--discret); padding: 6px 0; cursor: pointer; }
+.placard summary::-webkit-details-marker { display: none; }
+.placard summary .ic { width: 15px; height: 15px; transition: transform .15s; }
+.placard[open] summary .ic { transform: rotate(90deg); }
+.tj-nm { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
