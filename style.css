@@ -266,3 +266,7 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .placard summary .ic { width: 15px; height: 15px; transition: transform .15s; }
 .placard[open] summary .ic { transform: rotate(90deg); }
 .tj-nm { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Petit panneau des listes déroulantes sur téléphone (module champs-mobile.js) :
+   il reprend les couleurs de l'appli, et suit donc le thème clair / sombre. */
+.pm-voile, .ni-ecran { --pm-fond: var(--carte); --pm-texte: var(--encre); --pm-discret: var(--discret); --pm-trait: var(--trait); --pm-accent: var(--accent); --pm-champ: var(--creux); --pm-appui: var(--accent-doux); --pm-police: var(--texte); }

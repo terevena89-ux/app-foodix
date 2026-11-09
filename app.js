@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, aisleLabel, AISLE_ORDER, fmtQty, ingIm
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -60,6 +60,7 @@ const S = {
   menus: [],                              // toutes les « livraisons », la plus récente = le menu en cours
   prefs: Object.assign({}, PREFS_DEFAUT),
   toujours: [],                           // articles ajoutés à chaque nouveau menu (Réglages › Toujours)
+  idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
   onglet: lireLocal("fx-onglet", "menu"),
   // filtres de l'écran Recettes
   f: { q: "", cat: "", prot: "", fav: false, vege: false, saison: false, avance: false, invites: false }
@@ -91,6 +92,12 @@ function sauverPrefs() {
   if (MODE_DEMO) return sauverDemo();
   setDoc(refDonnees(), { prefs: S.prefs }, { merge: true }).catch(erreurEcriture);
 }
+// Réglages › Notes (bloc-notes d'idées) : seulement le champ « idees », sans toucher au reste.
+function sauverIdees(texte) {
+  S.idees = texte;
+  if (MODE_DEMO) return sauverDemo();
+  setDoc(refDonnees(), { idees: texte }, { merge: true }).catch(erreurEcriture);
+}
 function sauverToujours() {
   if (MODE_DEMO) return sauverDemo();
   setDoc(refDonnees(), { toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
@@ -121,7 +128,7 @@ function ecrireRecettes(liste) {
 
 // Mode démo : tout est recopié dans le navigateur après chaque modification
 function sauverDemo() {
-  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours })); } catch (e) { /* plein ou bloqué */ }
+  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours, idees: S.idees })); } catch (e) { /* plein ou bloqué */ }
 }
 function demarrerDemo() {
   let d = {};
@@ -130,6 +137,7 @@ function demarrerDemo() {
   S.menus = Array.isArray(d.menus) ? d.menus : [];
   S.prefs = Object.assign({}, PREFS_DEFAUT, d.prefs);
   S.toujours = Array.isArray(d.toujours) ? d.toujours : [];
+  S.idees = d.idees || "";
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
   S.pret = true;
@@ -165,6 +173,7 @@ function ecouter() {
   arrets.push(onSnapshot(refDonnees(), snap => {
     const p = Object.assign({}, PREFS_DEFAUT, snap.exists() && snap.data().prefs);
     const tj = (snap.exists() && snap.data().toujours) || [];
+    S.idees = (snap.exists() && snap.data().idees) || ""; NotesIdees.maj(S.idees); // un autre appareil a pu changer les notes
     if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours)) { S.prefs = p; S.toujours = tj; rerendre(); }
   }, err => console.error(err)));
 }
@@ -904,6 +913,8 @@ function ouvrirReglages() {
       <button class="${anim === "simples" ? "on" : ""}" data-act="anim" data-v="simples">Simples</button></span></div>
     ${uid ? `<div class="sect">Courses</div>
     <button class="reg" data-act="toujours"><span>Toujours dans la liste</span><span class="val">${S.toujours.length} ›</span></button>
+    <div class="sect">Idées</div>
+    <button class="reg" data-act="idees"><span>Notes</span><span class="val">›</span></button>
     <div class="sect">Excel</div>
     <div class="reg" style="justify-content:flex-start"><button class="btn" data-act="exporter">Exporter</button>
       <label class="btn">Importer<input type="file" id="fichier" accept=".xlsx" hidden></label></div>
@@ -1142,6 +1153,7 @@ document.addEventListener("click", e => {
     case "deconnexion": fermer(); S.pret = false; signOut(auth); break;
     case "reglages": ouvrirReglages(); break;
     case "themes": ouvrirThemes(); break;
+    case "idees": NotesIdees.ouvrir(S.idees, sauverIdees); break;
     case "theme": ecrireLocal("fx-theme", el.dataset.v); appliquerTheme(); ouvrirThemes(); break;
     case "anim": ecrireLocal("fx-anim", el.dataset.v); document.documentElement.dataset.anim = el.dataset.v; ouvrirReglages(); break;
     case "exporter": exporter(el); break;

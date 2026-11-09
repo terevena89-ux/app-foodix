@@ -4,11 +4,11 @@
 // même sans réseau. (Les données, elles, sont gérées par Firebase.)
 // À CHAQUE NOUVELLE VERSION : changer le numéro ci-dessous.
 // =========================================================
-const CACHE = "foodix-v0.4.0";
+const CACHE = "foodix-v0.4.1";
 
 // Fichiers de l'appli à garder dès l'installation
 const FICHIERS = [
-  "./", "index.html", "style.css", "app.js", "pixel.js", "excel-style.js", "firebase-config.js",
+  "./", "index.html", "style.css", "app.js", "champs-mobile.js", "notes-idees.js", "pixel.js", "excel-style.js", "firebase-config.js",
   "manifest.json", "icones/icone.svg", "icones/icone-192.png", "icones/icone-512.png"
 ];
 
