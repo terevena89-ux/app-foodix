@@ -1,5 +1,14 @@
 # Foodix — journal des nouveautés
 
+## 0.7.0 — 2026-11-14
+Animations, vibrations et mode « Compléter ».
+- **Gestes** :
+  - glisser la page à gauche / à droite pour changer d'onglet (la page suit le doigt) ;
+  - glisser un article de la liste vers la gauche pour le retirer (bandeau rouge « Retirer », avec Annuler). Un ingrédient venu d'une recette est seulement caché de la liste : « remettre » le fait revenir.
+- **Animations** : la case cochée rebondit, un trait barre le nom, puis l'article descend en bas de son rayon ; « Nouveau menu » fait arriver les propositions en cascade ; un plat accepté « vole » vers l'onglet Courses ; les fenêtres redescendent en douceur ; les boutons s'enfoncent sous le doigt. Réglages › Animations « Simples » coupe tout.
+- **Vibrations** (comme Médiathèque) : une différente par geste (cocher, ajouter, retirer, nouveau menu, nouvelle liste, seuil d'un glissement…). Réglages › Vibrations Oui / Non (réglage de cet appareil).
+- **Réglages › Compléter mes recettes** : je choisis quoi compléter (catégorie et protéine, ingrédients, prix / difficulté / temps / maîtrise, saison et options), puis les recettes incomplètes défilent en cartes. Tout est enregistré au toucher. Carte jetée à gauche = suivante, à droite = retour (ou les boutons en bas).
+
 ## 0.6.0 — 2026-11-14
 Nouvelle allure pour le téléphone, et le menu ne remplit plus la liste tout seul.
 - **Onglets en bas** (Courses · Recettes · Menu), à portée de pouce ; l'appli s'ouvre sur la liste de courses.
