@@ -1,5 +1,13 @@
 # Foodix — journal des nouveautés
 
+## 0.5.1 — 2026-11-14
+La banque devient une vraie fenêtre (plein écran), rangée par rayons.
+- Réglages › Banque d'ingrédients : liste par rayon (fruits, légumes, boucherie, crèmerie, boulangerie, conserves, épicerie, placard) sur 2 colonnes. Même chose pour les produits ménagers (vaisselle, linge, nettoyage, papier et sacs, hygiène).
+- Toucher un ingrédient ouvre sa fiche : modifier le nom (les recettes qui l'utilisent sont réécrites), changer le rayon, choisir l'icône, le rendre récurrent, voir toutes ses recettes (on peut les ouvrir), ou le supprimer (retiré aussi des recettes, avec « Annuler »).
+- Le rayon choisi dans la banque est celui de la liste de courses. Nouveaux rayons « Fruits », « Légumes et herbes » et « Conserves » (avant : « Fruits et légumes »).
+- L'icône choisie s'affiche partout (liste de courses, fiche recette, formulaire).
+- Plus de compteurs ni de textes d'explication.
+
 ## 0.5.0 — 2026-11-14
 La banque d'ingrédients.
 - Réglages › Courses › « Banque d'ingrédients » : tous les ingrédients de mes recettes, une seule fois chacun (« tomate » et « 2 tomates » = même fiche), avec le nombre de recettes qui l'utilisent. Recherche, ajout à la main, retrait de ce qui a été ajouté à la main.
