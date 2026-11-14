@@ -1,5 +1,13 @@
 # Foodix — journal des nouveautés
 
+## 0.5.0 — 2026-11-14
+La banque d'ingrédients.
+- Réglages › Courses › « Banque d'ingrédients » : tous les ingrédients de mes recettes, une seule fois chacun (« tomate » et « 2 tomates » = même fiche), avec le nombre de recettes qui l'utilisent. Recherche, ajout à la main, retrait de ce qui a été ajouté à la main.
+- Onglet « Produits ménagers » (avec quelques idées à ajouter d'un geste). Ils ont leur rayon dans la liste de courses.
+- Articles « récurrents » : bouton ↻ sur chaque ligne. À chaque « Nouveau menu », Foodix demande lesquels je veux dans la liste (tous cochés au départ). L'ancien « Toujours dans la liste » est repris tel quel dans les récurrents.
+- Liste de courses : en tapant un article, la banque propose ceux qui correspondent (on touche pour ajouter). Un article nouveau entre dans la banque, en ingrédient ou en produit ménager.
+- Formulaire de recette : en écrivant un ingrédient, la banque propose les noms qui ressemblent, pour éviter les doublons d'écriture.
+
 ## 0.4.1 — 2026-11-09
 - Réglages › Notes : bloc-notes libre pour noter mes idées d'amélioration, synchronisé entre le téléphone et le PC, avec un bouton Copier.
 - Correctif : plus de barre de remplissage automatique (clé / carte / adresse) au-dessus du clavier dans les cases de saisie.

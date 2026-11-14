@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, aisleLabel, AISLE_ORDER, fmtQty, ingIm
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -59,7 +59,9 @@ const S = {
   recettes: [], pret: false, compte: "",
   menus: [],                              // toutes les « livraisons », la plus récente = le menu en cours
   prefs: Object.assign({}, PREFS_DEFAUT),
-  toujours: [],                           // articles ajoutés à chaque nouveau menu (Réglages › Toujours)
+  toujours: [],                           // ancien réglage « Toujours dans la liste » : repris dans la banque au 1er lancement
+  banque: [],                             // banque d'ingrédients : seulement ce qui est noté à la main (voir banque())
+  bq: { onglet: "ing", rec: false },      // écran de la banque : onglet affiché, filtre « récurrents »
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
   onglet: lireLocal("fx-onglet", "menu"),
   // filtres de l'écran Recettes
@@ -98,9 +100,10 @@ function sauverIdees(texte) {
   if (MODE_DEMO) return sauverDemo();
   setDoc(refDonnees(), { idees: texte }, { merge: true }).catch(erreurEcriture);
 }
-function sauverToujours() {
+// Banque d'ingrédients. On écrit aussi « toujours » (vidé) : l'ancien réglage est repris dans la banque.
+function sauverBanque() {
   if (MODE_DEMO) return sauverDemo();
-  setDoc(refDonnees(), { toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
+  setDoc(refDonnees(), { banque: S.banque, toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
 }
 
 function erreurEcriture(err) { console.error(err); toast("Échec de l’enregistrement"); }
@@ -128,7 +131,7 @@ function ecrireRecettes(liste) {
 
 // Mode démo : tout est recopié dans le navigateur après chaque modification
 function sauverDemo() {
-  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours, idees: S.idees })); } catch (e) { /* plein ou bloqué */ }
+  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours, banque: S.banque, idees: S.idees })); } catch (e) { /* plein ou bloqué */ }
 }
 function demarrerDemo() {
   let d = {};
@@ -137,6 +140,8 @@ function demarrerDemo() {
   S.menus = Array.isArray(d.menus) ? d.menus : [];
   S.prefs = Object.assign({}, PREFS_DEFAUT, d.prefs);
   S.toujours = Array.isArray(d.toujours) ? d.toujours : [];
+  S.banque = Array.isArray(d.banque) ? d.banque : [];
+  migrerToujours();
   S.idees = d.idees || "";
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
@@ -171,10 +176,15 @@ function ecouter() {
     if (JSON.stringify(recu) !== JSON.stringify(S.menus)) { S.menus = recu; rerendre(); }
   }, err => console.error(err)));
   arrets.push(onSnapshot(refDonnees(), snap => {
-    const p = Object.assign({}, PREFS_DEFAUT, snap.exists() && snap.data().prefs);
-    const tj = (snap.exists() && snap.data().toujours) || [];
-    S.idees = (snap.exists() && snap.data().idees) || ""; NotesIdees.maj(S.idees); // un autre appareil a pu changer les notes
-    if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours)) { S.prefs = p; S.toujours = tj; rerendre(); }
+    const d = snap.exists() ? snap.data() : {};
+    const p = Object.assign({}, PREFS_DEFAUT, d.prefs);
+    const tj = d.toujours || [], bq = d.banque || [];
+    S.idees = d.idees || ""; NotesIdees.maj(S.idees); // un autre appareil a pu changer les notes
+    if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours) || JSON.stringify(bq) !== JSON.stringify(S.banque)) {
+      S.prefs = p; S.toujours = tj; S.banque = bq;
+      migrerToujours();
+      rerendre();
+    }
   }, err => console.error(err)));
 }
 
@@ -248,6 +258,7 @@ function rerendre() {
   render();
   // la fiche ouverte suit les changements (mais on ne touche jamais au formulaire en cours de saisie)
   if ($("#modal").dataset.recette && !$("#modal").dataset.form) ouvrirFiche($("#modal").dataset.recette);
+  if ($("#modal").dataset.banque) majBanque();
 }
 
 function render() {
@@ -328,18 +339,41 @@ function nouveauRepas(r, m) {
 }
 
 // Une livraison vide. Les ajouts à la main la suivent : ceux pas encore achetés
-// (pas cochés) passent au menu suivant, et la liste « Toujours » s'y rajoute.
-function creerMenu() {
+// (pas cochés) passent au menu suivant, et les articles récurrents choisis s'y rajoutent.
+function creerMenu(recurrents = []) {
   const avant = menuEnCours();
   const restants = avant ? (avant.ajouts || []).filter(a => !(avant.coches || {})[cleAjout(a)]) : [];
   const ajouts = [...restants];
-  S.toujours.forEach(a => { if (!ajouts.some(x => norm(x) === norm(a))) ajouts.push(a); });
+  recurrents.forEach(a => { if (!ajouts.some(x => cleBanque(x) === cleBanque(a))) ajouts.push(a); });
   return { id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [], ajouts, coches: {} };
 }
 
-// « Nouveau menu » : une nouvelle livraison ; l'ancienne reste dans l'historique
+// « Nouveau menu » : si la banque contient des articles récurrents, on demande d'abord lesquels
+// on veut cette fois-ci (tous cochés au départ), puis on tire les repas.
 function nouveauMenu() {
-  const m = creerMenu();
+  const rec = banque().filter(e => e.rec);
+  if (!rec.length) return tirerMenu([]);
+  const md = $("#modal");
+  ["recette", "form", "rep", "choix", "banque"].forEach(k => delete md.dataset[k]);
+  md.dataset.recur = "1";
+  const ligne = (e, i) => `<button class="rc on" data-rc="${i}" data-nom="${esc(e.nom)}"><span class="cb">${icone("check")}</span>${ingImg(e.nom, 18)}<span class="nm">${esc(e.nom)}</span>${e.menage ? `<span class="t">Ménager</span>` : ""}</button>`;
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Articles récurrents">
+    <div class="fi-hd"><div class="txt"><h2>Articles récurrents</h2><div class="sub">Lesquels veux-tu dans cette liste ?</div></div>
+      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="rc-l">${rec.map(ligne).join("")}</div>
+    <div class="pied2"><button class="btn" data-act="menu-sans">Aucun</button><button class="btn pri" data-act="menu-avec">${icone("shuffle")}Créer le menu</button></div>
+  </div></div>`;
+}
+// Après la question : on crée le menu avec les articles encore cochés (ou aucun)
+function menuAvecRecurrents(tous) {
+  const noms = tous ? [...document.querySelectorAll(".rc.on")].map(b => b.dataset.nom) : [];
+  fermer();
+  tirerMenu(noms);
+}
+
+// Tire les repas d'une nouvelle livraison ; l'ancienne reste dans l'historique
+function tirerMenu(recurrents) {
+  const m = creerMenu(recurrents);
   for (let i = 0; i < S.prefs.nb; i++) {
     const r = tirerPlat(m.repas.map(x => x.id));
     if (!r) break;
@@ -502,15 +536,28 @@ function articles(m) {
     const autre = [...map.values()].find(o => o !== e && o.cle.split("|")[0] === e.cle.split("|")[0] && o.qte != null);
     if (autre) { e.recettes.forEach(n => { if (!autre.recettes.includes(n)) autre.recettes.push(n); }); map.delete(e.cle); }
   }
-  (m.ajouts || []).forEach(a => map.set(cleAjout(a), { cle: cleAjout(a), nom: a, unite: "", qte: null, recettes: [], rayon: "perso", ajout: true }));
+  const idx = new Map(banque().map(e => [e.cle, e]));
+  (m.ajouts || []).forEach(a => {
+    // « tomate » ajouté à la main alors qu'une recette en demande déjà : une seule ligne (celle des recettes)
+    const seul = parseItem(a);
+    if (seul && seul.name === a.trim() && [...map.values()].some(x => !x.ajout && x.cle.split("|")[0] === seul.key)) return;
+    const e = idx.get(cleBanque(a));
+    map.set(cleAjout(a), { cle: cleAjout(a), nom: a, unite: "", qte: null, recettes: [], rayon: e && e.menage ? "menage" : "perso", ajout: true });
+  });
   return [...map.values()];
 }
 
 function renderCourses() {
   const m = menuEnCours();
+  // ce qui était tapé dans le champ d'ajout reste (la liste peut se redessiner quand l'autre appareil modifie quelque chose)
+  const champ = $("#ajout-art"), tape = champ ? champ.value : "", avaitFocus = !!champ && document.activeElement === champ;
   const ajout = `<div class="srow"><label class="cherche">${icone("plus")}<input id="ajout-art" placeholder="Ajouter un article" autocomplete="off" enterkeyhint="done"></label>
-    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div>`;
-  if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Pas encore de menu.</div>`; return; }
+    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div><div class="sugg" id="sugg-art"></div>`;
+  const finir = () => { // remet le champ comme il était
+    const c = $("#ajout-art"); if (!c || !tape) return;
+    c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
+  };
+  if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Pas encore de menu.</div>`; return finir(); }
   const coches = m.coches || {};
   const groupes = {};
   articles(m).forEach(e => (groupes[e.rayon] ??= []).push(e));
@@ -527,6 +574,23 @@ function renderCourses() {
   // Ce qu'on a sans doute déjà : replié tout en bas
   if (groupes.placard) html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Sans doute au placard (${groupes.placard.length})</summary>${tri(groupes.placard).map(ligne).join("")}</details>`;
   $("#main").innerHTML = ajout + (html || `<div class="vide">Rien à acheter.</div>`);
+  finir();
+}
+
+// Sous le champ d'ajout : les articles de la banque qui correspondent à ce qu'on tape.
+// On y touche pour ajouter, ce qui évite d'écrire deux fois le même article de deux façons.
+function majSuggArt() {
+  const box = $("#sugg-art"), champ = $("#ajout-art");
+  if (!box || !champ) return;
+  const v = champ.value.trim(), q = norm(v);
+  if (!q) { box.innerHTML = ""; return; }
+  const m = menuEnCours(), deja = new Set(((m && m.ajouts) || []).map(cleBanque));
+  const tous = banque();
+  const l = tous.filter(e => correspond(e, q) && !deja.has(e.cle))
+    .sort((a, b) => (norm(a.court).startsWith(q) ? 0 : 1) - (norm(b.court).startsWith(q) ? 0 : 1) || b.recettes.length - a.recettes.length || parNom(a, b)).slice(0, 8);
+  const existe = tous.some(e => e.cle === cleBanque(v));
+  box.innerHTML = l.map(e => `<button class="chip" data-sugg="${esc(e.cle)}">${esc(e.nom)}${e.menage ? " <small>ménager</small>" : ""}</button>`).join("")
+    + (existe ? "" : `<button class="chip nouv" data-act="art-ingredient">${icone("plus")}« ${esc(v)} »</button><button class="chip nouv" data-act="art-menage">${icone("plus")}« ${esc(v)} » ménager</button>`);
 }
 
 function cocher(cle) {
@@ -535,14 +599,26 @@ function cocher(cle) {
   if (m.coches[cle]) delete m.coches[cle]; else m.coches[cle] = true;
   ecrireMenu(m); renderCourses();
 }
-function ajouterArticle() {
-  const champ = $("#ajout-art"), v = champ.value.trim();
-  if (!v) return champ.focus();
+// Ajoute un article à la liste en cours. Un article connu de la banque garde son nom d'origine ;
+// un article nouveau y entre (en produit ménager si on l'a demandé), pour être proposé la prochaine fois.
+function ajouterALaListe(texte, menage = false) {
+  const v = texte.trim(); if (!v) return;
+  const it = parseItem(v), avecQte = !!it && it.name !== v;  // « 2 L lait » : la quantité reste dans la liste, pas dans la banque
+  const cle = cleBanque(v), connu = banque().find(e => e.cle === cle);
+  let nom = v;
+  if (connu) { if (!avecQte) nom = connu.nom; }
+  else { ajouterBanque(avecQte ? it.name : v, menage); toast(menage ? "Ajouté à la banque (ménager)" : "Ajouté à la banque d'ingrédients"); }
   let m = menuEnCours();
   if (!m) { m = creerMenu(); S.menus.push(m); }
   m.ajouts = m.ajouts || [];
-  if (!m.ajouts.some(a => norm(a) === norm(v))) m.ajouts.push(v);
-  ecrireMenu(m); renderCourses();
+  if (!m.ajouts.some(a => cleBanque(a) === cleBanque(nom))) m.ajouts.push(nom);
+  ecrireMenu(m);
+}
+function ajouterArticle(menage = false) {
+  const champ = $("#ajout-art"), v = champ.value.trim();
+  if (!v) return champ.focus();
+  ajouterALaListe(v, menage);
+  champ.value = ""; renderCourses();
   $("#ajout-art").focus(); // on peut enchaîner les ajouts au clavier
 }
 function retirerArticle(nom) {
@@ -551,6 +627,127 @@ function retirerArticle(nom) {
   m.ajouts.splice(i, 1);
   ecrireMenu(m); renderCourses();
   toast("Article retiré", () => { m.ajouts.splice(i, 0, nom); ecrireMenu(m); renderCourses(); });
+}
+
+/* ---------- 4 quater. Banque d'ingrédients ---------- */
+// Une seule fiche par ingrédient, quelle que soit la façon de l'écrire (« tomate », « 2 tomates »…).
+// La banque réunit : 1) tous les ingrédients des recettes (automatique, rien à tenir à jour),
+// 2) ce que j'y ai ajouté à la main (depuis les Réglages ou la liste de courses), dont les produits ménagers.
+// Dans S.banque, on ne garde que ce qui est noté à la main : { nom, cle, menage, rec }
+//   menage : produit ménager        rec : « récurrent » = proposé à chaque nouvelle liste
+
+const cleBanque = nom => { const it = parseItem(nom); return it && it.key ? it.key : norm(nom); };
+
+function banque() {
+  const auto = new Map();
+  S.recettes.forEach(r => (r.ingredients || []).forEach(txt => {
+    const it = parseItem(txt); if (!it || !it.name) return;
+    const e = auto.get(it.key) || { noms: {}, recettes: [] };
+    e.noms[it.name] = (e.noms[it.name] || 0) + 1;
+    if (!e.recettes.includes(r.nom)) e.recettes.push(r.nom);
+    auto.set(it.key, e);
+  }));
+  const out = new Map();
+  auto.forEach((e, cle) => {
+    const nom = Object.keys(e.noms).sort((a, b) => e.noms[b] - e.noms[a] || a.localeCompare(b, "fr"))[0];  // l'écriture la plus courante
+    out.set(cle, { cle, nom, menage: false, rec: false, recettes: e.recettes });
+  });
+  S.banque.forEach(b => {
+    const cle = b.cle || cleBanque(b.nom), e = out.get(cle);
+    if (e) { e.menage = !!b.menage; e.rec = !!b.rec; if (b.nom) e.nom = b.nom; }
+    else out.set(cle, { cle, nom: b.nom, menage: !!b.menage, rec: !!b.rec, recettes: [] });
+  });
+  out.forEach(e => { const it = parseItem(e.nom); e.court = it && it.name ? it.name : e.nom; });  // sans la quantité
+  return [...out.values()].sort(parNom);
+}
+
+// Une entrée correspond à ce qui est tapé (q = texte déjà normalisé) : même au pluriel, « tomates » trouve « tomate »
+const correspond = (e, q) => norm(e.nom).includes(q) || e.cle.includes(keyOf(q));
+
+// Nouvelle entrée à la main (si elle existe déjà, on ne fait rien et on la renvoie)
+function ajouterBanque(texte, menage = false) {
+  const nom = texte.trim(), cle = cleBanque(nom);
+  const ex = banque().find(e => e.cle === cle);
+  if (ex) return ex;
+  S.banque.push({ nom, cle, menage: !!menage, rec: false });
+  sauverBanque();
+  return banque().find(e => e.cle === cle);
+}
+// Change « récurrent » d'une entrée (la crée dans S.banque si elle ne venait que des recettes)
+function basculerRecurrent(cle) {
+  const e = banque().find(x => x.cle === cle); if (!e) return;
+  let b = S.banque.find(x => (x.cle || cleBanque(x.nom)) === cle);
+  if (!b) { b = { nom: e.nom, cle, menage: false, rec: false }; S.banque.push(b); }
+  b.rec = !e.rec;
+  // plus rien de particulier et déjà dans une recette : l'entrée manuelle ne sert plus à rien
+  if (!b.rec && !b.menage && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
+  sauverBanque();
+}
+function supprimerBanque(cle) {
+  const i = S.banque.findIndex(x => (x.cle || cleBanque(x.nom)) === cle); if (i < 0) return;
+  const [b] = S.banque.splice(i, 1);
+  sauverBanque(); majBanque();
+  toast("« " + b.nom + " » retiré", () => { S.banque.splice(i, 0, b); sauverBanque(); majBanque(); });
+}
+// Un ancien « Toujours dans la liste » devient des articles récurrents de la banque (une seule fois)
+function migrerToujours() {
+  if (!S.toujours.length) return;
+  S.toujours.forEach(a => {
+    const cle = cleBanque(a), b = S.banque.find(x => (x.cle || cleBanque(x.nom)) === cle);
+    if (b) b.rec = true; else S.banque.push({ nom: a, cle, menage: false, rec: true });
+  });
+  S.toujours = [];
+  sauverBanque();
+}
+
+// Produits ménagers courants, proposés d'un geste dans l'onglet « Ménager »
+const MENAGER_IDEES = ["Liquide vaisselle", "Tablettes lave-vaisselle", "Lessive", "Adoucissant", "Éponges", "Essuie-tout", "Papier toilette",
+  "Sacs poubelle", "Nettoyant multi-usage", "Produit WC", "Savon mains", "Papier aluminium", "Film alimentaire"];
+
+function ouvrirBanque() {
+  const md = $("#modal");
+  ["recette", "form", "rep", "choix", "recur"].forEach(k => delete md.dataset[k]);
+  md.dataset.banque = "1";
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Banque d'ingrédients">
+    <button class="retour" data-act="reglages">‹ Réglages</button>
+    <h2 class="titre-r">Banque d'ingrédients</h2>
+    <div class="sub">Tout ce qui sert dans tes recettes, une seule fois chacun, plus ce que tu ajoutes. Touche ${icone("refresh")} pour qu'un article te soit proposé à chaque nouvelle liste.</div>
+    <div class="srow" style="margin:0"><label class="cherche">${icone("search")}<input id="q-bq" placeholder="Chercher ou ajouter…" autocomplete="off" enterkeyhint="done"></label>
+      <button class="fab" data-act="ajouter-banque" aria-label="Ajouter à la banque">${icone("plus")}</button></div>
+    <div id="bq-corps"></div>
+  </div></div>`;
+  majBanque();
+}
+function majBanque() {
+  const corps = $("#bq-corps"); if (!corps) return;
+  const men = S.bq.onglet === "menage", q = norm(($("#q-bq") || {}).value || "");
+  const tous = banque(), nbRec = tous.filter(e => e.rec).length;
+  const liste = tous.filter(e => e.menage === men && (!q || correspond(e, q)) && (!S.bq.rec || e.rec));
+  const idees = men && !q ? MENAGER_IDEES.filter(n => !tous.some(e => e.cle === cleBanque(n))) : [];
+  const ligne = e => `<div class="it bq"><span class="w">
+      <span class="nm">${ingImg(e.nom, 16)}${esc(e.nom)}</span><span class="for">${e.recettes.length ? e.recettes.length + " recette" + (e.recettes.length > 1 ? "s" : "") : "ajouté à la main"}</span></span>
+      <button class="ib rec ${e.rec ? "on" : ""}" data-bq-rec="${esc(e.cle)}" aria-pressed="${e.rec}" aria-label="Récurrent">${icone("refresh")}</button>
+      ${e.recettes.length ? "" : `<button class="ib" data-bq-del="${esc(e.cle)}" aria-label="Retirer de la banque">${icone("x")}</button>`}</div>`;
+  const avant = corps.querySelector(".bq-l"), haut = avant ? avant.scrollTop : 0;
+  corps.innerHTML = `<div class="seg bq-seg">
+      <button class="${men ? "" : "on"}" data-act="bq-onglet" data-v="ing">Ingrédients ${tous.filter(e => !e.menage).length}</button>
+      <button class="${men ? "on" : ""}" data-act="bq-onglet" data-v="menage">Produits ménagers ${tous.filter(e => e.menage).length}</button></div>
+    <div class="defile" style="margin:0"><button class="chip ${S.bq.rec ? "on" : ""}" data-act="bq-rec">${icone("refresh")}Récurrents ${nbRec}</button></div>
+    ${idees.length ? `<div class="sugg">${idees.map(n => `<button class="chip nouv" data-bq-idee="${esc(n)}">${icone("plus")}${esc(n)}</button>`).join("")}</div>` : ""}
+    <div class="bq-l">${liste.map(ligne).join("") || `<div class="vide" style="padding:24px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : "Rien ici pour l'instant."}</div>`}</div>`;
+  const apres = corps.querySelector(".bq-l"); if (apres) apres.scrollTop = haut;
+}
+// « + » (ou Entrée) : ajoute ce qui est tapé, sauf si l'article existe déjà — on le montre alors
+function ajouterDepuisBanque() {
+  const champ = $("#q-bq"), v = champ.value.trim();
+  if (!v) return champ.focus();
+  const ex = banque().find(e => e.cle === cleBanque(v));
+  if (ex) {
+    S.bq.onglet = ex.menage ? "menage" : "ing"; champ.value = ex.court;
+    majBanque(); return toast("Déjà dans la banque");
+  }
+  ajouterBanque(v, S.bq.onglet === "menage");
+  champ.value = ""; majBanque(); champ.focus();
 }
 
 /* ---------- 5. Écran Recettes ---------- */
@@ -641,7 +838,7 @@ function basculerFavori() {
 
 function fermer() {
   $("#modal").innerHTML = "";
-  ["recette", "form", "rep", "choix"].forEach(k => delete $("#modal").dataset[k]);
+  ["recette", "form", "rep", "choix", "recur", "banque"].forEach(k => delete $("#modal").dataset[k]);
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -718,6 +915,31 @@ const ligneIngredient = (txt = "") => `<div class="li"><span class="poignee" ari
 function dessinIng(txt) {
   const it = parseItem(txt);
   return ingImg(it ? it.name : (txt || "sachet"), 18);
+}
+// Sous la ligne en cours de saisie : les ingrédients de la banque qui ressemblent à ce qu'on tape.
+// Toucher l'un d'eux remplace le nom (la quantité tapée reste) : pas de « tomate » et « tomates » en double.
+function majSuggIng(li) {
+  document.querySelectorAll(".sugg-ing").forEach(x => x.remove());
+  if (!li) return;
+  const it = parseItem(li.querySelector("input").value);
+  if (!it || norm(it.name).length < 2) return;
+  const q = norm(it.name);
+  const l = banque().filter(e => !e.menage && norm(e.court) !== q && (norm(e.court).includes(q) || e.cle === it.key))
+    .sort((a, b) => (a.cle === it.key ? 0 : 1) - (b.cle === it.key ? 0 : 1) || (norm(a.court).startsWith(q) ? 0 : 1) - (norm(b.court).startsWith(q) ? 0 : 1) || b.recettes.length - a.recettes.length || parNom(a, b)).slice(0, 6);
+  if (!l.length) return;
+  const box = document.createElement("div");
+  box.className = "sugg-ing";
+  // « on » = c'est déjà le même ingrédient, écrit autrement : à uniformiser
+  box.innerHTML = l.map(e => `<button type="button" class="chip ${e.cle === it.key ? "on" : ""}" data-sugg-ing="${esc(e.court)}">${esc(e.court)}</button>`).join("");
+  li.appendChild(box);
+}
+function choisirSuggIng(btn) {
+  const li = btn.closest(".li"), champ = li.querySelector("input");
+  const txt = champ.value.trimEnd(), it = parseItem(txt);
+  champ.value = (it ? txt.slice(0, txt.length - it.name.length) : "") + btn.dataset.suggIng;
+  li.querySelector("img").outerHTML = dessinIng(champ.value);
+  majSuggIng(null);
+  champ.focus();
 }
 function ajouterIngredient(apres) {
   const tmp = document.createElement("div");
@@ -901,7 +1123,7 @@ const THEMES = [["auto", "Auto", "Suit le téléphone ou le PC"], ["clair", "Cla
 
 function ouvrirReglages() {
   importEnAttente = null;
-  delete $("#modal").dataset.recette;
+  ["recette", "recur", "banque"].forEach(k => delete $("#modal").dataset[k]);
   const th = THEMES.find(t => t[0] === lireLocal("fx-theme", "auto")) || THEMES[0];
   const anim = lireLocal("fx-anim", "completes");
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Réglages">
@@ -912,7 +1134,7 @@ function ouvrirReglages() {
       <button class="${anim === "completes" ? "on" : ""}" data-act="anim" data-v="completes">Complètes</button>
       <button class="${anim === "simples" ? "on" : ""}" data-act="anim" data-v="simples">Simples</button></span></div>
     ${uid ? `<div class="sect">Courses</div>
-    <button class="reg" data-act="toujours"><span>Toujours dans la liste</span><span class="val">${S.toujours.length} ›</span></button>
+    <button class="reg" data-act="banque"><span>Banque d'ingrédients</span><span class="val">${banque().filter(e => e.rec).length} récurrent${banque().filter(e => e.rec).length > 1 ? "s" : ""} ›</span></button>
     <div class="sect">Idées</div>
     <button class="reg" data-act="idees"><span>Notes</span><span class="val">›</span></button>
     <div class="sect">Excel</div>
@@ -925,32 +1147,6 @@ function ouvrirReglages() {
     <div class="version">Version ${VERSION}</div>
   </div></div>`;
   majSynchro();
-}
-
-// « Toujours dans la liste » : articles remis à chaque nouveau menu (lait, pain…)
-function ouvrirToujours() {
-  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Toujours dans la liste">
-    <button class="retour" data-act="reglages">‹ Réglages</button>
-    <h2 class="titre-r">Toujours dans la liste</h2>
-    <div class="ingl">${S.toujours.map((a, i) => `<div class="li"><span class="tj-nm">${ingImg(a, 18)}${esc(a)}</span>
-      <button class="ib" data-act="retirer-toujours" data-i="${i}" aria-label="Retirer">${icone("x")}</button></div>`).join("")}</div>
-    <div class="srow" style="margin:0"><label class="cherche">${icone("plus")}<input id="ajout-tj" placeholder="ex. 1 L lait" autocomplete="off" enterkeyhint="done"></label>
-      <button class="fab" data-act="ajouter-toujours" aria-label="Ajouter">${icone("check")}</button></div>
-  </div></div>`;
-}
-function ajouterToujours() {
-  const v = $("#ajout-tj").value.trim();
-  if (!v) return $("#ajout-tj").focus();
-  if (!S.toujours.some(a => norm(a) === norm(v))) {
-    S.toujours.push(v); sauverToujours();
-    // et tout de suite dans la liste en cours
-    const m = menuEnCours();
-    if (m) { m.ajouts = m.ajouts || []; if (!m.ajouts.some(a => norm(a) === norm(v))) { m.ajouts.push(v); ecrireMenu(m); } }
-  }
-  ouvrirToujours(); $("#ajout-tj").focus();
-}
-function retirerToujours(i) {
-  S.toujours.splice(i, 1); sauverToujours(); ouvrirToujours();
 }
 
 function ouvrirThemes() {
@@ -1097,6 +1293,18 @@ document.addEventListener("click", e => {
   if (ligne) return ouvrirFiche(ligne.dataset.fiche);
   const coche = t.closest("[data-coche]");
   if (coche) return cocher(coche.dataset.coche);
+  const sugg = t.closest("[data-sugg]");
+  if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); renderCourses(); $("#ajout-art").focus(); } return; }
+  const suggIng = t.closest("[data-sugg-ing]");
+  if (suggIng) return choisirSuggIng(suggIng);
+  const rc = t.closest("[data-rc]");
+  if (rc) return rc.classList.toggle("on");
+  const bqRec = t.closest("[data-bq-rec]");
+  if (bqRec) { basculerRecurrent(bqRec.dataset.bqRec); majBanque(); return; }
+  const bqDel = t.closest("[data-bq-del]");
+  if (bqDel) return supprimerBanque(bqDel.dataset.bqDel);
+  const bqIdee = t.closest("[data-bq-idee]");
+  if (bqIdee) { ajouterBanque(bqIdee.dataset.bqIdee, true); majBanque(); return; }
   const retArt = t.closest("[data-retirer-art]");
   if (retArt) return retirerArticle(retArt.dataset.retirerArt);
   const repas = t.closest("[data-repas]");
@@ -1115,10 +1323,14 @@ document.addEventListener("click", e => {
   if (!el) return;
   switch (el.dataset.act) {
     case "nouveau-menu": nouveauMenu(); break;
-    case "ajouter-art": ajouterArticle(); break;
-    case "toujours": ouvrirToujours(); break;
-    case "ajouter-toujours": ajouterToujours(); break;
-    case "retirer-toujours": retirerToujours(+el.dataset.i); break;
+    case "ajouter-art": case "art-ingredient": ajouterArticle(); break;
+    case "art-menage": ajouterArticle(true); break;
+    case "menu-avec": menuAvecRecurrents(true); break;
+    case "menu-sans": menuAvecRecurrents(false); break;
+    case "banque": ouvrirBanque(); break;
+    case "ajouter-banque": ajouterDepuisBanque(); break;
+    case "bq-onglet": S.bq.onglet = el.dataset.v; majBanque(); break;
+    case "bq-rec": S.bq.rec = !S.bq.rec; majBanque(); break;
     case "nb": changerNombre(+el.dataset.v); break;
     case "pers": changerPersonnes(+el.dataset.v); break;
     case "fait": cocherFait(+el.dataset.i); break;
@@ -1172,16 +1384,29 @@ document.addEventListener("change", e => {
 document.addEventListener("input", e => {
   if (e.target.id === "q") { S.f.q = e.target.value; majListe(); }
   if (e.target.id === "q-choix") majChoix();
+  if (e.target.id === "ajout-art") majSuggArt();
+  if (e.target.id === "q-bq") majBanque();
   // En tapant un ingrédient, son petit dessin se met à jour
   const li = e.target.closest && e.target.closest("#f-ings .li");
-  if (li) li.querySelector("img").outerHTML = dessinIng(e.target.value);
+  if (li) { li.querySelector("img").outerHTML = dessinIng(e.target.value); majSuggIng(li); }
 });
+// Les suggestions suivent la ligne où l'on écrit, et disparaissent quand on la quitte
+document.addEventListener("focusin", e => {
+  const li = e.target.closest && e.target.closest("#f-ings .li");
+  if (li && e.target.tagName === "INPUT") majSuggIng(li);
+});
+document.addEventListener("focusout", e => {
+  if (!(e.target.closest && e.target.closest("#f-ings .li"))) return;
+  setTimeout(() => { if (!(document.activeElement && document.activeElement.closest("#f-ings .li"))) majSuggIng(null); }, 150);
+});
+// Toucher une suggestion ne doit pas faire perdre le champ en cours (le clavier reste ouvert)
+document.addEventListener("mousedown", e => { if (e.target.closest && e.target.closest(".sugg-ing, #sugg-art")) e.preventDefault(); });
 document.addEventListener("keydown", e => {
   // Entrée dans un ingrédient : nouvelle ligne juste en dessous (comme une liste au clavier)
   const li = e.target.closest && e.target.closest("#f-ings .li");
   if (li && e.key === "Enter") { e.preventDefault(); ajouterIngredient(li); return; }
   if (e.key === "Enter" && e.target.id === "ajout-art") { e.preventDefault(); ajouterArticle(); return; }
-  if (e.key === "Enter" && e.target.id === "ajout-tj") { e.preventDefault(); ajouterToujours(); return; }
+  if (e.key === "Enter" && e.target.id === "q-bq") { e.preventDefault(); ajouterDepuisBanque(); return; }
   // Échap ferme une fiche, mais pas le formulaire (pour ne pas perdre une saisie)
   if (e.key === "Escape" && $("#modal").innerHTML && !$("#modal").dataset.form) fermer();
 });
