@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AI
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -64,6 +64,7 @@ const S = {
   toujours: [],                           // ancien réglage « Toujours dans la liste » : repris dans la banque au 1er lancement
   banque: [],                             // banque d'ingrédients : seulement ce qui est noté à la main (voir banque())
   bq: { ouvert: false, onglet: "ing", rec: false, placard: false, detail: null, suppr: null, scroll: 0 },  // écran de la banque (voir 4 quater)
+  cp: null,                               // mode Compléter (voir 7 ter)
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
   onglet: lireLocal("fx-onglet", "courses"),
   // filtres de l'écran Recettes
@@ -264,6 +265,59 @@ function deSaison(r) {
   return !s || s === "annuel" || s === SAISON || (s === "automne" && SAISON === "hiver") || (s === "printemps" && SAISON === "ete");
 }
 
+/* ---------- 3 bis. Animations et vibrations ---------- */
+// Animations : « Complètes » (par défaut) ou « Simples » dans Réglages (et rien si le téléphone demande moins de mouvement).
+const animOK = () => document.documentElement.dataset.anim !== "simples" && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+const DOUX = "cubic-bezier(.22,.9,.25,1)", RESSORT = "cubic-bezier(.3,1.5,.5,1)";
+// Vibrations (téléphone Android), comme Médiathèque : chaque geste a la sienne, on « sent » ce qu'on a fait sans regarder.
+// Réglage de CET appareil : Réglages › Vibrations Oui / Non.
+const VIBRATIONS = {
+  pas: 8,                     // changer d'onglet, petit choix
+  coche: [10, 35, 18],        // article pris, plat cuisiné : double tape franche
+  decoche: 6,                 // on décoche : une toute petite
+  ajout: [8, 40, 8],          // ajouté à la liste : deux petites
+  retire: 28,                 // retiré : une seule, plus longue
+  seuil: 5,                   // le doigt a assez glissé pour que ça compte
+  tirage: [6, 30, 6, 30, 6],  // nouveau menu : trois légères (les dés)
+  gros: [14, 50, 22],         // nouvelle liste, liste remise en cours
+  carte: 9                    // Compléter : la carte part
+};
+const estTel = () => matchMedia("(pointer: coarse)").matches;
+function vibrer(sorte = "pas") {
+  if (lireLocal("fx-vibr", "oui") === "non" || !estTel()) return;
+  try { navigator.vibrate && navigator.vibrate(VIBRATIONS[sorte] ?? sorte); } catch (e) { /* pas de vibreur */ }
+}
+// Technique « FLIP » : on note où sont les lignes (repérées par data-k), on redessine,
+// puis chaque ligne glisse en douceur de son ancienne place à la nouvelle ; les nouvelles apparaissent en fondu.
+function flip(selecteur, redessiner) {
+  if (!animOK()) return redessiner();
+  const avant = new Map([...document.querySelectorAll(selecteur)].map(el => [el.dataset.k, el.getBoundingClientRect().top]));
+  redessiner();
+  document.querySelectorAll(selecteur).forEach(el => {
+    const h = avant.get(el.dataset.k);
+    if (h == null) return void el.animate([{ opacity: 0, transform: "scale(.97)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: "ease-out" });
+    const d = h - el.getBoundingClientRect().top;
+    if (Math.abs(d) > 1) el.animate([{ transform: `translateY(${d}px)` }, { transform: "none" }], { duration: 340, easing: DOUX });
+  });
+}
+// Un plat accepté « vole » vers l'onglet Courses (une copie de son dessin), et l'onglet fait un petit bond
+function voler(img, delai = 0) {
+  const cible = $('#tabs [data-tab="courses"]');
+  if (!img || !cible || !animOK()) return;
+  const a = img.getBoundingClientRect(), b = cible.getBoundingClientRect();
+  if (!a.width) return;
+  const c = img.cloneNode(true);
+  Object.assign(c.style, { position: "fixed", left: a.left + "px", top: a.top + "px", width: a.width + "px", height: a.height + "px", zIndex: 20, pointerEvents: "none", margin: 0 });
+  document.body.appendChild(c);
+  const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + 18 - (a.top + a.height / 2);
+  const vol = c.animate([
+    { transform: "translate(0,0) scale(1)", opacity: 1 },
+    { transform: `translate(${dx * .5}px, ${dy * .5 - 70}px) scale(1.25)`, opacity: 1, offset: .45 },
+    { transform: `translate(${dx}px, ${dy}px) scale(.35)`, opacity: .2 }
+  ], { duration: 620, delay: delai, easing: "cubic-bezier(.45,0,.35,1)", fill: "both" });
+  vol.onfinish = () => { c.remove(); cible.animate([{ transform: "scale(1)" }, { transform: "scale(1.18)" }, { transform: "scale(1)" }], { duration: 300, easing: RESSORT }); };
+}
+
 /* ---------- 4. Affichage général ---------- */
 
 // Redessine sans gêner une saisie en cours (ex. la recherche)
@@ -275,6 +329,7 @@ function rerendre() {
   // la fiche ouverte suit les changements (mais on ne touche jamais au formulaire en cours de saisie)
   if ($("#modal").dataset.recette && !$("#modal").dataset.form) ouvrirFiche($("#modal").dataset.recette);
   if (S.bq.ouvert) majBanque();
+  if ($("#cp-ecran")) majCp(false);  // venu de l'autre appareil : pas pendant qu'on tape
 }
 
 function render() {
@@ -391,6 +446,7 @@ function nouveauMenu() {
     S.propo.repas.push(nouveauRepas(r));
   }
   if (!S.propo.repas.length) { S.propo.repas = avant; return toast("Aucun plat ne correspond"); }
+  vibrer("tirage"); S.cascade = true;
   sauverPropo(); render();
   toast("Nouvelles propositions", () => { S.propo.repas = avant; sauverPropo(); render(); });
 }
@@ -398,6 +454,8 @@ function nouveauMenu() {
 // Accepter une proposition (ou toutes) : le plat passe dans la liste de courses
 function accepter(i) {
   const x = S.propo.repas[i]; if (!x) return;
+  vibrer("ajout");
+  voler($(`.rp.propo [data-repas="${i}"] img`) || $("#modal .fi-hd img"));
   const m = listeEnCours();
   S.propo.repas.splice(i, 1);
   m.repas.push({ id: x.id, side: x.side || null, fait: false });
@@ -407,6 +465,8 @@ function accepter(i) {
 function accepterTout() {
   const l = S.propo.repas; if (!l.length) return;
   const m = listeEnCours(), n = m.repas.length;
+  vibrer("gros");
+  document.querySelectorAll(".rp.propo .rp-btn img").forEach((img, k) => voler(img, k * 90));
   l.forEach(x => m.repas.push({ id: x.id, side: x.side || null, fait: false }));
   S.propo.repas = [];
   sauverPropo(); ecrireMenu(m); render();
@@ -445,7 +505,7 @@ function renderMenu() {
   const propos = pr.map((x, i) => {
     const r = recette(x.id), s = x.side && recette(x.side);
     if (!r) return "";
-    return `<div class="rp propo"><button class="rp-btn" data-repas="${i}" data-src="p">${infos(r, s)}</button>
+    return `<div class="rp propo" style="--i:${i}"><button class="rp-btn" data-repas="${i}" data-src="p">${infos(r, s)}</button>
       <button class="accepte" data-act="accepter" data-i="${i}" aria-label="Ajouter ${esc(r.nom)} à la liste">${icone("plus")}Liste</button></div>`;
   }).join("");
   const dansListe = ((m && m.repas) || []).map((x, i) => {
@@ -455,9 +515,10 @@ function renderMenu() {
       <button class="cb" data-act="fait" data-i="${i}" aria-label="${x.fait ? "Pas encore cuisiné" : "Cuisiné"}">${x.fait ? icone("check") : ""}</button>
       <button class="rp-btn" data-repas="${i}" data-src="l">${infos(r, s)}<span class="chev">${icone("right")}</span></button></div>`;
   }).join("");
+  const cascade = S.cascade; S.cascade = false;  // la cascade ne se joue qu'une fois, juste après « Nouveau menu »
   $("#main").innerHTML = haut
     + `<div class="sec-t"><h3>Propositions</h3>${pr.length > 1 ? `<button class="lien-btn" data-act="accepter-tout">${icone("check")}Tout ajouter</button>` : ""}</div>`
-    + (propos ? `<div class="repas">${propos}</div>` : `<div class="vide petit">Touche « Nouveau menu » pour des idées de plats.</div>`)
+    + (propos ? `<div class="repas ${cascade ? "cascade" : ""}">${propos}</div>` : `<div class="vide petit">Touche « Nouveau menu » pour des idées de plats.</div>`)
     + `<button class="btn ajout" data-act="choisir-plat">${icone("search")}Choisir un plat moi-même</button>`
     + `<div class="sec-t"><h3>Dans ma liste</h3>${dansListe ? `<span class="sub">Coche ce qui est cuisiné</span>` : ""}</div>`
     + (dansListe ? `<div class="repas">${dansListe}</div>` : `<div class="vide petit">Aucun plat dans la liste de courses.</div>`);
@@ -466,6 +527,7 @@ function renderMenu() {
 function cocherFait(i) {
   const m = menuEnCours(); if (!m || !m.repas[i]) return;
   m.repas[i].fait = !m.repas[i].fait;
+  vibrer(m.repas[i].fait ? "coche" : "decoche");
   ecrireMenu(m); render();
 }
 
@@ -513,7 +575,7 @@ function changerAccomp() {
 function retirer() {
   const o = repasOuvert(); if (!o) return;
   const [x] = o.l.splice(o.i, 1);
-  o.save(); fermer(); render();
+  vibrer("retire"); o.save(); fermer(); render();
   toast(o.src === "p" ? "Retiré des propositions" : "Retiré de la liste", () => { o.l.splice(o.i, 0, x); o.save(); render(); });
 }
 
@@ -605,11 +667,13 @@ function renderCourses() {
   const coches = m.coches || {}, dispo = m.dispo || {};
   const groupes = {}, placard = [];
   // Un article « souvent au placard » reste à part tant que je n'ai pas dit « il me faut » ; alors il rejoint son rayon.
+  const masques = m.masques || {}, nbMasques = Object.keys(masques).length;
   articles(m).forEach(e => {
+    if (masques[e.cle]) return;  // retiré d'un glissement (ingrédient d'une recette)
     if (e.placard && !e.ajout && dispo[e.cle] !== "non") placard.push(e);
     else (groupes[e.rayon] ??= []).push(e);
   });
-  const ligne = e => `<div class="it ${coches[e.cle] ? "fait" : ""}">
+  const ligne = e => `<div class="it ${coches[e.cle] ? "fait" : ""}" data-k="${esc(e.cle)}" ${e.ajout ? `data-ajout="${esc(e.nom)}"` : ""}>
       <button class="cb" data-coche="${esc(e.cle)}" aria-label="${coches[e.cle] ? "Pas encore pris" : "Pris"}">${coches[e.cle] ? icone("check") : ""}</button>
       ${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span>
       <span class="q num">${esc(fmtQty(e.qte, e.unite))}</span>
@@ -619,7 +683,8 @@ function renderCourses() {
       <div class="pl-h">${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></div>
       <div class="pl-b"><button class="chip ${dispo[e.cle] === "oui" ? "on" : ""}" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui">${icone("check")}Je l'ai</button>
         <button class="chip" data-act="dispo" data-cle="${esc(e.cle)}" data-v="non">${icone("cart")}Il me faut</button></div></div>`;
-  const tri = l => l.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  // Dans chaque rayon : ce qui reste à prendre en haut, ce qui est déjà pris en bas
+  const tri = l => l.sort((a, b) => (coches[a.cle] ? 1 : 0) - (coches[b.cle] ? 1 : 0) || a.nom.localeCompare(b.nom, "fr"));
   let html = "";
   AISLE_ORDER.filter(a => groupes[a]).forEach(a => {
     html += `<div class="rayon"><h3>${aisleLabel(a)}</h3>${tri(groupes[a]).map(ligne).join("")}</div>`;
@@ -629,7 +694,9 @@ function renderCourses() {
     const aVerifier = placard.filter(e => !dispo[e.cle]).length;
     html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier ? aVerifier + " à vérifier" : placard.length})</summary>${tri(placard).map(lignePlacard).join("")}</details>`;
   }
+  if (nbMasques) html += `<button class="lien-btn remettre" data-act="remettre-masques">${icone("refresh")}${nbMasques} ingrédient${nbMasques > 1 ? "s" : ""} retiré${nbMasques > 1 ? "s" : ""} · remettre</button>`;
   $("#main").innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
+  if (html) $("#main").insertAdjacentHTML("beforeend", `<div class="astuce">Glisse un article vers la gauche pour le retirer</div>`);
   finir();
 }
 
@@ -657,11 +724,22 @@ function majSuggArt() {
     + (existe ? "" : `<button class="chip nouv" data-act="art-ingredient">${icone("plus")}« ${esc(v)} »</button><button class="chip nouv" data-act="art-menage">${icone("plus")}« ${esc(v)} » ménager</button>`);
 }
 
-function cocher(cle) {
+// Cocher : la case se remplit avec un rebond, le nom se barre, puis l'article descend en bas de son rayon
+let cocheT;
+function cocher(cle, btn) {
   const m = menuEnCours(); if (!m) return;
   m.coches = m.coches || {};
   if (m.coches[cle]) delete m.coches[cle]; else m.coches[cle] = true;
-  ecrireMenu(m); renderCourses();
+  const fait = !!m.coches[cle];
+  vibrer(fait ? "coche" : "decoche");
+  ecrireMenu(m);
+  const ligne = btn && btn.closest(".it");
+  if (!ligne || !animOK()) return renderCourses();
+  ligne.classList.toggle("fait", fait);
+  btn.innerHTML = fait ? icone("check") : "";
+  btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop");
+  clearTimeout(cocheT);
+  cocheT = setTimeout(() => flip("#main .it", renderCourses), 480);  // on laisse voir la coche avant de ranger
 }
 // Ajoute un article à la liste en cours. Un article connu de la banque garde son nom d'origine ;
 // un article nouveau y entre (en produit ménager si on l'a demandé), pour être proposé la prochaine fois.
@@ -680,14 +758,25 @@ function ajouterALaListe(texte, menage = false) {
 function ajouterArticle(menage = false) {
   const champ = $("#ajout-art"), v = champ.value.trim();
   if (!v) return champ.focus();
-  ajouterALaListe(v, menage);
-  champ.value = ""; renderCourses();
+  ajouterALaListe(v, menage); vibrer("ajout");
+  champ.value = ""; flip("#main .it", renderCourses);
   $("#ajout-art").focus(); // on peut enchaîner les ajouts au clavier
+}
+// Retirer un ingrédient venu d'une recette (glissement) : il est caché de cette liste, « remettre » le fait revenir
+function masquer(cle) {
+  const m = menuEnCours(); if (!m) return;
+  m.masques = Object.assign({}, m.masques, { [cle]: true });
+  vibrer("retire"); ecrireMenu(m); renderCourses();
+  toast("Ingrédient retiré", () => { delete m.masques[cle]; ecrireMenu(m); flip("#main .it", renderCourses); });
+}
+function remettreMasques() {
+  const m = menuEnCours(); if (!m) return;
+  m.masques = {}; vibrer("ajout"); ecrireMenu(m); flip("#main .it", renderCourses);
 }
 function retirerArticle(nom) {
   const m = menuEnCours(); if (!m) return;
   const i = (m.ajouts || []).indexOf(nom); if (i < 0) return;
-  m.ajouts.splice(i, 1);
+  m.ajouts.splice(i, 1); vibrer("retire");
   ecrireMenu(m); renderCourses();
   toast("Article retiré", () => { m.ajouts.splice(i, 0, nom); ecrireMenu(m); renderCourses(); });
 }
@@ -739,8 +828,9 @@ function creerNouvelleListe(plats, arts) {
   S.menus = [...(avant ? [avant] : []), nv];
   aEffacer.forEach(x => effacerMenu(x.id));
   if (aEffacer.length) sauverHisto();
-  ecrireMenu(nv);
+  ecrireMenu(nv); vibrer("gros");
   render(); window.scrollTo(0, 0);
+  if (animOK()) document.querySelectorAll("#main .it").forEach((el, k) => el.animate([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], { duration: 280, delay: k * 25, easing: DOUX, fill: "backwards" }));
   toast("Nouvelle liste", () => {
     S.menus = [...aEffacer, ...S.menus.filter(x => x !== nv)].sort((a, b) => a.cree - b.cree);
     effacerMenu(nv.id); aEffacer.forEach(ecrireMenu);
@@ -775,8 +865,8 @@ function ouvrirArchive() {
 function reprendre(btn) {
   const txt = btn.dataset.repris, m = listeEnCours();
   const i = m.ajouts.findIndex(a => cleBanque(a) === cleBanque(txt));
-  if (btn.classList.contains("on") && i >= 0) { m.ajouts.splice(i, 1); ecrireMenu(m); btn.classList.remove("on"); }
-  else if (!btn.classList.contains("on")) { ajouterALaListe(txt, !!btn.dataset.menage); btn.classList.add("on"); }
+  if (btn.classList.contains("on") && i >= 0) { m.ajouts.splice(i, 1); ecrireMenu(m); btn.classList.remove("on"); vibrer("decoche"); }
+  else if (!btn.classList.contains("on")) { ajouterALaListe(txt, !!btn.dataset.menage); btn.classList.add("on"); vibrer("ajout"); }
   else return toast("Déjà dans la liste en cours (vient d'un plat)");
   render();
 }
@@ -784,7 +874,7 @@ function reprendre(btn) {
 function restaurerArchive() {
   const a = listeArchive(), m = menuEnCours(); if (!a || !m) return;
   const echange = () => { [a.cree, m.cree] = [m.cree, a.cree]; S.menus.sort((x, y) => x.cree - y.cree); ecrireMenu(a); ecrireMenu(m); render(); };
-  echange(); fermer();
+  echange(); fermer(); vibrer("gros");
   toast("Liste précédente remise en cours", echange);
 }
 
@@ -1023,7 +1113,7 @@ function basculerPick(cle) {
   const e = banque().find(x => x.cle === cle); if (!e) return;
   const m = listeEnCours(), i = m.ajouts.findIndex(a => cleBanque(a) === cle);
   if (i >= 0) { m.ajouts.splice(i, 1); ecrireMenu(m); } else ajouterALaListe(e.nom, e.menage);
-  if (navigator.vibrate) try { navigator.vibrate(8); } catch (err) { /* pas de vibreur */ }
+  vibrer(i >= 0 ? "decoche" : "ajout");
   majBanque();
 }
 
@@ -1067,7 +1157,7 @@ function renderRecettes() {
 // Redessine seulement la liste (pendant la frappe dans la recherche)
 function majListe() {
   const l = filtrees();
-  $("#liste").innerHTML = l.length ? l.map(r => `<button class="ligne" data-fiche="${esc(r.id)}">${dishImg(r, 28)}
+  $("#liste").innerHTML = l.length ? l.map(r => `<button class="ligne" data-fiche="${esc(r.id)}" data-k="${esc(r.id)}">${dishImg(r, 28)}
       <span class="nm">${esc(r.nom)}</span>
       <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`).join("")
     : `<div class="vide">Aucune recette ne correspond.</div>`;
@@ -1404,7 +1494,7 @@ function ouvrirReglages() {
   importEnAttente = null;
   ["recette", "archive"].forEach(k => delete $("#modal").dataset[k]);
   const th = THEMES.find(t => t[0] === lireLocal("fx-theme", "auto")) || THEMES[0];
-  const anim = lireLocal("fx-anim", "completes");
+  const anim = lireLocal("fx-anim", "completes"), vibr = lireLocal("fx-vibr", "oui");
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Réglages">
     <div class="fi-hd"><h2 class="titre-r" style="flex:1">Réglages</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="sect">Apparence</div>
@@ -1412,7 +1502,12 @@ function ouvrirReglages() {
     <div class="reg"><span>Animations</span><span class="seg">
       <button class="${anim === "completes" ? "on" : ""}" data-act="anim" data-v="completes">Complètes</button>
       <button class="${anim === "simples" ? "on" : ""}" data-act="anim" data-v="simples">Simples</button></span></div>
-    ${uid ? `<div class="sect">Idées</div>
+    <div class="reg"><span>Vibrations</span><span class="seg">
+      <button class="${vibr === "oui" ? "on" : ""}" data-act="vibr" data-v="oui">Oui</button>
+      <button class="${vibr === "non" ? "on" : ""}" data-act="vibr" data-v="non">Non</button></span></div>
+    ${uid ? `<div class="sect">Recettes</div>
+    <button class="reg" data-act="completer"><span>${icone("pen")} Compléter mes recettes</span><span class="val">${(() => { const n = S.recettes.filter(r => Object.values(GROUPES_CP).some(g => g.manque(r))).length; return n ? n + " à compléter ›" : "›"; })()}</span></button>
+    <div class="sect">Idées</div>
     <button class="reg" data-act="idees"><span>Notes</span><span class="val">›</span></button>
     <div class="sect">Excel</div>
     <div class="reg" style="justify-content:flex-start"><button class="btn" data-act="exporter">Exporter</button>
@@ -1560,22 +1655,318 @@ function confirmerImport() {
   toast(`Import terminé : ${r.ajout + r.maj} recettes`);
 }
 
+/* ---------- 7 bis. Gestes au doigt : changer d'onglet, retirer un article ---------- */
+const ORDRE_ONGLETS = ["courses", "recettes", "menu"];
+// Change d'onglet : la page part d'un côté et la nouvelle arrive de l'autre (depuisX = où le doigt l'avait laissée)
+function changerOnglet(tab, depuisX = 0) {
+  const avant = S.onglet;
+  if (!S.pret) { S.onglet = tab; ecrireLocal("fx-onglet", tab); return; }
+  if (tab === avant) { window.scrollTo({ top: 0, behavior: animOK() ? "smooth" : "auto" }); return; }
+  S.onglet = tab; ecrireLocal("fx-onglet", tab);
+  vibrer("pas");
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  placerIndicateur();
+  const main = $("#main"), dir = ORDRE_ONGLETS.indexOf(tab) > ORDRE_ONGLETS.indexOf(avant) ? 1 : -1, w = innerWidth;
+  const montrer = () => { main.style.transform = ""; render(); window.scrollTo(0, 0); };
+  if (!animOK()) return montrer();
+  main.animate([{ transform: `translateX(${depuisX}px)`, opacity: 1 }, { transform: `translateX(${-dir * w * .35}px)`, opacity: 0 }],
+    { duration: 130, easing: "ease-in" }).onfinish = () => {
+    montrer();
+    main.animate([{ transform: `translateX(${dir * w * .35}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 260, easing: DOUX });
+  };
+}
+
+// Un seul doigt qui glisse à l'horizontale :
+//  - sur un article de la liste, vers la gauche : il suit le doigt, et passé un tiers de l'écran il est retiré ;
+//  - ailleurs : la page suit le doigt, et passé un quart de l'écran (ou d'un coup sec) on change d'onglet.
+// On ne touche à rien dans les champs, les rangées de pastilles qui défilent, les fenêtres et la banque.
+let geste = null;
+document.addEventListener("touchstart", e => {
+  geste = null;
+  if (e.touches.length !== 1 || !S.pret || $("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran")) return;
+  const t = e.target;
+  if (t.closest("header, #tabs, .toast, #modal, input, textarea, select, .defile, .pastilles, .sugg, .poignee")) return;
+  const p = e.touches[0];
+  geste = { x0: p.clientX, y0: p.clientY, dx: 0, t0: Date.now(), mode: null, it: t.closest(".it"), seuil: false };
+}, { passive: true });
+document.addEventListener("touchmove", e => {
+  if (!geste) return;
+  const p = e.touches[0], dx = p.clientX - geste.x0, dy = p.clientY - geste.y0;
+  if (!geste.mode) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { geste = null; return; }   // on fait défiler : pas un glissement
+    if (Math.abs(dx) < 12) return;
+    geste.mode = geste.it && dx < 0 ? "article" : "page";
+    if (geste.mode === "article") geste.it.classList.add("glisse-g");
+  }
+  e.preventDefault();
+  geste.dx = dx;
+  const w = innerWidth;
+  if (geste.mode === "article") {
+    const x = Math.min(0, dx);
+    geste.it.style.transform = `translateX(${x}px)`;
+    geste.it.style.setProperty("--g", Math.min(1, -x / (w * .33)));
+    const passe = -x > w * .33;
+    if (passe !== geste.seuil) { geste.seuil = passe; if (passe) vibrer("seuil"); geste.it.classList.toggle("pret", passe); }
+  } else {
+    const i = ORDRE_ONGLETS.indexOf(S.onglet), voisin = ORDRE_ONGLETS[i + (dx < 0 ? 1 : -1)];
+    const x = voisin ? dx : dx / 4;   // pas d'onglet de ce côté : ça résiste
+    $("#main").style.transform = `translateX(${x}px)`;
+    $("#main").style.opacity = 1 - Math.min(.5, Math.abs(x) / w);
+    const passe = !!voisin && Math.abs(dx) > w * .25;
+    if (passe !== geste.seuil) { geste.seuil = passe; if (passe) vibrer("seuil"); }
+  }
+}, { passive: false });
+function finGeste() {
+  const g = geste; geste = null;
+  if (!g || !g.mode) return;
+  const w = innerWidth, rapide = Math.abs(g.dx) > 60 && Date.now() - g.t0 < 250;
+  if (g.mode === "article") {
+    const el = g.it;
+    if (-g.dx > w * .33 || (rapide && g.dx < 0)) {
+      const fin = () => { const a = el.dataset.ajout; a ? retirerArticle(a) : masquer(el.dataset.k); };
+      if (!animOK()) return fin();
+      el.animate([{ transform: el.style.transform }, { transform: `translateX(${-w}px)` }], { duration: 160, easing: "ease-in", fill: "forwards" }).onfinish = () => {
+        el.animate([{ height: el.offsetHeight + "px" }, { height: "0px", minHeight: "0px", paddingTop: 0, paddingBottom: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" }).onfinish = fin;
+      };
+    } else {
+      el.classList.remove("pret");
+      el.animate([{ transform: el.style.transform }, { transform: "none" }], { duration: 220, easing: RESSORT }).onfinish = () => { el.style.transform = ""; el.classList.remove("glisse-g"); };
+      el.style.transform = "";
+    }
+    return;
+  }
+  const main = $("#main"), i = ORDRE_ONGLETS.indexOf(S.onglet), voisin = ORDRE_ONGLETS[i + (g.dx < 0 ? 1 : -1)];
+  main.style.opacity = "";
+  if (voisin && (Math.abs(g.dx) > w * .25 || rapide)) return changerOnglet(voisin, g.dx);
+  const x = main.style.transform; main.style.transform = "";
+  if (animOK()) main.animate([{ transform: x }, { transform: "none" }], { duration: 260, easing: RESSORT });
+}
+document.addEventListener("touchend", finGeste);
+document.addEventListener("touchcancel", finGeste);
+
+// Fermer une fenêtre en douceur : elle redescend, le fond s'éclaircit (si rien d'autre ne s'est ouvert entre-temps)
+function fermerDoux() {
+  const fiche = $("#modal .fiche"), voile = $("#modal .voile");
+  if (!fiche || !animOK() || $("#modal").dataset.form) return fermer();
+  const contenu = $("#modal").firstElementChild;
+  ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete $("#modal").dataset[k]);
+  voile.style.pointerEvents = "none";
+  voile.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "forwards" });
+  fiche.animate([{ transform: "none" }, { transform: "translateY(60%)" }], { duration: 180, easing: "ease-in", fill: "forwards" })
+    .onfinish = () => { if ($("#modal").firstElementChild === contenu) $("#modal").innerHTML = ""; };
+}
+
+/* ---------- 7 ter. Mode « Compléter » (Réglages › Compléter mes recettes) ---------- */
+// Comme dans Médiathèque : les recettes incomplètes défilent une par une, comme des cartes.
+// Je remplis ce qui manque (tout est enregistré au fur et à mesure), puis je jette la carte :
+// à gauche = recette suivante, à droite = retour à la précédente (ou les boutons en bas).
+const GROUPES_CP = {
+  cat: { nom: "Catégorie et protéine", manque: r => !r.categorie || (estPlat(r) && !r.proteine) },
+  ing: { nom: "Ingrédients", manque: r => !(r.ingredients || []).length || r.ingredientsSource === "suggestion" },
+  niv: { nom: "Prix, difficulté, temps, maîtrise", manque: r => Object.keys(NIVEAUX).some(k => !r[k]) },
+  opt: { nom: "Saison, végé, à l'avance, invités", manque: r => !r.saison }
+};
+const manquesCp = r => [...S.cp.champs].filter(g => GROUPES_CP[g].manque(r));
+const recetteCp = () => S.cp && S.cp.etape === "cartes" ? recette(S.cp.ids[S.cp.i]) : null;
+
+function ouvrirCompleter() {
+  fermer();
+  S.cp = Object.assign({ champs: new Set(["cat", "ing", "niv", "opt"]) }, S.cp, { etape: "choix", ids: [], i: 0 });
+  const ec = document.createElement("div");
+  ec.id = "cp-ecran"; ec.className = "bq-ecran cp-ecran";
+  ec.innerHTML = `<div class="bq-in">
+    <div class="bq-hd"><button class="ib" data-act="cp-fermer" aria-label="Fermer">${icone("left")}</button><h2>Compléter mes recettes</h2><span class="spacer"></span><span class="sub num" id="cp-n"></span></div>
+    <div class="cp-corps" id="cp-corps"></div></div>`;
+  document.body.appendChild(ec);
+  majCp();
+}
+function fermerCompleter() {
+  const ec = $("#cp-ecran"); if (ec) ec.remove();
+  S.cp.etape = "ferme"; render();
+}
+
+function majCp(force = true) {
+  const corps = $("#cp-corps"); if (!corps) return;
+  const a = document.activeElement;
+  if (!force && a && a.id === "cp-ing") return;   // on ne redessine pas pendant qu'on tape un ingrédient
+  $("#cp-n").textContent = S.cp.etape === "cartes" ? `${S.cp.i + 1} / ${S.cp.ids.length}` : "";
+  if (S.cp.etape === "choix") {
+    const n = S.recettes.filter(r => manquesCp(r).length).length;
+    corps.innerHTML = `<div class="cp-choix"><p class="sub">Qu'est-ce que je veux compléter ?</p>
+      ${Object.entries(GROUPES_CP).map(([k, g]) => {
+        const c = S.recettes.filter(r => g.manque(r)).length;
+        return `<button class="rc ${S.cp.champs.has(k) ? "on" : ""}" data-cp-champ="${k}"><span class="cb">${icone("check")}</span><span class="nm">${g.nom}</span><span class="t">${c}</span></button>`;
+      }).join("")}
+      <button class="btn pri cp-go" data-act="cp-go" ${n ? "" : "disabled"}>${n ? `${icone("right")}Commencer · ${n} recette${n > 1 ? "s" : ""}` : "Tout est complet !"}</button>
+      <p class="sub cp-aide">Glisse la carte à gauche pour passer à la suivante, à droite pour revenir.</p></div>`;
+    return;
+  }
+  if (S.cp.etape === "fin") {
+    const finies = S.cp.ids.filter(id => { const r = recette(id); return r && !manquesCp(r).length; }).length;
+    corps.innerHTML = `<div class="cp-fin"><div class="cp-bravo">${icone("check")}</div><h3>${finies ? "Bravo !" : "C'est tout pour cette fois"}</h3>
+      <p class="sub">${finies} recette${finies > 1 ? "s" : ""} complète${finies > 1 ? "s" : ""} sur ${S.cp.ids.length}.</p>
+      <div class="pied2"><button class="btn" data-act="cp-retour">${icone("left")}Revenir</button><button class="btn pri" data-act="cp-fermer">Terminer</button></div></div>`;
+    return;
+  }
+  const r = recetteCp();
+  if (!r) { S.cp.etape = "fin"; return majCp(); }
+  const haut = corps.querySelector(".cp-carte") ? corps.querySelector(".cp-carte").scrollTop : 0;
+  const memeCarte = corps.dataset.id === r.id;
+  corps.dataset.id = r.id;
+  corps.innerHTML = `<div class="cp-pile"><div class="cp-dessous"></div><div class="cp-carte" id="cp-carte">${htmlCarteCp(r)}</div></div>
+    <div class="cp-nav"><button class="btn" data-act="cp-prec" ${S.cp.i ? "" : "disabled"}>${icone("left")}Précédente</button>
+      <button class="btn pri" data-act="cp-suiv">${S.cp.i < S.cp.ids.length - 1 ? "Suivante" : "Terminer"}${icone("right")}</button></div>`;
+  if (memeCarte) $("#cp-carte").scrollTop = haut;
+}
+
+function htmlCarteCp(r) {
+  const m = manquesCp(r), titre = g => `<div class="cp-t ${m.includes(g) ? "manque" : "ok"}">${m.includes(g) ? "" : icone("check")}${GROUPES_CP[g].nom}</div>`;
+  const pastilles = (k, liste) => `<div class="pastilles">${liste.map(v => `<button class="chip ${v === r[k] ? "on" : ""}" data-cp-val="${k}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>`;
+  const parts = [`<div class="cp-hd">${dishImg(r, 52)}<div><h3>${esc(r.nom)}</h3><div class="sub">${m.length ? m.length + " chose" + (m.length > 1 ? "s" : "") + " à compléter" : "Complète !"}</div></div></div>`];
+  if (S.cp.champs.has("cat")) parts.push(`<section>${titre("cat")}
+    <span class="lbl">Catégorie</span>${pastilles("categorie", valeursDe("categorie", r.categorie).slice(0, 8))}
+    <span class="lbl">Protéine</span>${pastilles("proteine", valeursDe("proteine", r.proteine).slice(0, 10))}</section>`);
+  if (S.cp.champs.has("ing")) {
+    const ings = r.ingredients || [];
+    parts.push(`<section>${titre("ing")}
+      ${r.ingredientsSource === "suggestion" && ings.length ? `<div class="cp-sugg">Ingrédients suggérés, à vérifier <button class="chip on" data-act="cp-ing-ok">${icone("check")}C'est bon</button></div>` : ""}
+      <div class="cp-ings">${ings.map((t, i) => `<span class="chip cp-ing">${imgIng(t, 16)}${esc(t)}<button data-cp-ing-x="${i}" aria-label="Retirer">${icone("x")}</button></span>`).join("") || `<span class="sub">Aucun ingrédient.</span>`}</div>
+      <label class="cherche" style="margin:0">${icone("plus")}<input id="cp-ing" placeholder="ex. 250 g pâtes" autocomplete="off" enterkeyhint="done"></label>
+      <div class="sugg" id="cp-ing-sugg"></div></section>`);
+  }
+  if (S.cp.champs.has("niv")) parts.push(`<section>${titre("niv")}${Object.keys(NIVEAUX).map(k => `<div class="niv"><span class="lbl">${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</span>
+    <span class="seg">${NIVEAUX[k].map((l, i) => `<button class="${r[k] === i + 1 ? "on" : ""}" data-cp-niv="${k}" data-v="${i + 1}">${l}</button>`).join("")}</span></div>`).join("")}</section>`);
+  if (S.cp.champs.has("opt")) parts.push(`<section>${titre("opt")}
+    <span class="lbl">Saison</span>${pastilles("saison", SAISONS.includes(r.saison) || !r.saison ? SAISONS : [...SAISONS, r.saison])}
+    <div class="cases">${[["vege", "leaf", "Végé"], ["prep", "box", "À l'avance"], ["date", "glass", "Invités"], ["favori", "star", "Favori"]]
+      .map(([k, i, t]) => `<button class="chip ${r[k] ? "on" : ""}" data-cp-case="${k}">${icone(i)}${t}</button>`).join("")}</div></section>`);
+  return parts.join("");
+}
+
+// Chaque toucher enregistre tout de suite la recette
+function majRecetteCp(chg) {
+  const r = recetteCp(); if (!r) return;
+  chg(r); ecrireRecette(r); vibrer("pas"); majCp(true);
+}
+function cpIngredient(texte) {
+  const v = texte.trim(); if (!v) return;
+  majRecetteCp(r => { r.ingredients = [...(r.ingredients || []), v]; r.ingredientsSource = "app"; });
+  const c = $("#cp-ing"); if (c) { c.value = ""; $("#cp-ing-sugg").innerHTML = ""; c.focus(); }
+}
+// En tapant un ingrédient : ceux de la banque qui ressemblent (toucher = ajouter, la quantité tapée reste)
+function majSuggCp() {
+  const champ = $("#cp-ing"), box = $("#cp-ing-sugg"); if (!champ || !box) return;
+  const it = parseItem(champ.value);
+  if (!it || norm(it.name).length < 2) { box.innerHTML = ""; return; }
+  const q = norm(it.name);
+  box.innerHTML = banque().filter(e => !e.menage && norm(e.court).includes(q)).slice(0, 6)
+    .map(e => `<button class="chip" data-cp-sugg="${esc(e.court)}">${esc(e.court)}</button>`).join("");
+}
+
+// Passer à la carte suivante (sens 1) ou précédente (-1). La carte part du côté où on l'a jetée, la suivante arrive de derrière.
+function allerCp(sens, depuisX = 0) {
+  const n = S.cp.i + sens;
+  if (n < 0) return rebondCp();
+  const carte = $("#cp-carte");
+  if (document.activeElement && document.activeElement.id === "cp-ing") document.activeElement.blur();
+  const changer = () => {
+    if (n >= S.cp.ids.length) S.cp.etape = "fin"; else S.cp.i = n;
+    majCp();
+    const c = $("#cp-carte");
+    if (c && animOK()) c.animate([{ transform: `translateX(${sens > 0 ? 0 : -40}px) scale(.94)`, opacity: .3 }, { transform: "none", opacity: 1 }], { duration: 260, easing: DOUX });
+  };
+  vibrer("carte");
+  if (!carte || !animOK()) return changer();
+  const w = innerWidth;
+  carte.animate([{ transform: `translateX(${depuisX}px) rotate(${depuisX / 22}deg)` }, { transform: `translateX(${-sens * w * 1.2}px) rotate(${-sens * 18}deg)`, opacity: .6 }],
+    { duration: 220, easing: "ease-in", fill: "forwards" }).onfinish = changer;
+}
+function rebondCp() {
+  const c = $("#cp-carte"); vibrer("decoche");
+  if (c && animOK()) c.animate([{ transform: "translateX(0)" }, { transform: "translateX(18px)" }, { transform: "translateX(0)" }], { duration: 260, easing: RESSORT });
+}
+
+// La carte suit le doigt (avec un peu de rotation) ; passé un tiers de l'écran : elle part
+let gesteCp = null;
+document.addEventListener("touchstart", e => {
+  gesteCp = null;
+  const carte = e.target.closest && e.target.closest("#cp-carte");
+  if (!carte || e.touches.length !== 1 || e.target.closest("input")) return;
+  gesteCp = { x0: e.touches[0].clientX, y0: e.touches[0].clientY, dx: 0, t0: Date.now(), h: false, seuil: false, carte };
+}, { passive: true });
+document.addEventListener("touchmove", e => {
+  const g = gesteCp; if (!g) return;
+  const dx = e.touches[0].clientX - g.x0, dy = e.touches[0].clientY - g.y0;
+  if (!g.h) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { gesteCp = null; return; }  // on fait défiler la carte
+    if (Math.abs(dx) < 12) return;
+    g.h = true;
+  }
+  e.preventDefault();
+  g.dx = dx;
+  const x = dx > 0 && !S.cp.i ? dx / 4 : dx;   // pas de carte avant la première : ça résiste
+  g.carte.style.transform = `translateX(${x}px) rotate(${x / 22}deg)`;
+  g.carte.style.setProperty("--g", Math.max(-1, Math.min(1, x / (innerWidth * .33))));
+  g.carte.classList.toggle("vers-g", x < -20); g.carte.classList.toggle("vers-d", x > 20);
+  const passe = Math.abs(x) > innerWidth * .33;
+  if (passe !== g.seuil) { g.seuil = passe; if (passe) vibrer("seuil"); }
+}, { passive: false });
+document.addEventListener("touchend", () => {
+  const g = gesteCp; gesteCp = null;
+  if (!g || !g.h) return;
+  const rapide = Math.abs(g.dx) > 60 && Date.now() - g.t0 < 250;
+  if (Math.abs(g.dx) > innerWidth * .33 || rapide) return allerCp(g.dx < 0 ? 1 : -1, g.dx);
+  const t = g.carte.style.transform;
+  g.carte.style.transform = ""; g.carte.classList.remove("vers-g", "vers-d");
+  if (animOK()) g.carte.animate([{ transform: t }, { transform: "none" }], { duration: 260, easing: RESSORT });
+});
+
+// Clics propres au mode Compléter (renvoie vrai si le clic a été traité)
+function clicCompleter(t) {
+  if (!$("#cp-ecran")) return false;
+  const ch = t.closest("[data-cp-champ]");
+  if (ch) { const k = ch.dataset.cpChamp; S.cp.champs.has(k) ? S.cp.champs.delete(k) : S.cp.champs.add(k); vibrer("pas"); majCp(); return true; }
+  const val = t.closest("[data-cp-val]");
+  if (val) { const k = val.dataset.cpVal, v = val.dataset.v; majRecetteCp(r => { if (r[k] === v) delete r[k]; else r[k] = v; }); return true; }
+  const niv = t.closest("[data-cp-niv]");
+  if (niv) { const k = niv.dataset.cpNiv, v = +niv.dataset.v; majRecetteCp(r => { if (r[k] === v) delete r[k]; else r[k] = v; }); return true; }
+  const cas = t.closest("[data-cp-case]");
+  if (cas) { const k = cas.dataset.cpCase; majRecetteCp(r => { r[k] = !r[k]; }); return true; }
+  const x = t.closest("[data-cp-ing-x]");
+  if (x) { const i = +x.dataset.cpIngX; majRecetteCp(r => { r.ingredients = r.ingredients.filter((_, j) => j !== i); r.ingredientsSource = "app"; }); return true; }
+  const sg = t.closest("[data-cp-sugg]");
+  if (sg) { const c = $("#cp-ing"), it = parseItem(c.value), txt = c.value.trimEnd(); cpIngredient((it ? txt.slice(0, txt.length - it.name.length) : "") + sg.dataset.cpSugg); return true; }
+  const el = t.closest("[data-act]");
+  switch (el && el.dataset.act) {
+    case "cp-go":
+      S.cp.ids = S.recettes.filter(r => manquesCp(r).length).sort(parNom).map(r => r.id);
+      S.cp.i = 0; S.cp.etape = S.cp.ids.length ? "cartes" : "choix"; vibrer("carte"); majCp(); return true;
+    case "cp-suiv": allerCp(1); return true;
+    case "cp-prec": allerCp(-1); return true;
+    case "cp-retour": S.cp.etape = "cartes"; S.cp.i = S.cp.ids.length - 1; majCp(); return true;
+    case "cp-ing-ok": majRecetteCp(r => { r.ingredientsSource = "app"; }); return true;
+    case "cp-fermer": fermerCompleter(); return true;
+  }
+  return false;
+}
+
 /* ---------- 8. Clics et démarrage ---------- */
 
 document.addEventListener("click", e => {
   const t = e.target;
+  if (clicCompleter(t)) return;
   const onglet = t.closest("#tabs button");
-  if (onglet) { S.onglet = onglet.dataset.tab; ecrireLocal("fx-onglet", S.onglet); if (S.pret) render(); window.scrollTo(0, 0); return; }
+  if (onglet) return changerOnglet(onglet.dataset.tab);
   const ligne = t.closest("[data-fiche]");
   if (ligne) return ouvrirFiche(ligne.dataset.fiche);
   const coche = t.closest("[data-coche]");
-  if (coche) return cocher(coche.dataset.coche);
+  if (coche) return cocher(coche.dataset.coche, coche);
   const sugg = t.closest("[data-sugg]");
-  if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); renderCourses(); $("#ajout-art").focus(); } return; }
+  if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); vibrer("ajout"); flip("#main .it", renderCourses); $("#ajout-art").focus(); } return; }
   const suggIng = t.closest("[data-sugg-ing]");
   if (suggIng) return choisirSuggIng(suggIng);
   const rc = t.closest("[data-rc]");
-  if (rc) return rc.classList.toggle("on");
+  if (rc) { vibrer(rc.classList.toggle("on") ? "pas" : "decoche"); return; }
   const bqOuvrir = t.closest("[data-bq-ouvrir]");
   if (bqOuvrir) { S.bq.scroll = $("#bq-corps").scrollTop; S.bq.detail = bqOuvrir.dataset.bqOuvrir; S.bq.suppr = null; return majBanque(); }
   const bqRayon = t.closest("[data-bq-rayon]");
@@ -1595,9 +1986,9 @@ document.addEventListener("click", e => {
   const choisi = t.closest("[data-choisi]");
   if (choisi) return choisirPlat(choisi.dataset.choisi);
   const pref = t.closest("[data-pref]");
-  if (pref) { const k = pref.dataset.pref; S.prefs[k] = !S.prefs[k]; sauverPrefs(); return renderMenu(); }
+  if (pref) { const k = pref.dataset.pref; S.prefs[k] = !S.prefs[k]; sauverPrefs(); vibrer("pas"); return renderMenu(); }
   const bascule = t.closest("[data-bascule]");
-  if (bascule) { const k = bascule.dataset.bascule; S.f[k] = !S.f[k]; return renderRecettes(); }
+  if (bascule) { const k = bascule.dataset.bascule; S.f[k] = !S.f[k]; vibrer("pas"); return flip("#liste .ligne", renderRecettes); }
   if ($("#modal").dataset.form && clicFormulaire(t)) return;
   const el = t.closest("[data-act]");
   // Menu ⋯ ouvert : un clic n'importe où ailleurs le referme
@@ -1618,12 +2009,14 @@ document.addEventListener("click", e => {
     case "ajouter-art": case "art-ingredient": ajouterArticle(); break;
     case "art-menage": ajouterArticle(true); break;
     case "banque": ouvrirBanque(); break;
+    case "completer": ouvrirCompleter(); break;
     case "ajouter-banque": ajouterDepuisBanque(); break;
     case "bq-onglet": S.bq.onglet = el.dataset.v; majBanque(); break;
     case "bq-rec": S.bq.rec = !S.bq.rec; majBanque(); break;
     case "bq-placard": S.bq.placard = !S.bq.placard; majBanque(); break;
     case "bq-placard-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { placard: !e.placard }); majBanque(); } break; }
-    case "dispo": definirDispo(el.dataset.cle, el.dataset.v); break;
+    case "dispo": vibrer(el.dataset.v === "oui" ? "coche" : "pas"); definirDispo(el.dataset.cle, el.dataset.v); break;
+    case "remettre-masques": remettreMasques(); break;
     case "bq-retour": retourBanque(); break;
     case "bq-rec-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { rec: !e.rec }); majBanque(); } break; }
     case "bq-suppr":
@@ -1666,13 +2059,14 @@ document.addEventListener("click", e => {
     case "themes": ouvrirThemes(); break;
     case "idees": NotesIdees.ouvrir(S.idees, sauverIdees); break;
     case "theme": ecrireLocal("fx-theme", el.dataset.v); appliquerTheme(); ouvrirThemes(); break;
+    case "vibr": ecrireLocal("fx-vibr", el.dataset.v); vibrer("coche"); ouvrirReglages(); break;
     case "anim": ecrireLocal("fx-anim", el.dataset.v); document.documentElement.dataset.anim = el.dataset.v; ouvrirReglages(); break;
     case "exporter": exporter(el); break;
     case "confirmer-import": confirmerImport(); break;
     case "favori": basculerFavori(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
-    case "fermer": fermer(); break;
-    case "fermer-fond": if (t === el) fermer(); break; // toucher le fond grisé ferme, pas la fiche elle-même
+    case "fermer": fermerDoux(); break;
+    case "fermer-fond": if (t === el) fermerDoux(); break; // toucher le fond grisé ferme, pas la fiche elle-même
   }
 });
 document.addEventListener("change", e => {
@@ -1686,6 +2080,7 @@ document.addEventListener("input", e => {
   if (e.target.id === "q-choix") majChoix();
   if (e.target.id === "ajout-art") majSuggArt();
   if (e.target.id === "q-bq") majBanque();
+  if (e.target.id === "cp-ing") majSuggCp();
   // En tapant un ingrédient, son petit dessin se met à jour
   const li = e.target.closest && e.target.closest("#f-ings .li");
   if (li) { li.querySelector("img").outerHTML = dessinIng(e.target.value); majSuggIng(li); }
@@ -1707,6 +2102,8 @@ document.addEventListener("keydown", e => {
   if (li && e.key === "Enter") { e.preventDefault(); ajouterIngredient(li); return; }
   if (e.key === "Enter" && e.target.id === "ajout-art") { e.preventDefault(); ajouterArticle(); return; }
   if (e.key === "Enter" && e.target.id === "q-bq") { e.preventDefault(); ajouterDepuisBanque(); return; }
+  if (e.key === "Enter" && e.target.id === "cp-ing") { e.preventDefault(); cpIngredient(e.target.value); return; }
+  if (e.key === "Escape" && $("#cp-ecran")) { fermerCompleter(); return; }
   if (e.key === "Enter" && e.target.id === "bq-nom") { e.preventDefault(); e.target.blur(); return; }
   // Échap ferme une fiche, mais pas le formulaire (pour ne pas perdre une saisie)
   if (e.key === "Escape" && $("#modal").innerHTML && !$("#modal").dataset.form) fermer();
