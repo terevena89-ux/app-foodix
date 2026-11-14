@@ -1,5 +1,17 @@
 # Foodix — journal des nouveautés
 
+## 0.6.0 — 2026-11-14
+Nouvelle allure pour le téléphone, et le menu ne remplit plus la liste tout seul.
+- **Onglets en bas** (Courses · Recettes · Menu), à portée de pouce ; l'appli s'ouvre sur la liste de courses.
+- Calée sur la largeur d'un Galaxy S26 : **plus de zoom** (ni pincer, ni double-toucher), boutons et lignes plus grands, fenêtres qui montent du bas de l'écran.
+- **Menu = des propositions** : « Nouveau menu » propose des plats, rien n'arrive dans la liste. « + Liste » sur un plat (ou « Tout ajouter ») l'envoie dans la liste de courses. Section « Dans ma liste » : les plats acceptés, avec la case « cuisiné ».
+- Fiche recette : « À la liste » met le plat directement dans la liste de courses.
+- **Liste de courses** :
+  - « Nouvelle liste » : repart de zéro, en demandant ce qu'on garde (plats pas encore cuisinés, articles pas encore cochés, articles récurrents ; tout est coché au départ, ou « Partir de zéro »).
+  - « Précédente » : l'ancienne liste reste en archive (une seule). On peut la consulter, toucher un article pour le reprendre, ou la remettre en cours.
+  - « Parcourir » : la banque d'ingrédients et de produits ménagers en grand ; toucher un article l'ajoute à la liste (retoucher l'enlève).
+- **Banque d'ingrédients** : déplacée de Réglages vers l'onglet Recettes (bouton « Ingrédients »).
+
 ## 0.5.2 — 2026-11-14
 « Placard » devient une option d'un ingrédient, plus un rayon.
 - Fiche d'un ingrédient : « Souvent au placard ? » (comme « récurrent »). Départ deviné d'après le nom (sel, huile, épices, farine…), modifiable. Filtre « Placard » dans la banque.

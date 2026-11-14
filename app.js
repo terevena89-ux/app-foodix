@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AI
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.5.2";
+const VERSION = "0.6.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -57,13 +57,15 @@ const PREFS_DEFAUT = { nb: 5, pers: 2, vege: false, rapide: false, avance: false
 
 const S = {
   recettes: [], pret: false, compte: "",
-  menus: [],                              // toutes les « livraisons », la plus récente = le menu en cours
+  menus: [],                              // les listes de courses : la plus récente = en cours, celle d'avant = archive
+  propo: { repas: [] },                   // onglet Menu : les plats proposés, pas encore dans la liste
+  histo: [],                              // plats des 2 listes effacées avant l'archive (pour varier le tirage)
   prefs: Object.assign({}, PREFS_DEFAUT),
   toujours: [],                           // ancien réglage « Toujours dans la liste » : repris dans la banque au 1er lancement
   banque: [],                             // banque d'ingrédients : seulement ce qui est noté à la main (voir banque())
   bq: { ouvert: false, onglet: "ing", rec: false, placard: false, detail: null, suppr: null, scroll: 0 },  // écran de la banque (voir 4 quater)
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
-  onglet: lireLocal("fx-onglet", "menu"),
+  onglet: lireLocal("fx-onglet", "courses"),
   // filtres de l'écran Recettes
   f: { q: "", cat: "", prot: "", fav: false, vege: false, saison: false, avance: false, invites: false }
 };
@@ -72,7 +74,7 @@ const S = {
 // Rangement dans Firestore :
 //   users/{mon uid}/app-foodix/donnees                  -> réglages du tirage (prefs)
 //   users/{mon uid}/app-foodix/donnees/recettes/{id}    -> une recette par document
-//   users/{mon uid}/app-foodix/donnees/menus/{id}       -> un menu (« livraison ») par document
+//   users/{mon uid}/app-foodix/donnees/menus/{id}       -> une liste de courses par document (en cours + précédente)
 // Un document par recette : deux appareils qui modifient deux recettes différentes
 // ne se gênent pas. Si les deux modifient la même : la dernière modification gagne.
 
@@ -94,6 +96,15 @@ function sauverPrefs() {
   if (MODE_DEMO) return sauverDemo();
   setDoc(refDonnees(), { prefs: S.prefs }, { merge: true }).catch(erreurEcriture);
 }
+// Propositions du menu et historique des plats (dans le même document que les réglages)
+function sauverPropo() {
+  if (MODE_DEMO) return sauverDemo();
+  setDoc(refDonnees(), { propo: S.propo }, { merge: true }).catch(erreurEcriture);
+}
+function sauverHisto() {
+  if (MODE_DEMO) return sauverDemo();
+  setDoc(refDonnees(), { histo: S.histo.map(l => ({ ids: l })) }, { merge: true }).catch(erreurEcriture);  // Firestore : pas de liste dans une liste
+}
 // Réglages › Notes (bloc-notes d'idées) : seulement le champ « idees », sans toucher au reste.
 function sauverIdees(texte) {
   S.idees = texte;
@@ -105,6 +116,8 @@ function sauverBanque() {
   if (MODE_DEMO) return sauverDemo();
   setDoc(refDonnees(), { banque: S.banque, toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
 }
+
+const lirePropo = p => ({ repas: p && Array.isArray(p.repas) ? p.repas : [] });
 
 function erreurEcriture(err) { console.error(err); toast("Échec de l’enregistrement"); }
 
@@ -131,7 +144,7 @@ function ecrireRecettes(liste) {
 
 // Mode démo : tout est recopié dans le navigateur après chaque modification
 function sauverDemo() {
-  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours, banque: S.banque, idees: S.idees })); } catch (e) { /* plein ou bloqué */ }
+  try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours, banque: S.banque, idees: S.idees, propo: S.propo, histo: S.histo })); } catch (e) { /* plein ou bloqué */ }
 }
 function demarrerDemo() {
   let d = {};
@@ -141,6 +154,8 @@ function demarrerDemo() {
   S.prefs = Object.assign({}, PREFS_DEFAUT, d.prefs);
   S.toujours = Array.isArray(d.toujours) ? d.toujours : [];
   S.banque = Array.isArray(d.banque) ? d.banque : [];
+  S.propo = lirePropo(d.propo);
+  S.histo = Array.isArray(d.histo) ? d.histo : [];
   migrerToujours();
   S.idees = d.idees || "";
   uid = "demo";
@@ -178,10 +193,11 @@ function ecouter() {
   arrets.push(onSnapshot(refDonnees(), snap => {
     const d = snap.exists() ? snap.data() : {};
     const p = Object.assign({}, PREFS_DEFAUT, d.prefs);
-    const tj = d.toujours || [], bq = d.banque || [];
+    const tj = d.toujours || [], bq = d.banque || [], pr = lirePropo(d.propo), hi = (d.histo || []).map(x => x.ids || []);
     S.idees = d.idees || ""; NotesIdees.maj(S.idees); // un autre appareil a pu changer les notes
-    if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours) || JSON.stringify(bq) !== JSON.stringify(S.banque)) {
-      S.prefs = p; S.toujours = tj; S.banque = bq;
+    if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours) || JSON.stringify(bq) !== JSON.stringify(S.banque)
+      || JSON.stringify(pr) !== JSON.stringify(S.propo) || JSON.stringify(hi) !== JSON.stringify(S.histo)) {
+      S.prefs = p; S.toujours = tj; S.banque = bq; S.propo = pr; S.histo = hi;
       migrerToujours();
       rerendre();
     }
@@ -264,18 +280,31 @@ function rerendre() {
 function render() {
   const m = menuEnCours();
   const titres = {
-    menu: ["Menu", m ? "Livraison du " + new Date(m.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""],
-    courses: ["Courses", ""],
-    recettes: ["Recettes", ""]
+    menu: ["Menu", S.propo.repas.length ? S.propo.repas.length + " proposition" + (S.propo.repas.length > 1 ? "s" : "") : ""],
+    courses: ["Liste de courses", m ? "du " + new Date(m.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : ""],
+    recettes: ["Recettes", S.recettes.length ? S.recettes.length + " recette" + (S.recettes.length > 1 ? "s" : "") : ""]
   };
   const [titre, sous] = titres[S.onglet];
   $("#titre").textContent = titre;
   $("#sub").textContent = sous;
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.onglet));
+  placerIndicateur();
   if (S.onglet === "recettes") renderRecettes();
   else if (S.onglet === "menu") renderMenu();
   else renderCourses();
 }
+
+// La pastille claire sous l'onglet choisi glisse d'un onglet à l'autre
+function placerIndicateur() {
+  const on = $("#tabs button.on"), ind = $("#tind");
+  if (!ind) return;
+  ind.style.opacity = on ? 1 : 0;
+  if (on) { ind.style.left = on.offsetLeft + "px"; ind.style.width = on.offsetWidth + "px"; }
+}
+window.addEventListener("resize", placerIndicateur);
+// Pas de zoom : on bloque le pincement à deux doigts (en plus du réglage « viewport » de index.html)
+document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener("gesturestart", e => e.preventDefault());
 
 function renderConnexion() {
   $("#titre").textContent = "Foodix";
@@ -284,26 +313,33 @@ function renderConnexion() {
     <div><button class="btn pri" data-act="connexion">Se connecter avec Google</button></div></div>`;
 }
 
-/* ---------- 4 bis. Menu : la « livraison » de N repas ---------- */
-// Pas de jours ni de semaines : un menu est une liste de repas tirée quand on le décide
-// (comme une box repas). On coche les repas déjà cuisinés.
-// Un repas = { id: recette, side: accompagnement ou null, fait: true/false }.
+/* ---------- 4 bis. Menu : des propositions de plats ---------- */
+// Pas de jours ni de semaines : « Nouveau menu » propose N plats tirés au sort (S.propo).
+// Rien n'arrive dans la liste de courses avant d'avoir accepté un plat (ou tous d'un coup).
+// Une proposition = { id: recette, side: accompagnement ou null } ;
+// un plat de la liste = { id, side, fait: true/false } (fait = cuisiné : ses ingrédients sortent de la liste).
 
+// La liste de courses en cours = la dernière de S.menus ; celle d'avant = l'archive (« Liste précédente »).
 const menuEnCours = () => S.menus[S.menus.length - 1] || null;
+const listeArchive = () => S.menus.length > 1 ? S.menus[S.menus.length - 2] : null;
 const recette = id => S.recettes.find(r => r.id === id);
 const estPlat = r => /plat complet|principal/.test(norm(r.categorie));
 const estAccomp = r => /accompagnement/.test(norm(r.categorie));
 const veutAccomp = r => /principal/.test(norm(r.categorie));
+// Les plats déjà pris : propositions + liste en cours (pour ne pas proposer deux fois le même)
+const platsPris = () => [...S.propo.repas.map(x => x.id), ...((menuEnCours() || {}).repas || []).map(x => x.id)];
+const accompsPris = () => [...S.propo.repas, ...((menuEnCours() || {}).repas || [])].map(x => x.side).filter(Boolean);
 
 // Les plats que le tirage peut proposer (de saison, et selon Végé / Rapide)
 function candidats() {
   const p = S.prefs;
   return S.recettes.filter(r => estPlat(r) && deSaison(r) && (!p.vege || r.vege) && (!p.rapide || !r.temps || r.temps <= 1));
 }
-// Plats servis dans les 3 menus précédents : ils sortiront moins souvent
+// Plats des listes récentes (en cours, précédente, et les 2 d'avant gardées dans S.histo) : ils sortiront moins souvent
 function recents() {
   const ids = new Set();
-  S.menus.slice(-4, -1).forEach(m => m.repas.forEach(x => { ids.add(x.id); if (x.side) ids.add(x.side); }));
+  S.menus.slice(-2).forEach(m => m.repas.forEach(x => { ids.add(x.id); if (x.side) ids.add(x.side); }));
+  S.histo.forEach(l => l.forEach(id => ids.add(id)));
   return ids;
 }
 // Tirage au sort « pondéré » : chaque plat a un poids, plus il est lourd, plus il a de chances de sortir
@@ -324,8 +360,8 @@ function tirer(liste, poidsDe) {
   for (let i = 0; i < liste.length; i++) { x -= ws[i]; if (x <= 0) return liste[i]; }
   return liste[liste.length - 1];
 }
-// Un plat de plus, différent de ceux déjà dans le menu
-function tirerPlat(deja) {
+// Un plat de plus, différent de ceux déjà proposés ou dans la liste
+function tirerPlat(deja = platsPris()) {
   const recent = recents();
   return tirer(candidats().filter(r => !deja.includes(r.id)), r => poids(r, deja, recent));
 }
@@ -334,70 +370,57 @@ function tirerAccomp(exclus = []) {
   const r = tirer(S.recettes.filter(x => estAccomp(x) && deSaison(x) && !exclus.includes(x.id)), x => x.favori ? 2 : 1);
   return r ? r.id : null;
 }
-function nouveauRepas(r, m) {
-  return { id: r.id, side: veutAccomp(r) ? tirerAccomp(m ? m.repas.map(x => x.side).filter(Boolean) : []) : null, fait: false };
+// Une proposition : { id: recette, side: accompagnement ou null }
+const nouveauRepas = r => ({ id: r.id, side: veutAccomp(r) ? tirerAccomp(accompsPris()) : null });
+
+// Une liste de courses vide (les plats acceptés, les articles ajoutés, ce qui est coché)
+const creerListe = () => ({ id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [], ajouts: [], coches: {}, dispo: {} });
+// La liste en cours, créée si besoin (premier ajout)
+function listeEnCours() {
+  let m = menuEnCours();
+  if (!m) { m = creerListe(); S.menus.push(m); }
+  return m;
 }
 
-// Une livraison vide. Les ajouts à la main la suivent : ceux pas encore achetés
-// (pas cochés) passent au menu suivant, et les articles récurrents choisis s'y rajoutent.
-function creerMenu(recurrents = []) {
-  const avant = menuEnCours();
-  const restants = avant ? (avant.ajouts || []).filter(a => !(avant.coches || {})[cleAjout(a)]) : [];
-  const ajouts = [...restants];
-  recurrents.forEach(a => { if (!ajouts.some(x => cleBanque(x) === cleBanque(a))) ajouts.push(a); });
-  return { id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [], ajouts, coches: {} };
-}
-
-// « Nouveau menu » : si la banque contient des articles récurrents, on demande d'abord lesquels
-// on veut cette fois-ci (tous cochés au départ), puis on tire les repas.
+// « Nouveau menu » : de nouvelles propositions (rien n'arrive dans la liste avant d'avoir accepté)
 function nouveauMenu() {
-  const rec = banque().filter(e => e.rec);
-  if (!rec.length) return tirerMenu([]);
-  const md = $("#modal");
-  ["recette", "form", "rep", "choix", "banque"].forEach(k => delete md.dataset[k]);
-  md.dataset.recur = "1";
-  const ligne = (e, i) => `<button class="rc on" data-rc="${i}" data-nom="${esc(e.nom)}"><span class="cb">${icone("check")}</span>${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span>${e.menage ? `<span class="t">Ménager</span>` : ""}</button>`;
-  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Articles récurrents">
-    <div class="fi-hd"><div class="txt"><h2>Articles récurrents</h2><div class="sub">Lesquels veux-tu dans cette liste ?</div></div>
-      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
-    <div class="rc-l">${rec.map(ligne).join("")}</div>
-    <div class="pied2"><button class="btn" data-act="menu-sans">Aucun</button><button class="btn pri" data-act="menu-avec">${icone("shuffle")}Créer le menu</button></div>
-  </div></div>`;
-}
-// Après la question : on crée le menu avec les articles encore cochés (ou aucun)
-function menuAvecRecurrents(tous) {
-  const noms = tous ? [...document.querySelectorAll(".rc.on")].map(b => b.dataset.nom) : [];
-  fermer();
-  tirerMenu(noms);
-}
-
-// Tire les repas d'une nouvelle livraison ; l'ancienne reste dans l'historique
-function tirerMenu(recurrents) {
-  const m = creerMenu(recurrents);
+  const avant = S.propo.repas;
+  S.propo.repas = [];
   for (let i = 0; i < S.prefs.nb; i++) {
-    const r = tirerPlat(m.repas.map(x => x.id));
-    if (!r) break;
-    m.repas.push(nouveauRepas(r, m));
+    const r = tirerPlat(); if (!r) break;
+    S.propo.repas.push(nouveauRepas(r));
   }
-  if (!m.repas.length) return toast("Aucun plat ne correspond");
-  S.menus.push(m);
-  ecrireMenu(m);
-  render();
-  toast("Nouveau menu", () => { S.menus = S.menus.filter(x => x !== m); effacerMenu(m.id); render(); });
+  if (!S.propo.repas.length) { S.propo.repas = avant; return toast("Aucun plat ne correspond"); }
+  sauverPropo(); render();
+  toast("Nouvelles propositions", () => { S.propo.repas = avant; sauverPropo(); render(); });
 }
 
-// Nombre de repas : + tire un plat de plus, − retire le dernier
+// Accepter une proposition (ou toutes) : le plat passe dans la liste de courses
+function accepter(i) {
+  const x = S.propo.repas[i]; if (!x) return;
+  const m = listeEnCours();
+  S.propo.repas.splice(i, 1);
+  m.repas.push({ id: x.id, side: x.side || null, fait: false });
+  sauverPropo(); ecrireMenu(m); fermer(); render();
+  toast("Ajouté à la liste", () => { m.repas.pop(); S.propo.repas.splice(i, 0, x); sauverPropo(); ecrireMenu(m); render(); });
+}
+function accepterTout() {
+  const l = S.propo.repas; if (!l.length) return;
+  const m = listeEnCours(), n = m.repas.length;
+  l.forEach(x => m.repas.push({ id: x.id, side: x.side || null, fait: false }));
+  S.propo.repas = [];
+  sauverPropo(); ecrireMenu(m); render();
+  toast(l.length + " plat" + (l.length > 1 ? "s" : "") + " dans la liste", () => { m.repas.splice(n); S.propo.repas = l; sauverPropo(); ecrireMenu(m); render(); });
+}
+
+// Nombre de propositions : + tire un plat de plus, − retire le dernier
 function changerNombre(d) {
-  const m = menuEnCours();
-  const n = Math.min(14, Math.max(1, (m ? m.repas.length : S.prefs.nb) + d));
+  const n = Math.min(14, Math.max(1, S.prefs.nb + d));
   S.prefs.nb = n; sauverPrefs();
-  if (m) {
-    if (d > 0 && m.repas.length < 14) {
-      const r = tirerPlat(m.repas.map(x => x.id));
-      if (r) m.repas.push(nouveauRepas(r, m)); else toast("Plus d'autre plat disponible");
-    }
-    if (d < 0 && m.repas.length > 1) m.repas.pop();
-    ecrireMenu(m);
+  if (S.propo.repas.length) {
+    if (d > 0) { const r = tirerPlat(); if (r) S.propo.repas.push(nouveauRepas(r)); else toast("Plus d'autre plat disponible"); }
+    if (d < 0 && S.propo.repas.length > 1) S.propo.repas.pop();
+    sauverPropo();
   }
   render();
 }
@@ -409,24 +432,35 @@ function changerPersonnes(d) {
 }
 
 function renderMenu() {
-  const m = menuEnCours(), p = S.prefs;
+  const m = menuEnCours(), p = S.prefs, pr = S.propo.repas;
   const pastille = (k, ic, txt) => `<button class="chip ${p[k] ? "on" : ""}" data-pref="${k}">${icone(ic)}${txt}</button>`;
   const haut = `<div class="ctl">
-      <span class="pas"><span class="l">${icone("utensils")}</span><button data-act="nb" data-v="-1" aria-label="Moins de repas">−</button><b class="num">${m ? m.repas.length : p.nb}</b><button data-act="nb" data-v="1" aria-label="Plus de repas">+</button></span>
+      <span class="pas"><span class="l">${icone("utensils")}</span><button data-act="nb" data-v="-1" aria-label="Moins de plats">−</button><b class="num">${p.nb}</b><button data-act="nb" data-v="1" aria-label="Plus de plats">+</button></span>
       <span class="pas"><span class="l">${icone("users")}</span><button data-act="pers" data-v="-1" aria-label="Moins de personnes">−</button><b class="num">${p.pers}</b><button data-act="pers" data-v="1" aria-label="Plus de personnes">+</button></span>
       <span class="spacer"></span><button class="btn pri" data-act="nouveau-menu">${icone("shuffle")}Nouveau menu</button></div>
     <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "À l'avance")}${pastille("invites", "glass", "Invités")}</div>`;
   if (!S.recettes.length) { $("#main").innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
-  if (!m) { $("#main").innerHTML = haut + `<div class="vide">Pas encore de menu.</div>`; return; }
-  const lignes = m.repas.map((x, i) => {
+  const infos = (r, s) => `${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s.nom)}</span>` : ""}</span>
+        <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span>`;
+  const propos = pr.map((x, i) => {
     const r = recette(x.id), s = x.side && recette(x.side);
-    if (!r) return ""; // recette supprimée entre-temps
+    if (!r) return "";
+    return `<div class="rp propo"><button class="rp-btn" data-repas="${i}" data-src="p">${infos(r, s)}</button>
+      <button class="accepte" data-act="accepter" data-i="${i}" aria-label="Ajouter ${esc(r.nom)} à la liste">${icone("plus")}Liste</button></div>`;
+  }).join("");
+  const dansListe = ((m && m.repas) || []).map((x, i) => {
+    const r = recette(x.id), s = x.side && recette(x.side);
+    if (!r) return "";
     return `<div class="rp ${x.fait ? "fait" : ""}">
       <button class="cb" data-act="fait" data-i="${i}" aria-label="${x.fait ? "Pas encore cuisiné" : "Cuisiné"}">${x.fait ? icone("check") : ""}</button>
-      <button class="rp-btn" data-repas="${i}">${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s.nom)}</span>` : ""}</span>
-        <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span><span class="chev">${icone("right")}</span></button></div>`;
+      <button class="rp-btn" data-repas="${i}" data-src="l">${infos(r, s)}<span class="chev">${icone("right")}</span></button></div>`;
   }).join("");
-  $("#main").innerHTML = haut + `<div class="repas">${lignes}</div>`;
+  $("#main").innerHTML = haut
+    + `<div class="sec-t"><h3>Propositions</h3>${pr.length > 1 ? `<button class="lien-btn" data-act="accepter-tout">${icone("check")}Tout ajouter</button>` : ""}</div>`
+    + (propos ? `<div class="repas">${propos}</div>` : `<div class="vide petit">Touche « Nouveau menu » pour des idées de plats.</div>`)
+    + `<button class="btn ajout" data-act="choisir-plat">${icone("search")}Choisir un plat moi-même</button>`
+    + `<div class="sec-t"><h3>Dans ma liste</h3>${dansListe ? `<span class="sub">Coche ce qui est cuisiné</span>` : ""}</div>`
+    + (dansListe ? `<div class="repas">${dansListe}</div>` : `<div class="vide petit">Aucun plat dans la liste de courses.</div>`);
 }
 
 function cocherFait(i) {
@@ -435,48 +469,55 @@ function cocherFait(i) {
   ecrireMenu(m); render();
 }
 
-// Petit menu d'un repas : gros boutons
-function ouvrirRepas(i) {
-  const m = menuEnCours(), x = m && m.repas[i];
-  const r = x && recette(x.id);
+// Petit menu d'un plat : gros boutons. src « p » = une proposition, « l » = un plat de la liste
+function ouvrirRepas(i, src) {
+  const l = src === "p" ? S.propo.repas : ((menuEnCours() || {}).repas || []);
+  const x = l[i], r = x && recette(x.id);
   if (!r) return;
   const s = x.side && recette(x.side);
   const md = $("#modal");
-  md.dataset.rep = i; delete md.dataset.recette; delete md.dataset.form;
+  md.dataset.rep = i; md.dataset.src = src; delete md.dataset.recette; delete md.dataset.form;
   md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
     <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>${s ? `<div class="sub">+ ${esc(s.nom)}</div>` : ""}</div>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="actions">
+      ${src === "p" ? `<button class="act pri" data-act="accepter" data-i="${i}">${icone("cart")}Ajouter à la liste de courses</button>
       <button class="act" data-act="remplacer">${icone("refresh")}Remplacer (au hasard)</button>
-      <button class="act" data-act="choisir">${icone("search")}Choisir…</button>
+      <button class="act" data-act="choisir">${icone("search")}Choisir un autre plat…</button>` : ""}
       ${veutAccomp(r) ? `<button class="act" data-act="accomp">${icone("refresh")}Changer l'accompagnement</button>` : ""}
       <button class="act" data-act="voir">${icone("book")}Voir la recette</button>
-      <button class="act danger" data-act="retirer">${icone("trash")}Retirer du menu</button>
+      <button class="act danger" data-act="retirer">${icone("trash")}${src === "p" ? "Retirer des propositions" : "Retirer de la liste de courses"}</button>
     </div></div></div>`;
 }
-const repasOuvert = () => { const m = menuEnCours(), i = +$("#modal").dataset.rep; return m && m.repas[i] ? { m, i } : null; };
+// Le plat ouvert : sa liste (propositions ou liste de courses), sa place, et comment l'enregistrer
+function repasOuvert() {
+  const md = $("#modal"), i = +md.dataset.rep;
+  if (md.dataset.src === "p") return S.propo.repas[i] ? { l: S.propo.repas, i, src: "p", save: sauverPropo } : null;
+  const m = menuEnCours();
+  return m && m.repas[i] ? { l: m.repas, i, src: "l", save: () => ecrireMenu(m) } : null;
+}
 
 function remplacer() {
   const o = repasOuvert(); if (!o) return;
-  const r = tirerPlat(o.m.repas.map(x => x.id));
+  const r = tirerPlat();
   if (!r) return toast("Plus d'autre plat disponible");
-  o.m.repas[o.i] = nouveauRepas(r, o.m);
-  ecrireMenu(o.m); render(); ouvrirRepas(o.i);
+  o.l[o.i] = nouveauRepas(r);
+  o.save(); render(); ouvrirRepas(o.i, o.src);
 }
 function changerAccomp() {
   const o = repasOuvert(); if (!o) return;
-  const x = o.m.repas[o.i];
-  x.side = tirerAccomp([x.side, ...o.m.repas.map(y => y.side)].filter(Boolean)) || x.side;
-  ecrireMenu(o.m); render(); ouvrirRepas(o.i);
+  const x = o.l[o.i];
+  x.side = tirerAccomp([x.side, ...accompsPris()].filter(Boolean)) || x.side;
+  o.save(); render(); ouvrirRepas(o.i, o.src);
 }
 function retirer() {
   const o = repasOuvert(); if (!o) return;
-  const [x] = o.m.repas.splice(o.i, 1);
-  ecrireMenu(o.m); fermer(); render();
-  toast("Retiré du menu", () => { o.m.repas.splice(o.i, 0, x); ecrireMenu(o.m); render(); });
+  const [x] = o.l.splice(o.i, 1);
+  o.save(); fermer(); render();
+  toast(o.src === "p" ? "Retiré des propositions" : "Retiré de la liste", () => { o.l.splice(o.i, 0, x); o.save(); render(); });
 }
 
-// « Choisir… » : liste des plats avec recherche ; i = place du repas à remplacer (ou absent = ajouter)
+// « Choisir… » : liste des plats avec recherche ; i = proposition à remplacer (ou absent = en proposer un de plus)
 function ouvrirChoix(i) {
   const md = $("#modal");
   md.dataset.choix = i ?? ""; delete md.dataset.recette;
@@ -494,19 +535,19 @@ function majChoix() {
 }
 function choisirPlat(id) {
   const r = recette(id); if (!r) return;
-  const i = $("#modal").dataset.choix;
-  let m = menuEnCours();
-  if (!m) { m = creerMenu(); S.menus.push(m); }
-  const x = nouveauRepas(r, m);
-  if (i !== "" && m.repas[+i]) m.repas[+i] = x; else m.repas.push(x);
-  ecrireMenu(m); fermer(); render();
-  toast("Au menu");
+  const i = $("#modal").dataset.choix, x = nouveauRepas(r);
+  if (i !== "" && S.propo.repas[+i]) S.propo.repas[+i] = x; else S.propo.repas.push(x);
+  sauverPropo(); fermer(); render();
+  toast("Ajouté aux propositions");
 }
-// Bouton « Au menu » de la fiche recette : ajouté à la fin du menu en cours
+// Bouton « À la liste » de la fiche recette : le plat va directement dans la liste de courses
 function auMenu() {
-  const id = $("#modal").dataset.recette;
-  $("#modal").dataset.choix = "";
-  choisirPlat(id);
+  const r = recette($("#modal").dataset.recette); if (!r) return;
+  const m = listeEnCours();
+  m.repas.push(Object.assign(nouveauRepas(r), { fait: false }));
+  S.propo.repas = S.propo.repas.filter(x => x.id !== r.id);
+  sauverPropo(); ecrireMenu(m); render(); ouvrirFiche(r.id);
+  toast("Ajouté à la liste de courses");
 }
 
 /* ---------- 4 ter. Liste de courses ---------- */
@@ -552,12 +593,15 @@ function renderCourses() {
   // ce qui était tapé dans le champ d'ajout reste (la liste peut se redessiner quand l'autre appareil modifie quelque chose)
   const champ = $("#ajout-art"), tape = champ ? champ.value : "", avaitFocus = !!champ && document.activeElement === champ;
   const ajout = `<div class="srow"><label class="cherche">${icone("plus")}<input id="ajout-art" placeholder="Ajouter un article" autocomplete="off" enterkeyhint="done"></label>
-    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div><div class="sugg" id="sugg-art"></div>`;
+    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div><div class="sugg" id="sugg-art"></div>
+    <div class="outils3"><button class="btn" data-act="parcourir">${icone("grid")}Parcourir</button>
+      <button class="btn" data-act="nouvelle-liste">${icone("file-plus")}Nouvelle liste</button>
+      <button class="btn ${listeArchive() ? "" : "inactif"}" data-act="archive" aria-label="Liste précédente">${icone("history")}Précédente</button></div>`;
   const finir = () => { // remet le champ comme il était
     const c = $("#ajout-art"); if (!c || !tape) return;
     c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
   };
-  if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Pas encore de menu.</div>`; return finir(); }
+  if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`; return finir(); }
   const coches = m.coches || {}, dispo = m.dispo || {};
   const groupes = {}, placard = [];
   // Un article « souvent au placard » reste à part tant que je n'ai pas dit « il me faut » ; alors il rejoint son rayon.
@@ -585,7 +629,7 @@ function renderCourses() {
     const aVerifier = placard.filter(e => !dispo[e.cle]).length;
     html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier ? aVerifier + " à vérifier" : placard.length})</summary>${tri(placard).map(lignePlacard).join("")}</details>`;
   }
-  $("#main").innerHTML = ajout + (html || `<div class="vide">Rien à acheter.</div>`);
+  $("#main").innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
   finir();
 }
 
@@ -628,8 +672,7 @@ function ajouterALaListe(texte, menage = false) {
   let nom = v;
   if (connu) { if (!avecQte) nom = connu.nom; }
   else { ajouterBanque(avecQte ? it.name : v, menage); toast(menage ? "Ajouté à la banque (ménager)" : "Ajouté à la banque d'ingrédients"); }
-  let m = menuEnCours();
-  if (!m) { m = creerMenu(); S.menus.push(m); }
+  const m = listeEnCours();
   m.ajouts = m.ajouts || [];
   if (!m.ajouts.some(a => cleBanque(a) === cleBanque(nom))) m.ajouts.push(nom);
   ecrireMenu(m);
@@ -647,6 +690,102 @@ function retirerArticle(nom) {
   m.ajouts.splice(i, 1);
   ecrireMenu(m); renderCourses();
   toast("Article retiré", () => { m.ajouts.splice(i, 0, nom); ecrireMenu(m); renderCourses(); });
+}
+
+/* ---------- 4 ter bis. Nouvelle liste et liste précédente ---------- */
+// « Nouvelle liste » : la liste en cours devient la « Liste précédente » (l'ancienne archive est effacée),
+// et une liste vide commence. Avant, on demande ce qu'on garde : les plats pas encore cuisinés,
+// les articles ajoutés pas encore cochés, et les articles récurrents de la banque (tout est coché au départ).
+function nouvelleListe() {
+  const m = menuEnCours(), coches = (m && m.coches) || {};
+  const plats = m ? m.repas.map((x, i) => ({ x, i, r: recette(x.id) })).filter(o => !o.x.fait && o.r) : [];
+  const restants = m ? (m.ajouts || []).filter(a => !coches[cleAjout(a)]) : [];
+  const rec = banque().filter(e => e.rec && !restants.some(a => cleBanque(a) === e.cle));
+  if (!plats.length && !restants.length && !rec.length) return creerNouvelleListe([], [], []);
+  const md = $("#modal");
+  ["recette", "form", "rep", "choix"].forEach(k => delete md.dataset[k]);
+  const ligne = (type, v, img, nom, extra = "") => `<button class="rc on" data-rc data-type="${type}" data-v="${esc(v)}"><span class="cb">${icone("check")}</span>${img}<span class="nm">${esc(nom)}</span>${extra}</button>`;
+  const bloc = (titre, l) => l.length ? `<div class="sect">${titre}</div><div>${l.join("")}</div>` : "";
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Nouvelle liste">
+    <div class="fi-hd"><div class="txt"><h2>Nouvelle liste</h2><div class="sub">Je garde ce qui n'était pas coché ?</div></div>
+      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="rc-l">
+      ${bloc("Plats pas encore cuisinés", plats.map(o => ligne("plat", o.i, dishImg(o.r, 22), o.r.nom)))}
+      ${bloc("Articles pas encore pris", restants.map(a => ligne("art", a, imgIng(a, 18), a)))}
+      ${bloc("Articles récurrents", rec.map(e => ligne("art", e.nom, ingImg(e.nom, 18, e.icone), e.nom, e.menage ? `<span class="t">Ménager</span>` : "")))}
+    </div>
+    <div class="infos">L'ancienne liste reste dans « Précédente ».</div>
+    <div class="pied2"><button class="btn" data-act="liste-zero">Partir de zéro</button><button class="btn pri" data-act="liste-garder">${icone("check")}Nouvelle liste</button></div>
+  </div></div>`;
+}
+// Après la question : ce qui est encore coché passe dans la nouvelle liste
+function nouvelleListeChoix(garder) {
+  const pris = garder ? [...document.querySelectorAll(".rc.on")] : [];
+  const m = menuEnCours();
+  const plats = pris.filter(b => b.dataset.type === "plat").map(b => m.repas[+b.dataset.v]).filter(Boolean);
+  const arts = pris.filter(b => b.dataset.type === "art").map(b => b.dataset.v);
+  fermer();
+  creerNouvelleListe(plats, arts);
+}
+function creerNouvelleListe(plats, arts) {
+  const avant = menuEnCours(), nv = creerListe();
+  nv.repas = plats.map(x => ({ id: x.id, side: x.side || null, fait: false }));
+  arts.forEach(a => { if (!nv.ajouts.some(x => cleBanque(x) === cleBanque(a))) nv.ajouts.push(a); });
+  // Un ingrédient d'un plat gardé, déjà pris dans l'ancienne liste, reste coché
+  if (avant) articles(nv).forEach(e => { if ((avant.coches || {})[e.cle]) nv.coches[e.cle] = true; });
+  // On ne garde que la liste précédente : les plus anciennes sont effacées (leurs plats restent dans l'historique du tirage)
+  const aEffacer = avant ? S.menus.filter(x => x !== avant) : [], histoAvant = S.histo;
+  if (aEffacer.length) S.histo = [...S.histo, ...aEffacer.map(x => x.repas.map(y => y.id))].slice(-2);
+  S.menus = [...(avant ? [avant] : []), nv];
+  aEffacer.forEach(x => effacerMenu(x.id));
+  if (aEffacer.length) sauverHisto();
+  ecrireMenu(nv);
+  render(); window.scrollTo(0, 0);
+  toast("Nouvelle liste", () => {
+    S.menus = [...aEffacer, ...S.menus.filter(x => x !== nv)].sort((a, b) => a.cree - b.cree);
+    effacerMenu(nv.id); aEffacer.forEach(ecrireMenu);
+    S.histo = histoAvant; sauverHisto(); render();
+  });
+}
+
+// « Précédente » : l'ancienne liste, pour la consulter, y reprendre un article (toucher) ou la remettre en cours
+function ouvrirArchive() {
+  const a = listeArchive();
+  if (!a) return toast("Pas encore de liste précédente");
+  const md = $("#modal");
+  ["recette", "form", "rep", "choix"].forEach(k => delete md.dataset[k]);
+  md.dataset.archive = "1";
+  const m = menuEnCours(), deja = new Set(m ? articles(m).filter(e => !(m.coches || {})[e.cle]).map(e => cleBanque(e.nom)) : []);
+  const coches = a.coches || {};
+  const l = articles(a).sort((x, y) => AISLE_ORDER.indexOf(x.rayon) - AISLE_ORDER.indexOf(y.rayon) || x.nom.localeCompare(y.nom, "fr"));
+  const plats = a.repas.map(x => recette(x.id)).filter(Boolean);
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Liste précédente">
+    <div class="fi-hd"><div class="txt"><h2>Liste précédente</h2><div class="sub">du ${new Date(a.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} · touche un article pour le reprendre</div></div>
+      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    ${plats.length ? `<div class="tg">${plats.map(r => `<span class="t">${esc(r.nom)}</span>`).join("")}</div>` : ""}
+    <div class="rc-l">${l.map(e => {
+      const txt = e.qte != null ? (fmtQty(e.qte, e.unite) + " " + e.nom) : e.nom, dedans = deja.has(cleBanque(e.nom));
+      return `<button class="rc arch ${dedans ? "on" : ""}" data-repris="${esc(txt)}" data-menage="${banque().some(b => b.cle === cleBanque(e.nom) && b.menage) ? 1 : ""}">
+        <span class="cb">${icone("check")}</span>${imgIng(e.nom, 18)}<span class="nm ${coches[e.cle] ? "barre" : ""}">${esc(e.nom)}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></button>`;
+    }).join("") || `<div class="vide">Elle était vide.</div>`}</div>
+    <div class="pied2"><button class="btn" data-act="fermer">Fermer</button><button class="btn pri" data-act="restaurer">${icone("history")}Remettre cette liste</button></div>
+  </div></div>`;
+}
+// Reprendre un article de la liste précédente dans la liste en cours (retoucher l'enlève)
+function reprendre(btn) {
+  const txt = btn.dataset.repris, m = listeEnCours();
+  const i = m.ajouts.findIndex(a => cleBanque(a) === cleBanque(txt));
+  if (btn.classList.contains("on") && i >= 0) { m.ajouts.splice(i, 1); ecrireMenu(m); btn.classList.remove("on"); }
+  else if (!btn.classList.contains("on")) { ajouterALaListe(txt, !!btn.dataset.menage); btn.classList.add("on"); }
+  else return toast("Déjà dans la liste en cours (vient d'un plat)");
+  render();
+}
+// La liste précédente redevient celle en cours, et inversement
+function restaurerArchive() {
+  const a = listeArchive(), m = menuEnCours(); if (!a || !m) return;
+  const echange = () => { [a.cree, m.cree] = [m.cree, a.cree]; S.menus.sort((x, y) => x.cree - y.cree); ecrireMenu(a); ecrireMenu(m); render(); };
+  echange(); fermer();
+  toast("Liste précédente remise en cours", echange);
 }
 
 /* ---------- 4 quater. Banque d'ingrédients ---------- */
@@ -779,16 +918,19 @@ const MENAGER_IDEES = [["Liquide vaisselle", "m-vaisselle"], ["Tablettes lave-va
   ["Essuie-tout", "m-papier"], ["Papier toilette", "m-papier"], ["Sacs poubelle", "m-papier"], ["Papier aluminium", "m-papier"], ["Film alimentaire", "m-papier"],
   ["Savon mains", "m-hygiene"], ["Dentifrice", "m-hygiene"], ["Gel douche", "m-hygiene"]];
 
-// La banque est une vraie fenêtre (plein écran), pas un pop-up : liste par rayon sur 2 colonnes,
-// et en touchant un ingrédient, sa fiche (nom, rayon, icône, recettes, supprimer).
-function ouvrirBanque() {
+// La banque est une vraie fenêtre (plein écran), pas un pop-up : liste par rayon sur 2 colonnes.
+// Deux façons de l'ouvrir :
+//   - Recettes › « Ingrédients » : toucher un ingrédient ouvre sa fiche (nom, rayon, icône, recettes, supprimer) ;
+//   - Courses › « Parcourir » (choisir = vrai) : toucher un article l'ajoute à la liste (retoucher l'enlève).
+function ouvrirBanque(choisir = false) {
   fermer();
   fermerBanque();
-  S.bq.detail = null; S.bq.suppr = null; S.bq.ouvert = true; S.bq.scroll = 0;
+  S.bq.detail = null; S.bq.suppr = null; S.bq.ouvert = true; S.bq.scroll = 0; S.bq.choisir = choisir;
   const ec = document.createElement("div");
   ec.id = "bq-ecran"; ec.className = "bq-ecran";
   ec.innerHTML = `<div class="bq-in">
-    <div class="bq-hd"><button class="ib" data-act="bq-retour" aria-label="Retour">${icone("left")}</button><h2 id="bq-titre">Banque d'ingrédients</h2></div>
+    <div class="bq-hd"><button class="ib" data-act="bq-retour" aria-label="Retour">${icone("left")}</button><h2 id="bq-titre">Banque d'ingrédients</h2>
+      ${choisir ? `<span class="spacer"></span><button class="btn pri" data-act="bq-retour">${icone("check")}OK</button>` : ""}</div>
     <div class="bq-barre" id="bq-barre">
       <div class="srow" style="margin:0"><label class="cherche">${icone("search")}<input id="q-bq" placeholder="Chercher ou ajouter…" autocomplete="off" enterkeyhint="done"></label>
         <button class="fab" data-act="ajouter-banque" aria-label="Ajouter à la banque">${icone("plus")}</button></div>
@@ -803,7 +945,7 @@ function fermerBanque() {
 }
 function retourBanque() {
   if (S.bq.detail) { S.bq.detail = null; S.bq.suppr = null; return majBanque(); }
-  fermerBanque(); ouvrirReglages();
+  fermerBanque(); render();
 }
 
 function majBanque() {
@@ -816,7 +958,7 @@ function majBanque() {
   const mode = e ? "d" + e.cle : "liste", memeMode = ec.dataset.mode === mode, haut = corps.scrollTop;
   ec.dataset.mode = mode;
   $("#bq-barre").hidden = !!e;
-  $("#bq-titre").textContent = e ? e.court : "Banque d'ingrédients";
+  $("#bq-titre").textContent = e ? e.court : S.bq.choisir ? "Ajouter à la liste" : "Banque d'ingrédients";
   corps.innerHTML = e ? htmlFicheIngredient(e) : htmlListeBanque(tous);
   corps.scrollTop = memeMode ? haut : e ? 0 : S.bq.scroll;
 }
@@ -828,11 +970,14 @@ function htmlListeBanque(tous) {
       <button class="${men ? "on" : ""}" data-act="bq-onglet" data-v="menage">Produits ménagers</button></div>
     <div class="defile" style="margin:0;padding:0"><button class="chip ${S.bq.rec ? "on" : ""}" data-act="bq-rec">${icone("refresh")}Récurrents</button><button class="chip ${S.bq.placard ? "on" : ""}" data-act="bq-placard">${icone("box")}Placard</button></div>`;
   const liste = tous.filter(e => e.menage === men && (!q || correspond(e, q)) && (!S.bq.rec || e.rec) && (!S.bq.placard || e.placard));
+  const m = menuEnCours(), dansListe = new Set(((m && m.ajouts) || []).map(cleBanque));
   let html = "";
+  if (S.bq.choisir && dansListe.size && !q) html += `<div class="infos" style="margin-top:6px">${dansListe.size} article${dansListe.size > 1 ? "s" : ""} ajouté${dansListe.size > 1 ? "s" : ""} à la main dans la liste</div>`;
   rayonsDe(men).forEach(r => {
     const l = liste.filter(e => e.rayon === r); if (!l.length) return;
-    html += `<div class="rayon"><h3>${esc(libelleRayon(r))}</h3><div class="bq-grid">${l.map(e =>
-      `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
+    html += `<div class="rayon"><h3>${esc(libelleRayon(r))}</h3><div class="bq-grid">${l.map(e => S.bq.choisir
+      ? `<button class="bq-t pick ${dansListe.has(e.cle) ? "on" : ""}" data-bq-pick="${esc(e.cle)}" aria-pressed="${dansListe.has(e.cle)}">${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span><span class="cb">${icone("check")}</span></button>`
+      : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
   });
   if (!html) html = `<div class="vide" style="padding:28px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : S.bq.placard ? "Rien au placard." : "Rien ici pour l'instant."}</div>`;
   const idees = men && !q && !S.bq.rec && !S.bq.placard ? MENAGER_IDEES.filter(([n]) => !tous.some(e => e.cle === cleBanque(n))) : [];
@@ -863,13 +1008,23 @@ function ajouterDepuisBanque() {
   const champ = $("#q-bq"), v = champ.value.trim();
   if (!v) return champ.focus();
   const ex = banque().find(e => e.cle === cleBanque(v));
+  if (ex && S.bq.choisir) { ajouterALaListe(ex.nom, ex.menage); champ.value = ""; majBanque(); return toast("« " + ex.court + " » est dans la liste"); }
   if (ex) {
     S.bq.onglet = ex.menage ? "menage" : "ing"; champ.value = ex.court;
     majBanque(); return toast("Déjà dans la banque");
   }
   const e = ajouterBanque(v, S.bq.onglet === "menage");
+  if (S.bq.choisir) ajouterALaListe(e.nom, e.menage);
   champ.value = ""; majBanque(); champ.focus();
-  toast("Ajouté dans « " + libelleRayon(e.rayon) + " »");
+  toast((S.bq.choisir ? "Ajouté à la liste et dans « " : "Ajouté dans « ") + libelleRayon(e.rayon) + " »");
+}
+// Mode « Parcourir » : toucher un article l'ajoute à la liste en cours, retoucher l'enlève
+function basculerPick(cle) {
+  const e = banque().find(x => x.cle === cle); if (!e) return;
+  const m = listeEnCours(), i = m.ajouts.findIndex(a => cleBanque(a) === cle);
+  if (i >= 0) { m.ajouts.splice(i, 1); ecrireMenu(m); } else ajouterALaListe(e.nom, e.menage);
+  if (navigator.vibrate) try { navigator.vibrate(8); } catch (err) { /* pas de vibreur */ }
+  majBanque();
 }
 
 /* ---------- 5. Écran Recettes ---------- */
@@ -888,7 +1043,8 @@ function filtrees() {
 function renderRecettes() {
   if (!S.recettes.length) {
     $("#main").innerHTML = `<div class="vide">Aucune recette pour l’instant.<div class="pied2" style="justify-content:center;margin-top:14px">
-      <button class="btn" data-act="reglages">Importer un fichier Excel</button><button class="btn pri" data-act="nouvelle">${icone("plus")}Ajouter</button></div></div>`;
+      <button class="btn" data-act="reglages">Importer un fichier Excel</button><button class="btn pri" data-act="nouvelle">${icone("plus")}Ajouter</button></div>
+      <div style="margin-top:10px"><button class="btn" data-act="banque">${icone("carrot")}Banque d'ingrédients</button></div></div>`;
     return;
   }
   const f = S.f;
@@ -899,6 +1055,7 @@ function renderRecettes() {
   $("#main").innerHTML = `
     <div class="srow"><label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
       ${f.q ? `<button data-act="effacer-q" aria-label="Effacer">${icone("x")}</button>` : ""}</label>
+      <button class="btn" data-act="banque" aria-label="Banque d'ingrédients">${icone("carrot")}Ingrédients</button>
       <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>
     <div class="defile">${liste("cat", "Catégorie")}${liste("prot", "Protéine")}
       ${bascule("fav", "star", "Favoris")}${bascule("vege", "leaf", "Végé")}${bascule("saison", "sun", "De saison")}
@@ -945,8 +1102,8 @@ function ouvrirFiche(id) {
     ${/^https?:\/\//.test(r.lien || "") ? `<a class="lien" href="${esc(r.lien)}" target="_blank" rel="noopener">${icone("link")}Voir la recette en ligne</a>` : ""}
     <div class="gros"><button class="btn ${r.favori ? "fav-on" : ""}" data-act="favori">${icone("star")}${r.favori ? "Favori" : "Mettre en favori"}</button>
       ${menuEnCours() && menuEnCours().repas.some(x => x.id === r.id)
-        ? `<button class="btn" disabled>${icone("check")}Au menu</button>`
-        : `<button class="btn pri" data-act="au-menu">${icone("plus")}Au menu</button>`}</div>
+        ? `<button class="btn" disabled>${icone("check")}Dans la liste</button>`
+        : `<button class="btn pri" data-act="au-menu">${icone("cart")}À la liste</button>`}</div>
   </div></div>`;
 }
 
@@ -960,7 +1117,7 @@ function basculerFavori() {
 
 function fermer() {
   $("#modal").innerHTML = "";
-  ["recette", "form", "rep", "choix", "recur"].forEach(k => delete $("#modal").dataset[k]);
+  ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete $("#modal").dataset[k]);
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -1245,7 +1402,7 @@ const THEMES = [["auto", "Auto", "Suit le téléphone ou le PC"], ["clair", "Cla
 
 function ouvrirReglages() {
   importEnAttente = null;
-  ["recette", "recur", "banque"].forEach(k => delete $("#modal").dataset[k]);
+  ["recette", "archive"].forEach(k => delete $("#modal").dataset[k]);
   const th = THEMES.find(t => t[0] === lireLocal("fx-theme", "auto")) || THEMES[0];
   const anim = lireLocal("fx-anim", "completes");
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Réglages">
@@ -1255,9 +1412,7 @@ function ouvrirReglages() {
     <div class="reg"><span>Animations</span><span class="seg">
       <button class="${anim === "completes" ? "on" : ""}" data-act="anim" data-v="completes">Complètes</button>
       <button class="${anim === "simples" ? "on" : ""}" data-act="anim" data-v="simples">Simples</button></span></div>
-    ${uid ? `<div class="sect">Courses</div>
-    <button class="reg" data-act="banque"><span>Banque d'ingrédients</span><span class="val">›</span></button>
-    <div class="sect">Idées</div>
+    ${uid ? `<div class="sect">Idées</div>
     <button class="reg" data-act="idees"><span>Notes</span><span class="val">›</span></button>
     <div class="sect">Excel</div>
     <div class="reg" style="justify-content:flex-start"><button class="btn" data-act="exporter">Exporter</button>
@@ -1432,7 +1587,11 @@ document.addEventListener("click", e => {
   const retArt = t.closest("[data-retirer-art]");
   if (retArt) return retirerArticle(retArt.dataset.retirerArt);
   const repas = t.closest("[data-repas]");
-  if (repas) return ouvrirRepas(+repas.dataset.repas);
+  if (repas) return ouvrirRepas(+repas.dataset.repas, repas.dataset.src);
+  const pick = t.closest("[data-bq-pick]");
+  if (pick) return basculerPick(pick.dataset.bqPick);
+  const repris = t.closest("[data-repris]");
+  if (repris) return reprendre(repris);
   const choisi = t.closest("[data-choisi]");
   if (choisi) return choisirPlat(choisi.dataset.choisi);
   const pref = t.closest("[data-pref]");
@@ -1447,10 +1606,17 @@ document.addEventListener("click", e => {
   if (!el) return;
   switch (el.dataset.act) {
     case "nouveau-menu": nouveauMenu(); break;
+    case "accepter": accepter(+el.dataset.i); break;
+    case "accepter-tout": accepterTout(); break;
+    case "choisir-plat": ouvrirChoix(); break;
+    case "nouvelle-liste": nouvelleListe(); break;
+    case "liste-garder": nouvelleListeChoix(true); break;
+    case "liste-zero": nouvelleListeChoix(false); break;
+    case "archive": ouvrirArchive(); break;
+    case "restaurer": restaurerArchive(); break;
+    case "parcourir": ouvrirBanque(true); break;
     case "ajouter-art": case "art-ingredient": ajouterArticle(); break;
     case "art-menage": ajouterArticle(true); break;
-    case "menu-avec": menuAvecRecurrents(true); break;
-    case "menu-sans": menuAvecRecurrents(false); break;
     case "banque": ouvrirBanque(); break;
     case "ajouter-banque": ajouterDepuisBanque(); break;
     case "bq-onglet": S.bq.onglet = el.dataset.v; majBanque(); break;
@@ -1470,7 +1636,7 @@ document.addEventListener("click", e => {
     case "remplacer": remplacer(); break;
     case "choisir": ouvrirChoix($("#modal").dataset.rep); break;
     case "accomp": changerAccomp(); break;
-    case "voir": { const o = repasOuvert(); if (o) ouvrirFiche(o.m.repas[o.i].id); break; }
+    case "voir": { const o = repasOuvert(); if (o) ouvrirFiche(o.l[o.i].id); break; }
     case "retirer": retirer(); break;
     case "au-menu": auMenu(); break;
     case "nouvelle": nouvelle(); break;
