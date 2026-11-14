@@ -1,5 +1,11 @@
 # Foodix — journal des nouveautés
 
+## 0.5.2 — 2026-11-14
+« Placard » devient une option d'un ingrédient, plus un rayon.
+- Fiche d'un ingrédient : « Souvent au placard ? » (comme « récurrent »). Départ deviné d'après le nom (sel, huile, épices, farine…), modifiable. Filtre « Placard » dans la banque.
+- Nouveau rayon « Épices et condiments » ; huile, vinaigre, farine, sucre vont en Épicerie.
+- Liste de courses, section « Peut-être au placard » : pour chaque ingrédient, « Je l'ai » (grisé) ou « Il me faut » (il passe dans son rayon avec le reste ; le bouton boîte permet de le remettre au placard). Le choix vaut pour la liste en cours : chaque nouveau menu repart de zéro.
+
 ## 0.5.1 — 2026-11-14
 La banque devient une vraie fenêtre (plein écran), rangée par rayons.
 - Réglages › Banque d'ingrédients : liste par rayon (fruits, légumes, boucherie, crèmerie, boulangerie, conserves, épicerie, placard) sur 2 colonnes. Même chose pour les produits ménagers (vaisselle, linge, nettoyage, papier et sacs, hygiène).
