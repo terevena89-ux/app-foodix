@@ -39,9 +39,9 @@ const AISLES = [
   ["boulangerie","Boulangerie",/(^| )(pain|baguette|tortilla)/],
   ["fruits","Fruits et légumes",/(^| )(tomate|courgette|aubergine|poivron|oignon|echalote|ail|carotte|poireau|pomme|champignon|salade|roquette|concombre|avocat|citron|menthe|persil|basilic|coriandre|ciboulette|aneth|estragon|sauge|gingembre|chou|betterave|epinard|potimarron|navet|melon|grenade|legume|pousse|chataigne|olive)/],
 ];
-const AISLE_ORDER = ["fruits","boucherie","cremerie","boulangerie","epicerie","placard","perso"];
+const AISLE_ORDER = ["fruits","boucherie","cremerie","boulangerie","epicerie","placard","perso","menage"];
 function aisleOf(name){ const n=norm(name); for(const [id,,re] of AISLES) if(re.test(n)) return id; return "epicerie"; }
-function aisleLabel(id){ return id==="perso" ? "Ajouts" : (AISLES.find(a=>a[0]===id)||[,"Épicerie"])[1]; }
+function aisleLabel(id){ return id==="perso" ? "Ajouts" : id==="menage" ? "Produits ménagers" : (AISLES.find(a=>a[0]===id)||[,"Épicerie"])[1]; }
 function fmtQty(q, unit){
   if(q==null) return "";
   if(unit==="g"){ if(q>=1000) return (Math.round(q/100)/10).toLocaleString("fr-FR")+" kg"; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+" g"; }
@@ -105,6 +105,7 @@ roast:["","","","","     bbbbb","   bbtttttbb","  btttttttttb"," btttwtttttttb",
 fish:["","","","","","","    1111111   1","  111111111111 1"," 1k1111111111111","  22222222222 22","wwww2222222wwwww","wwwwwwwwwwwwwwwW"," WWWWWWWWWWWWWW"],
 };
 const ING_SPR=[
+ [/vaisselle|lessive|adoucissant|savon|javel|nettoyant|detartrant|desinfectant|produit wc|multi-usage/,"bouteille",{y:"l",Y:"L"}],
  [/pomme de terre|patate/,"patate"],[/chataigne/,"patate",{t:"b",b:"B"}],[/petit(s)? poi/,"noix",{B:"G",b:"g"}],[/pois chiche/,"noix",{B:"b",b:"t"}],
  [/lentille/,"noix",{B:"G",b:"v"}],[/olive/,"noix",{B:"k",b:"G"}],[/tomate/,"tomate"],[/poivron|piment/,"poivron"],[/betterave/,"tomate",{r:"u",R:"U"}],
  [/potimarron|courge/,"tomate",{r:"o",R:"O"}],[/oignon|echalote/,"oignon"],[/(^| )ail( |$)/,"ail"],[/carotte/,"carotte"],[/aubergine/,"courgette",{g:"u",G:"U"}],

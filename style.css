@@ -207,8 +207,9 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .pas button { border: 0; background: none; width: 30px; height: 32px; font-weight: 800; color: var(--discret); }
 .pas b { min-width: 20px; text-align: center; }
 .ingl { display: flex; flex-direction: column; gap: 4px; }
-.ingl .li { display: flex; align-items: center; gap: 6px; border: 1px solid var(--trait); background: var(--fond); border-radius: 7px; height: 34px; padding: 0 2px 0 4px; }
-.ingl .li input { flex: 1; min-width: 0; border: 0; background: none; height: 100%; outline: none; }
+.ingl .li { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; border: 1px solid var(--trait); background: var(--fond); border-radius: 7px; min-height: 34px; padding: 0 2px 0 4px; }
+.ingl .li input { flex: 1; min-width: 0; border: 0; background: none; height: 32px; outline: none; }
+.sugg-ing { flex: 0 0 100%; display: flex; flex-wrap: wrap; gap: 4px; padding: 1px 2px 6px; }
 .ingl .li .ib { width: 28px; height: 28px; }
 .ingl .li .ib .ic { width: 15px; height: 15px; }
 .poignee { color: var(--discret); display: grid; place-items: center; width: 22px; height: 30px; cursor: grab; touch-action: none; flex-shrink: 0; }
@@ -265,7 +266,26 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .placard summary::-webkit-details-marker { display: none; }
 .placard summary .ic { width: 15px; height: 15px; transition: transform .15s; }
 .placard[open] summary .ic { transform: rotate(90deg); }
-.tj-nm { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ---------- Banque d'ingrédients et articles récurrents (v0.5.0) ---------- */
+.sugg { display: flex; flex-wrap: wrap; gap: 5px; margin: -2px 0 8px; }
+.sugg:empty { display: none; }
+.chip.nouv { border-style: dashed; color: var(--accent); }
+.chip small { font-size: 10.5px; font-weight: 600; opacity: .8; }
+.bq-seg button { flex: 1; }
+#bq-corps { display: flex; flex-direction: column; gap: 8px; }
+.bq-l { display: flex; flex-direction: column; max-height: 48vh; max-height: 48dvh; overflow: auto; }
+.bq { border-bottom: 1px solid var(--trait); }
+.bq .nm { display: flex; align-items: center; gap: 8px; }
+.bq .for { padding-left: 24px; }
+.ib.rec.on { color: var(--accent); background: var(--accent-doux); }
+.rc-l { display: flex; flex-direction: column; max-height: 55vh; max-height: 55dvh; overflow: auto; }
+.rc { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; border-bottom: 1px solid var(--trait); background: none; padding: 4px 0; min-height: 40px; text-align: left; }
+.rc .nm { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc .cb { width: 20px; height: 20px; border: 1.8px solid var(--discret); border-radius: 5px; display: grid; place-items: center; flex-shrink: 0; color: var(--accent-encre); }
+.rc .cb .ic { width: 13px; height: 13px; stroke-width: 3; opacity: 0; }
+.rc.on .cb { background: var(--accent); border-color: var(--accent); }
+.rc.on .cb .ic { opacity: 1; }
+.rc:not(.on) .nm, .rc:not(.on) img { opacity: .5; }
 
 /* Petit panneau des listes déroulantes sur téléphone (module champs-mobile.js) :
    il reprend les couleurs de l'appli, et suit donc le thème clair / sombre. */
