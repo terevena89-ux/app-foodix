@@ -32,16 +32,33 @@ function keyOf(name){ return norm(name).replace(/^(de |d')/,"").split(" ").map(w
 /* ---------- Rayons et quantités ---------- */
 // Rayons : mots-clés testés dans cet ordre (le premier qui correspond gagne)
 const AISLES = [
-  ["placard","Sans doute au placard",/(^| )(sel|poivre|huile|vinaigre|farine|sucre|moutarde|sauce soja|herbe|epice|cumin|paprika|muscade|thym|bouquet garni|cube|bouillon|levure|chapelure|miel|cinq epice|safran|anis|cannelle|piment|mayonnaise|zaatar|menthe sechee|tahini|nuoc|cognac|pate de curry)/],
-  ["epicerie","Épicerie",/(boite|concass|sechee|seches|lait de coco|beurre de cacah|morilles|champignons noirs|vin |cidre|croutons|sauce )/],
+  ["placard","Placard (épices, huiles…)",/(^| )(sel|poivre|huile|vinaigre|farine|sucre|moutarde|sauce soja|herbe|epice|cumin|paprika|muscade|thym|bouquet garni|cube|bouillon|levure|chapelure|miel|cinq epice|safran|anis|cannelle|piment|mayonnaise|zaatar|menthe sechee|tahini|nuoc|cognac|pate de curry)/],
+  ["conserves","Conserves",/(boite|conserve|concass|lait de coco|(^| )thon|sardine|(^| )mais|coulis|pelee|cornichon|olive)/],
+  ["epicerie","Épicerie",/(sechee|seches|beurre de cacah|morilles|champignons noirs|vin |cidre|croutons|sauce )/],
   ["boucherie","Boucherie, charcuterie, poisson",/(^| )(boeuf|veau|porc|poulet|lardon|jambon|chorizo|saucisse|merguez|chipolata|boudin|magret|steak|cordon|chair a saucisse|petit sale|crevette|saumon|morue|poisson|surimi|rillette|canard|dinde)/],
   ["cremerie","Crèmerie, œufs, frais",/(^| )(oeuf|lait|beurre|creme|fromage|gruyere|parmesan|mozzarella|feta|chevre|roquefort|bleu|reblochon|cheddar|yaourt|pate brisee|ravioles|gnocchi|tofu)/],
   ["boulangerie","Boulangerie",/(^| )(pain|baguette|tortilla)/],
-  ["fruits","Fruits et légumes",/(^| )(tomate|courgette|aubergine|poivron|oignon|echalote|ail|carotte|poireau|pomme|champignon|salade|roquette|concombre|avocat|citron|menthe|persil|basilic|coriandre|ciboulette|aneth|estragon|sauge|gingembre|chou|betterave|epinard|potimarron|navet|melon|grenade|legume|pousse|chataigne|olive)/],
+  ["legumes","Légumes et herbes",/(^| )(tomate|courgette|aubergine|poivron|oignon|echalote|ail|carotte|poireau|champignon|salade|roquette|concombre|menthe|persil|basilic|coriandre|ciboulette|aneth|estragon|sauge|gingembre|chou|betterave|epinard|potimarron|navet|legume|pousse|chataigne|pomme de terre|patate|courge|haricots? verts?|petit(s)? pois|fenouil|celeri|radis|asperge|brocoli|endive)/],
+  ["fruits","Fruits",/(^| )(pomme|citron|avocat|melon|grenade|peche|poire|banane|fraise|orange|raisin|cerise|kiwi|mangue|ananas|framboise|abricot|clementine|prune|myrtille|datte|figue)/],
 ];
-const AISLE_ORDER = ["fruits","boucherie","cremerie","boulangerie","epicerie","placard","perso","menage"];
+// Produits ménagers : catégories
+const RAYONS_MENAGE = [["m-vaisselle","Vaisselle"],["m-linge","Linge"],["m-nettoyage","Nettoyage"],["m-papier","Papier et sacs"],["m-hygiene","Hygiène"]];
+const AISLES_FOOD = ["fruits","legumes","boucherie","cremerie","boulangerie","conserves","epicerie","placard"];
+const AISLE_ORDER = [...AISLES_FOOD,"perso",...RAYONS_MENAGE.map(r=>r[0])];
 function aisleOf(name){ const n=norm(name); for(const [id,,re] of AISLES) if(re.test(n)) return id; return "epicerie"; }
-function aisleLabel(id){ return id==="perso" ? "Ajouts" : id==="menage" ? "Produits ménagers" : (AISLES.find(a=>a[0]===id)||[,"Épicerie"])[1]; }
+function rayonMenage(name){
+  const n=norm(name);
+  if(/vaisselle|eponge|lave-vaisselle/.test(n)) return "m-vaisselle";
+  if(/lessive|adoucissant|linge|detachant/.test(n)) return "m-linge";
+  if(/papier|sac|essuie|alu|film|mouchoir/.test(n)) return "m-papier";
+  if(/savon|shampoing|dentifrice|gel douche|deodorant|coton/.test(n)) return "m-hygiene";
+  return "m-nettoyage";
+}
+function aisleLabel(id){
+  if(id==="perso") return "Ajouts";
+  const m=RAYONS_MENAGE.find(r=>r[0]===id); if(m) return "Ménage · "+m[1];
+  return (AISLES.find(a=>a[0]===id)||[,"Épicerie"])[1];
+}
 function fmtQty(q, unit){
   if(q==null) return "";
   if(unit==="g"){ if(q>=1000) return (Math.round(q/100)/10).toLocaleString("fr-FR")+" kg"; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+" g"; }
@@ -124,6 +141,11 @@ const ING_SPR=[
  [/huile|vinaigre/,"bouteille"],[/sauce|mayonnaise|moutarde|miel|tahini|pate de curry/,"pot"],
  [/(^| )sel|poivre|epice|cumin|paprika|muscade|safran|anis|cannelle|cinq|zaatar|curry/,"pot",{y:"o",Y:"O"}],
 ];
+// Icônes qu'on peut choisir à la main pour un ingrédient
+const ICONES={tomate:"Tomate",poivron:"Poivron",oignon:"Oignon",ail:"Ail",carotte:"Carotte",courgette:"Courgette",champignon:"Champignon",patate:"Pomme de terre",
+  salade:"Salade",herbe:"Herbes",pomme:"Pomme",citron:"Citron",avocat:"Avocat",oeuf:"Œuf",fromage:"Fromage",lait:"Lait",beurre:"Beurre",pot:"Pot",
+  poulet:"Poulet",viande:"Viande",saucisse:"Saucisse",poisson:"Poisson",crevette:"Crevette",boite:"Conserve",pates:"Pâtes",riz:"Riz",pain:"Pain",
+  noix:"Noix, graines",bouteille:"Bouteille",sachet:"Sachet"};
 const spriteCache=new Map();
 function drawGrid(rows, size, map={}, fill=[]){
   const cv=document.createElement("canvas"); cv.width=cv.height=size; const cx=cv.getContext("2d");
@@ -143,8 +165,8 @@ function mainColor(spr){
   const cnt={}; SPR[spr.name].join("").split("").forEach(ch=>{ if(ch!==" "&&ch!=="k") cnt[ch]=(cnt[ch]||0)+1; });
   const ch=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0]; return spr.map[ch]||ch;
 }
-function ingImg(name, px=22){
-  const s=ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
+function ingImg(name, px=22, icone){
+  const s=(icone && SPR[icone]) ? {name:icone,map:{}} : ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
   if(!spriteCache.has(key)) spriteCache.set(key, drawGrid(SPR[s.name],12,s.map));
   return `<img class="px" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
@@ -185,4 +207,4 @@ function dishImg(r, px = 40) {
   return `<img class="px dish" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
 
-export { norm, parseItem, keyOf, aisleOf, aisleLabel, AISLE_ORDER, fmtQty, ingImg, dishImg, dishType };
+export { norm, parseItem, keyOf, aisleOf, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType };
