@@ -1,5 +1,17 @@
 # Foodix — journal des nouveautés
 
+## 0.8.0 — 2026-11-14
+Filtres multiples, variantes d'un plat, bases (sous-recettes).
+- **Filtres** : bouton « Filtres » dans Recettes. Une feuille avec des cases : plusieurs catégories et protéines à la fois (l'une ou l'autre). Les filtres choisis restent en pastilles, une croix pour les enlever.
+- **Variantes** : des recettes de la même *famille* sont des versions du même plat (Burger bœuf / végé / poulet).
+  - Liste : une seule ligne « Burger · Bœuf · Végé ». Fiche : pastilles pour passer d'une variante à l'autre, les ingrédients propres à la variante sont marqués d'un point orange.
+  - Menu : une seule variante d'une famille par menu, tirée au hasard (la famille ne sort pas plus souvent qu'un autre plat) ; pastilles pour changer de variante dans la proposition. Avec le réglage Végé, seules les variantes végé sont proposées.
+  - Fiche › ⋯ › « Nouvelle variante » ; formulaire › Plus : Famille et Variante.
+- **Bases (sous-recettes)** : une recette de catégorie « Base » (pâte brisée, sauce…) s'utilise dans une autre en écrivant son nom entre crochets : `[Pâte brisée maison]` (proposé en tapant un ingrédient).
+  - Dans la fiche, la base se déplie. Les bases sont rangées à part dans la liste et ne sont jamais proposées dans le menu. Un seul niveau.
+  - En ajoutant le plat à la liste : « Je la fais » (ses ingrédients vont dans la liste) ou « Je l'achète » (elle y va toute prête). Demandé à chaque fois.
+- **Excel** : colonnes « Famille » et « Variante », bases entre crochets dans « Ingrédients », onglet « Familles » en plus (pour lire seulement, ignoré à l'import).
+
 ## 0.7.0 — 2026-11-14
 Animations, vibrations et mode « Compléter ».
 - **Gestes** :

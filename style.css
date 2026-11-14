@@ -430,3 +430,37 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .cp-fin .pied2 { width: 100%; margin-top: 14px; }
 .cp-bravo { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); color: var(--accent-encre); display: grid; place-items: center; animation: pop .5s cubic-bezier(.3, 1.5, .5, 1); }
 .cp-bravo .ic { width: 38px; height: 38px; stroke-width: 2.6; }
+
+/* ---------- v0.8.0 : filtres, variantes, bases ---------- */
+.chip.filtres { color: var(--encre); }
+.chip.filtres b { background: var(--accent); color: var(--accent-encre); border-radius: 999px; min-width: 20px; height: 20px; display: inline-grid; place-items: center; font-size: 11px; padding: 0 5px; }
+.grille2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; }
+.grille2 .rc .t { margin-left: auto; }
+.ligne .nm small { display: block; font-weight: 600; font-size: 12px; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ligne .ri .t { margin-right: 2px; }
+/* Fiche : pastilles des variantes, ingrédients propres à la variante */
+.variantes { display: flex; flex-wrap: wrap; gap: 6px; }
+.variantes .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-encre); }
+.ings li.propre span { font-weight: 800; }
+.ings li.propre span::after { content: " •"; color: var(--fav); }
+.legende { font-size: 12px; color: var(--discret); margin: -2px 0 6px; display: flex; align-items: center; gap: 6px; }
+.legende i { width: 7px; height: 7px; border-radius: 50%; background: var(--fav); display: inline-block; }
+/* Une base dans une recette : ligne orange qui se déplie */
+.ings li.base-l { grid-column: 1 / -1; flex-direction: column; align-items: stretch; }
+.base-hd { display: flex; align-items: center; gap: 8px; border: 0; background: var(--fav-doux); color: var(--fav); border-radius: 10px; padding: 8px 10px; font-weight: 800; text-align: left; width: 100%; }
+.base-hd span { flex: 1; }
+.base-hd .chev { transition: transform .2s; }
+.base-l.ouvert .base-hd .chev { transform: rotate(90deg); }
+.base-in { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; padding: 8px 4px 2px 14px; margin-left: 8px; border-left: 2px solid var(--fav-doux); font-size: 13px; }
+.base-in span { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.base-in .lien-btn { grid-column: 1 / -1; justify-self: start; font-size: 13px; }
+.chip.base { color: var(--fav); border-color: var(--fav); background: var(--fav-doux); }
+/* « Je la fais / je l'achète » avant d'ajouter à la liste */
+.base-q { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--trait); }
+.base-q .w { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.base-q .seg button { padding: 8px 10px; }
+/* Menu : variantes sous une proposition */
+.rp.propo.a-vars { flex-wrap: wrap; row-gap: 0; padding-bottom: 8px; }
+.rp.propo .vars { order: 3; flex: 1 1 100%; display: flex; gap: 5px; flex-wrap: wrap; padding-left: 40px; }
+.rp.propo .vars .chip { height: 30px; font-size: 12px; padding: 0 10px; }
+.duo2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

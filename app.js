@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AI
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -39,7 +39,7 @@ const NIVEAUX = {
 // Colonnes du fichier Excel : [clé dans l'appli, en-tête Excel, largeur, type]
 // Types : oui = Oui / Non ; niv = libellé d'une échelle 1-3 ; liste = éléments séparés par « ; »
 const COLONNES = [
-  ["id", "ID", 30], ["nom", "Nom", 34], ["categorie", "Catégorie", 16], ["proteine", "Protéine", 16],
+  ["id", "ID", 30], ["nom", "Nom", 34], ["famille", "Famille", 16], ["variante", "Variante", 14], ["categorie", "Catégorie", 16], ["proteine", "Protéine", 16],
   ["saison", "Saison", 10], ["origine", "Origine", 15], ["preparation", "Préparation", 13],
   ["vege", "Végé", 8, "oui"], ["favori", "Favori", 8, "oui"], ["prep", "À l'avance", 11, "oui"], ["date", "Invités", 9, "oui"],
   ["prix", "Prix", 7, "niv"], ["difficulte", "Difficulté", 11, "niv"], ["temps", "Temps", 9, "niv"], ["maitrise", "Maîtrise", 13, "niv"],
@@ -68,7 +68,7 @@ const S = {
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
   onglet: lireLocal("fx-onglet", "courses"),
   // filtres de l'écran Recettes
-  f: { q: "", cat: "", prot: "", fav: false, vege: false, saison: false, avance: false, invites: false }
+  f: { q: "", cats: [], prots: [], fav: false, vege: false, saison: false, avance: false, invites: false }
 };
 
 /* ---------- 2. Stockage : Firebase ---------- */
@@ -379,6 +379,16 @@ const menuEnCours = () => S.menus[S.menus.length - 1] || null;
 const listeArchive = () => S.menus.length > 1 ? S.menus[S.menus.length - 2] : null;
 const recette = id => S.recettes.find(r => r.id === id);
 const estPlat = r => /plat complet|principal/.test(norm(r.categorie));
+// Bases (sous-recettes) : une recette de catégorie « Base », appelée dans une autre en écrivant son nom entre crochets : [Pâte brisée maison].
+// Un seul niveau (les crochets dans une base sont lus comme un ingrédient normal). Jamais proposées dans le menu.
+const estBase = r => norm(r.categorie) === "base";
+const nomCrochets = txt => { const m = /^\s*\[(.+)\]\s*$/.exec(txt || ""); return m ? m[1].trim() : null; };
+const recetteParNom = nom => S.recettes.find(r => norm(r.nom) === norm(nom));
+const sousRecette = txt => { const n = nomCrochets(txt); const r = n && recetteParNom(n); return r && r.ingredients ? r : null; };
+const basesDe = r => r ? (r.ingredients || []).map(sousRecette).filter(Boolean) : [];
+// Familles (variantes) : des recettes qui sont des versions du même plat (Burger bœuf / végé / poulet), même « famille »
+const familleDe = r => r && r.famille ? S.recettes.filter(x => norm(x.famille) === norm(r.famille)).sort((a, b) => (a.variante || a.nom).localeCompare(b.variante || b.nom, "fr")) : (r ? [r] : []);
+const cleFamille = r => r.famille ? "f:" + norm(r.famille) : r.id;
 const estAccomp = r => /accompagnement/.test(norm(r.categorie));
 const veutAccomp = r => /principal/.test(norm(r.categorie));
 // Les plats déjà pris : propositions + liste en cours (pour ne pas proposer deux fois le même)
@@ -417,8 +427,11 @@ function tirer(liste, poidsDe) {
 }
 // Un plat de plus, différent de ceux déjà proposés ou dans la liste
 function tirerPlat(deja = platsPris()) {
-  const recent = recents();
-  return tirer(candidats().filter(r => !deja.includes(r.id)), r => poids(r, deja, recent));
+  const recent = recents(), fams = new Set(deja.map(id => recette(id)).filter(Boolean).map(cleFamille));
+  const l = candidats().filter(r => !deja.includes(r.id) && !fams.has(cleFamille(r)));
+  const taille = new Map(); l.forEach(r => taille.set(cleFamille(r), (taille.get(cleFamille(r)) || 0) + 1));
+  // une famille de 3 variantes ne sort pas 3 fois plus souvent : la variante est tirée au hasard dans la famille
+  return tirer(l, r => poids(r, deja, recent) / taille.get(cleFamille(r)));
 }
 // Un accompagnement de saison (favoris ×2), différent de ceux déjà pris
 function tirerAccomp(exclus = []) {
@@ -452,25 +465,53 @@ function nouveauMenu() {
 }
 
 // Accepter une proposition (ou toutes) : le plat passe dans la liste de courses
-function accepter(i) {
+function accepter(i, choixFait) {
   const x = S.propo.repas[i]; if (!x) return;
+  if (!choixFait) return demanderBases([x], () => accepter(i, true));
   vibrer("ajout");
   voler($(`.rp.propo [data-repas="${i}"] img`) || $("#modal .fi-hd img"));
   const m = listeEnCours();
   S.propo.repas.splice(i, 1);
-  m.repas.push({ id: x.id, side: x.side || null, fait: false });
+  m.repas.push(repasListe(x));
   sauverPropo(); ecrireMenu(m); fermer(); render();
   toast("Ajouté à la liste", () => { m.repas.pop(); S.propo.repas.splice(i, 0, x); sauverPropo(); ecrireMenu(m); render(); });
 }
-function accepterTout() {
+function accepterTout(choixFait) {
   const l = S.propo.repas; if (!l.length) return;
+  if (!choixFait) return demanderBases(l, () => accepterTout(true));
   const m = listeEnCours(), n = m.repas.length;
   vibrer("gros");
   document.querySelectorAll(".rp.propo .rp-btn img").forEach((img, k) => voler(img, k * 90));
-  l.forEach(x => m.repas.push({ id: x.id, side: x.side || null, fait: false }));
+  l.forEach(x => m.repas.push(repasListe(x)));
   S.propo.repas = [];
   sauverPropo(); ecrireMenu(m); render();
   toast(l.length + " plat" + (l.length > 1 ? "s" : "") + " dans la liste", () => { m.repas.splice(n); S.propo.repas = l; sauverPropo(); ecrireMenu(m); render(); });
+}
+
+// Un plat qui entre dans la liste : { id, side, fait, achete: [bases achetées toutes prêtes] }
+const repasListe = x => { const o = { id: x.id, side: x.side || null, fait: false }; if (x.achete && x.achete.length) o.achete = x.achete; return o; };
+
+// Avant d'ajouter des plats qui utilisent une base (pâte, sauce…) : « je la fais » ou « je l'achète toute prête » ?
+// On demande à chaque fois (rien n'est retenu). Le choix est noté sur le plat (x.achete), puis on continue.
+function demanderBases(plats, ensuite) {
+  const q = [];
+  plats.forEach((x, n) => [x.id, x.side].filter(Boolean).forEach(id => basesDe(recette(id)).forEach(b => q.push({ n, plat: recette(id).nom, b }))));
+  if (!q.length) return ensuite();
+  const md = $("#modal");
+  ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete md.dataset[k]);
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Bases">
+    <div class="fi-hd"><div class="txt"><h2>Je la fais ou je l'achète ?</h2><div class="sub">Pour la liste de courses</div></div>
+      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    ${q.map((o, k) => `<div class="base-q"><div class="w"><b>${esc(o.b.nom)}</b><span class="sub">pour ${esc(o.plat)}</span></div>
+      <span class="seg" data-base-q="${k}" data-n="${o.n}" data-nom="${esc(o.b.nom)}"><button class="on" data-v="fais">Je la fais</button><button data-v="achete">Je l'achète</button></span></div>`).join("")}
+    <div class="pied2"><button class="btn" data-act="fermer">Annuler</button><button class="btn pri" data-act="bases-ok">${icone("cart")}Ajouter à la liste</button></div></div></div>`;
+  md.suite = () => {
+    document.querySelectorAll("[data-base-q]").forEach(g => {
+      if (!g.querySelector('[data-v="achete"]').classList.contains("on")) return;
+      const x = plats[+g.dataset.n]; x.achete = [...new Set([...(x.achete || []), g.dataset.nom])];
+    });
+    fermer(); ensuite();
+  };
 }
 
 // Nombre de propositions : + tire un plat de plus, − retire le dernier
@@ -505,7 +546,9 @@ function renderMenu() {
   const propos = pr.map((x, i) => {
     const r = recette(x.id), s = x.side && recette(x.side);
     if (!r) return "";
-    return `<div class="rp propo" style="--i:${i}"><button class="rp-btn" data-repas="${i}" data-src="p">${infos(r, s)}</button>
+    const fam = familleDe(r).filter(v => !S.prefs.vege || v.vege);
+    const vars = fam.length > 1 ? `<span class="vars">${fam.map(v => `<button class="chip ${v.id === r.id ? "on" : ""}" data-var-propo="${i}" data-v="${esc(v.id)}">${esc(v.variante || v.nom)}</button>`).join("")}</span>` : "";
+    return `<div class="rp propo ${vars ? "a-vars" : ""}" style="--i:${i}"><button class="rp-btn" data-repas="${i}" data-src="p">${infos(r, s)}</button>${vars}
       <button class="accepte" data-act="accepter" data-i="${i}" aria-label="Ajouter ${esc(r.nom)} à la liste">${icone("plus")}Liste</button></div>`;
   }).join("");
   const dansListe = ((m && m.repas) || []).map((x, i) => {
@@ -605,11 +648,14 @@ function choisirPlat(id) {
 // Bouton « À la liste » de la fiche recette : le plat va directement dans la liste de courses
 function auMenu() {
   const r = recette($("#modal").dataset.recette); if (!r) return;
+  const x = nouveauRepas(r);
+  demanderBases([x], () => {
   const m = listeEnCours();
-  m.repas.push(Object.assign(nouveauRepas(r), { fait: false }));
+  m.repas.push(repasListe(x));
   S.propo.repas = S.propo.repas.filter(x => x.id !== r.id);
   sauverPropo(); ecrireMenu(m); render(); ouvrirFiche(r.id);
-  toast("Ajouté à la liste de courses");
+  toast("Ajouté à la liste de courses"); vibrer("ajout");
+  });
 }
 
 /* ---------- 4 ter. Liste de courses ---------- */
@@ -626,7 +672,15 @@ function articles(m) {
   m.repas.filter(x => !x.fait).forEach(x => [x.id, x.side].filter(Boolean).forEach(id => {
     const r = recette(id); if (!r) return;
     const k = (m.pers || 2) / (r.portions || 2);       // ex. recette pour 2, on est 4 : ×2
+    // Une base entre crochets : ses ingrédients à elle (même échelle que le plat), ou elle-même si je l'achète toute prête
+    const lignes = [];
     (r.ingredients || []).forEach(txt => {
+      const b = sousRecette(txt);
+      if (!b) return lignes.push(txt);
+      if ((x.achete || []).includes(b.nom)) return lignes.push(b.nom.replace(/\s+maison$/i, "") + " (tout prêt)");
+      (b.ingredients || []).forEach(t => lignes.push(nomCrochets(t) || t));
+    });
+    lignes.forEach(txt => {
       const it = parseItem(txt); if (!it) return;
       const cle = it.key + "|" + it.unit;
       const e = map.get(cle) || { cle, nom: it.name, unite: it.unit, qte: null, recettes: [], rayon: idx.has(it.key) ? idx.get(it.key).rayon : aisleOf(it.name), placard: idx.has(it.key) ? idx.get(it.key).placard : auPlacard(it.name) };
@@ -900,6 +954,7 @@ const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return in
 function banque() {
   const auto = new Map();
   S.recettes.forEach(r => (r.ingredients || []).forEach(txt => {
+    if (nomCrochets(txt)) return;  // une base : ce n'est pas un ingrédient
     const it = parseItem(txt); if (!it || !it.name) return;
     const e = auto.get(it.key) || { noms: {}, recettes: [] };
     e.noms[it.name] = (e.noms[it.name] || 0) + 1;
@@ -1124,7 +1179,8 @@ function filtrees() {
   const f = S.f, q = norm(f.q);
   return S.recettes.filter(r =>
     (!q || norm([r.nom, r.proteine, r.origine, (r.ingredients || []).join(" ")].join(" ")).includes(q)) &&
-    (!f.cat || r.categorie === f.cat) && (!f.prot || r.proteine === f.prot) &&
+    // plusieurs catégories (ou protéines) cochées : l'une OU l'autre
+    (!f.cats.length || f.cats.includes(r.categorie)) && (!f.prots.length || f.prots.includes(r.proteine)) &&
     (!f.fav || r.favori) && (!f.vege || r.vege) && (!f.saison || deSaison(r)) &&
     (!f.avance || r.prep) && (!f.invites || r.date)
   ).sort(parNom);
@@ -1137,17 +1193,18 @@ function renderRecettes() {
       <div style="margin-top:10px"><button class="btn" data-act="banque">${icone("carrot")}Banque d'ingrédients</button></div></div>`;
     return;
   }
-  const f = S.f;
-  const valeurs = k => [...new Set(S.recettes.map(r => r[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
-  const liste = (k, tous) => `<select class="chip ${f[k] ? "on" : ""}" data-filtre="${k}" aria-label="${tous}">
-    <option value="">${tous}</option>${valeurs(k === "cat" ? "categorie" : "proteine").map(v => `<option ${v === f[k] ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>`;
+  const f = S.f, n = f.cats.length + f.prots.length;
+  // Bouton « Filtres » (ouvre une feuille avec des cases) ; les filtres choisis restent en pastilles, une croix pour les enlever
+  const liste = () => `<button class="chip filtres ${n ? "on" : ""}" data-act="filtres">${icone("sliders")}Filtres${n ? `<b>${n}</b>` : ""}</button>`
+    + f.cats.map(c => `<button class="chip on" data-retire-f="cats" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("")
+    + f.prots.map(c => `<button class="chip on" data-retire-f="prots" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("");
   const bascule = (k, ic, txt) => `<button class="chip ${f[k] ? "on" : ""}" data-bascule="${k}">${ic ? icone(ic) : ""}${txt}</button>`;
   $("#main").innerHTML = `
     <div class="srow"><label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
       ${f.q ? `<button data-act="effacer-q" aria-label="Effacer">${icone("x")}</button>` : ""}</label>
       <button class="btn" data-act="banque" aria-label="Banque d'ingrédients">${icone("carrot")}Ingrédients</button>
       <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>
-    <div class="defile">${liste("cat", "Catégorie")}${liste("prot", "Protéine")}
+    <div class="defile">${liste()}
       ${bascule("fav", "star", "Favoris")}${bascule("vege", "leaf", "Végé")}${bascule("saison", "sun", "De saison")}
       ${bascule("avance", "box", "À l'avance")}${bascule("invites", "glass", "Invités")}</div>
     <div id="liste"></div>`;
@@ -1155,12 +1212,36 @@ function renderRecettes() {
 }
 
 // Redessine seulement la liste (pendant la frappe dans la recherche)
+// Une famille = une seule ligne (« Burger · Bœuf, Végé, Poulet »), sur la 1re variante qui passe les filtres.
+// Les bases (sous-recettes) sont rangées à part, en bas.
 function majListe() {
-  const l = filtrees();
-  $("#liste").innerHTML = l.length ? l.map(r => `<button class="ligne" data-fiche="${esc(r.id)}" data-k="${esc(r.id)}">${dishImg(r, 28)}
-      <span class="nm">${esc(r.nom)}</span>
-      <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`).join("")
+  const vues = new Set(), l = filtrees().filter(r => { const k = cleFamille(r); if (vues.has(k)) return false; vues.add(k); return true; });
+  const ligne = r => {
+    const fam = familleDe(r), nom = fam.length > 1 ? r.famille : r.nom;
+    return `<button class="ligne" data-fiche="${esc(r.id)}" data-k="${esc(cleFamille(r))}">${dishImg(r, 28)}
+      <span class="nm">${esc(nom)}${fam.length > 1 ? `<small>${fam.map(x => esc(x.variante || x.nom)).join(" · ")}</small>` : ""}</span>
+      <span class="ri">${fam.length > 1 ? `<span class="t acc">${fam.length} variantes</span>` : ""}${estBase(r) ? `<span class="t fav">Base</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
+  };
+  const plats = l.filter(r => !estBase(r)), bases = l.filter(estBase);
+  $("#liste").innerHTML = l.length ? plats.map(ligne).join("") + (bases.length ? `<div class="sec-t"><h3>Bases (sous-recettes)</h3></div>` + bases.map(ligne).join("") : "")
     : `<div class="vide">Aucune recette ne correspond.</div>`;
+}
+
+// Feuille « Filtres » : catégories et protéines, plusieurs à la fois
+function ouvrirFiltres() {
+  const f = S.f, valeurs = k => [...new Set(S.recettes.map(r => r[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
+  const nb = (k, v) => S.recettes.filter(r => r[k] === v).length;
+  const cases = (fk, k) => valeurs(k).map(v => `<button class="rc ${f[fk].includes(v) ? "on" : ""}" data-filtre-case="${fk}" data-v="${esc(v)}"><span class="cb">${icone("check")}</span><span class="nm">${esc(v)}</span><span class="t">${nb(k, v)}</span></button>`).join("");
+  const n = filtrees().length;
+  ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete $("#modal").dataset[k]);
+  $("#modal").dataset.filtres = "1";
+  const haut = $("#modal .fiche") && $("#modal").dataset.filtres ? $("#modal .fiche").scrollTop : 0, deja = !!$("#modal .filtres-f");
+  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche filtres-f" role="dialog" aria-label="Filtres">
+    <div class="fi-hd"><h2 class="titre-r" style="flex:1">Filtres</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="sect">Catégories</div><div class="grille2">${cases("cats", "categorie")}</div>
+    <div class="sect">Protéines</div><div class="grille2">${cases("prots", "proteine")}</div>
+    <div class="pied2"><button class="btn" data-act="filtres-effacer">Tout effacer</button><button class="btn pri" data-act="fermer">Voir ${n} recette${n > 1 ? "s" : ""}</button></div></div></div>`;
+  if (deja) { const fi = $("#modal .fiche"); fi.style.animation = "none"; fi.parentElement.style.animation = "none"; fi.scrollTop = haut; }
 }
 
 /* ---------- 6. Fiche recette (mini pop-up) ---------- */
@@ -1174,24 +1255,40 @@ function ouvrirFiche(id) {
   if (r.date) tags.push(`<span class="t fav">${icone("glass")}Invités</span>`);
   const faits = Object.keys(NIVEAUX).filter(k => r[k]).map(k =>
     `<div><dt>${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</dt><dd>${NIVEAUX[k][r[k] - 1]}</dd></div>`).join("");
-  const ings = (r.ingredients || []).map(t => { const it = parseItem(t); return `<li>${imgIng(t, 18)}<span>${esc(t)}</span></li>`; }).join("");
-  ["form", "rep", "choix"].forEach(k => delete $("#modal").dataset[k]);
+  // Variantes : pastilles pour passer de l'une à l'autre ; les ingrédients propres à cette variante sont marqués
+  const fam = familleDe(r), communs = fam.length > 1 ? (r.ingredients || []).filter(t => fam.every(x => (x.ingredients || []).includes(t))) : null;
+  const ings = (r.ingredients || []).map((t, i) => {
+    const b = sousRecette(t);
+    if (b && !estBase(r)) {
+      const ouvert = S.basesOuvertes && S.basesOuvertes.has(b.id);
+      return `<li class="base-l ${ouvert ? "ouvert" : ""}"><button class="base-hd" data-deplier="${esc(b.id)}" aria-expanded="${!!ouvert}">${icone("book")}<span>${esc(b.nom)}</span>${icone("right", "chev")}</button>
+        ${ouvert ? `<div class="base-in">${(b.ingredients || []).map(x => `<span>${imgIng(x, 16)}${esc(x)}</span>`).join("")}<button class="lien-btn" data-fiche="${esc(b.id)}">Ouvrir la recette ${icone("right")}</button></div>` : ""}</li>`;
+    }
+    const propre = communs && !communs.includes(t);
+    return `<li class="${propre ? "propre" : ""}">${imgIng(t, 18)}<span>${esc(t)}</span></li>`;
+  }).join("");
+  const utilisee = estBase(r) ? S.recettes.filter(x => (x.ingredients || []).some(t => norm(nomCrochets(t) || "") === norm(r.nom))) : [];
+  ["form", "rep", "choix", "filtres"].forEach(k => delete $("#modal").dataset[k]);
   $("#modal").dataset.recette = id;
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
-    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2><div class="tg">${tags.join("")}</div></div>
+    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(fam.length > 1 ? r.famille : r.nom)}</h2><div class="tg">${tags.join("")}</div></div>
       <button class="ib" data-act="menu3" aria-label="Plus d'actions">${icone("more")}</button>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="menu3" id="menu3" hidden>
       <button data-act="modifier">${icone("pen")}Modifier</button>
       <button data-act="dupliquer">${icone("copy")}Dupliquer</button>
+      ${estBase(r) ? "" : `<button data-act="variante">${icone("plus")}Nouvelle variante</button>`}
       <button class="danger" data-act="supprimer">${icone("trash")}Supprimer</button></div>
+    ${fam.length > 1 ? `<div class="variantes">${fam.map(x => `<button class="chip ${x.id === r.id ? "on" : ""}" data-fiche="${esc(x.id)}" data-variante>${x.vege ? icone("leaf") : ""}${esc(x.variante || x.nom)}</button>`).join("")}</div>` : ""}
+    ${utilisee.length ? `<p class="infos">Base (sous-recette) : elle sert dans ${utilisee.map(u => `<b>${esc(u.nom)}</b>`).join(", ")}. Jamais proposée dans le menu.</p>` : ""}
     ${faits ? `<dl class="faits">${faits}</dl>` : ""}
     <div><div class="h4">Ingrédients <i>pour ${r.portions || 2}${r.ingredientsSource === "suggestion" ? " · suggérés" : ""}</i></div>
+      ${communs ? `<div class="legende"><i></i>propre à « ${esc(r.variante || r.nom)} » · le reste est commun</div>` : ""}
       ${ings ? `<ul class="ings">${ings}</ul>` : `<div class="sub">Aucun ingrédient.</div>`}</div>
     ${r.notes ? `<p class="notes">${esc(r.notes)}</p>` : ""}
     ${/^https?:\/\//.test(r.lien || "") ? `<a class="lien" href="${esc(r.lien)}" target="_blank" rel="noopener">${icone("link")}Voir la recette en ligne</a>` : ""}
     <div class="gros"><button class="btn ${r.favori ? "fav-on" : ""}" data-act="favori">${icone("star")}${r.favori ? "Favori" : "Mettre en favori"}</button>
-      ${menuEnCours() && menuEnCours().repas.some(x => x.id === r.id)
+      ${estBase(r) ? "" : menuEnCours() && menuEnCours().repas.some(x => x.id === r.id)
         ? `<button class="btn" disabled>${icone("check")}Dans la liste</button>`
         : `<button class="btn pri" data-act="au-menu">${icone("cart")}À la liste</button>`}</div>
   </div></div>`;
@@ -1207,7 +1304,7 @@ function basculerFavori() {
 
 function fermer() {
   $("#modal").innerHTML = "";
-  ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete $("#modal").dataset[k]);
+  ["recette", "form", "rep", "src", "choix", "archive", "filtres"].forEach(k => delete $("#modal").dataset[k]);
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -1262,6 +1359,9 @@ function ouvrirFormulaire(brouillon, titre) {
       <button type="button" class="btn ajout" data-act="ajout-ing">${icone("plus")}Ajouter un ingrédient</button></div>
     <button type="button" class="plus" data-act="plus" aria-expanded="false">${icone("down")}<span>Plus : saison, origine, prix, notes…</span></button>
     <div id="f-plus" hidden>
+      <div class="duo2"><div class="champ"><label for="f-famille">Famille</label><input class="saisie" id="f-famille" list="familles" placeholder="ex. Burger" value="${esc(r.famille || "")}" autocomplete="off"></div>
+        <div class="champ"><label for="f-variante">Variante</label><input class="saisie" id="f-variante" placeholder="ex. Végé" value="${esc(r.variante || "")}" autocomplete="off"></div></div>
+      <datalist id="familles">${[...new Set(S.recettes.map(x => x.famille).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join("")}</datalist>
       <div class="champ"><span class="lbl">Saison</span>${pastilles("saison", false, SAISONS.includes(r.saison) || !r.saison ? SAISONS : [...SAISONS, r.saison])}</div>
       <div class="champ"><span class="lbl">Origine</span>${pastilles("origine", true)}</div>
       <div class="champ"><span class="lbl">Préparation</span>${pastilles("preparation", true)}</div>
@@ -1293,13 +1393,15 @@ function majSuggIng(li) {
   const it = parseItem(li.querySelector("input").value);
   if (!it || norm(it.name).length < 2) return;
   const q = norm(it.name);
+  const bases = S.recettes.filter(b => estBase(b) && norm(b.nom).includes(q)).slice(0, 3);
   const l = banque().filter(e => !e.menage && norm(e.court) !== q && (norm(e.court).includes(q) || e.cle === it.key))
     .sort((a, b) => (a.cle === it.key ? 0 : 1) - (b.cle === it.key ? 0 : 1) || (norm(a.court).startsWith(q) ? 0 : 1) - (norm(b.court).startsWith(q) ? 0 : 1) || b.recettes.length - a.recettes.length || parNom(a, b)).slice(0, 6);
-  if (!l.length) return;
+  if (!l.length && !bases.length) return;
   const box = document.createElement("div");
   box.className = "sugg-ing";
   // « on » = c'est déjà le même ingrédient, écrit autrement : à uniformiser
-  box.innerHTML = l.map(e => `<button type="button" class="chip ${e.cle === it.key ? "on" : ""}" data-sugg-ing="${esc(e.court)}">${esc(e.court)}</button>`).join("");
+  box.innerHTML = bases.map(b => `<button type="button" class="chip base" data-sugg-base="${esc(b.nom)}">${icone("book")}${esc(b.nom)}</button>`).join("")
+    + l.map(e => `<button type="button" class="chip ${e.cle === it.key ? "on" : ""}" data-sugg-ing="${esc(e.court)}">${esc(e.court)}</button>`).join("");
   li.appendChild(box);
 }
 function choisirSuggIng(btn) {
@@ -1338,6 +1440,9 @@ function lireFormulaire() {
   // Ingrédients touchés : ce ne sont plus des « suggestions »
   if (ings.join("|") !== (r.ingredients || []).join("|")) r.ingredientsSource = "app";
   r.ingredients = ings;
+  const fa = $("#f-famille").value.trim(), va = $("#f-variante").value.trim();
+  if (fa) r.famille = fa; else delete r.famille;
+  if (fa && va) r.variante = va; else delete r.variante;
   const lien = $("#f-lien").value.trim(), notes = $("#f-notes").value.trim();
   if (lien) r.lien = lien; else delete r.lien;
   if (notes) r.notes = notes; else delete r.notes;
@@ -1356,6 +1461,12 @@ function enregistrer() {
   } else {
     S.recettes = S.recettes.map(x => x.id === r.id ? r : x);
   }
+  // Première variante d'une recette seule : l'original rejoint la famille (variante « Classique » si rien n'est dit)
+  if (r.varianteDe) {
+    const o = recette(r.varianteDe);
+    if (o && !o.famille && r.famille) { o.famille = r.famille; o.variante = o.variante || "Classique"; ecrireRecette(o); }
+    delete r.varianteDe;
+  }
   ecrireRecette(r);
   render();
   ouvrirFiche(r.id);
@@ -1368,6 +1479,19 @@ function nouvelle() {
 function modifier() {
   const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
   if (r) ouvrirFormulaire(JSON.parse(JSON.stringify(r)), "Modifier");
+}
+// « Nouvelle variante » : une copie rangée dans la même famille (la famille est créée si la recette n'en avait pas)
+function nouvelleVariante() {
+  const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
+  if (!r) return;
+  const copie = JSON.parse(JSON.stringify(r));
+  delete copie.id; delete copie.maj; delete copie.variante;
+  copie.famille = r.famille || r.nom;
+  copie.nom = copie.famille + " (variante)";
+  copie.varianteDe = r.id;
+  ouvrirFormulaire(copie, "Nouvelle variante");
+  $("#f-plus").hidden = false;
+  $("#f-variante").focus();
 }
 function dupliquer() {
   const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
@@ -1547,6 +1671,12 @@ async function classeurRecettes() {
   });
   const ws = ajouterFeuille(wb, "Recettes", COLONNES.map(([k, h, w]) => ({ header: h, key: k, width: w })), lignes);
   ws.getColumn("ingredients").alignment = { wrapText: true, vertical: "middle" };
+  // Onglet « Familles », juste pour lire (ignoré à l'import) : les variantes et ce qu'elles ont en commun
+  const fams = [...new Set(S.recettes.map(r => r.famille).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")).map(f => {
+    const l = S.recettes.filter(r => r.famille === f);
+    return { famille: f, variantes: l.map(r => r.variante || r.nom).join("; "), communs: (l[0].ingredients || []).filter(t => l.every(x => (x.ingredients || []).includes(t))).join("; ") };
+  });
+  if (fams.length) ajouterFeuille(wb, "Familles", [{ header: "Famille", key: "famille", width: 20 }, { header: "Variantes", key: "variantes", width: 36 }, { header: "Ingrédients communs", key: "communs", width: 70 }], fams);
   return wb;
 }
 async function exporter(btn) {
@@ -1957,18 +2087,36 @@ document.addEventListener("click", e => {
   if (clicCompleter(t)) return;
   const onglet = t.closest("#tabs button");
   if (onglet) return changerOnglet(onglet.dataset.tab);
+  const dep = t.closest("[data-deplier]");
+  if (dep) { S.basesOuvertes = S.basesOuvertes || new Set(); const k = dep.dataset.deplier; S.basesOuvertes.has(k) ? S.basesOuvertes.delete(k) : S.basesOuvertes.add(k); vibrer("pas"); const fi = $("#modal .fiche"), h = fi ? fi.scrollTop : 0; ouvrirFiche($("#modal").dataset.recette); const f2 = $("#modal .fiche"); if (f2) { f2.style.animation = "none"; f2.parentElement.style.animation = "none"; f2.scrollTop = h; } return; }
   const ligne = t.closest("[data-fiche]");
-  if (ligne) return ouvrirFiche(ligne.dataset.fiche);
+  if (ligne) {
+    const garder = ligne.hasAttribute("data-variante"), fi = $("#modal .fiche");
+    if (garder) vibrer("pas");
+    ouvrirFiche(ligne.dataset.fiche);
+    if (garder && fi) { const f2 = $("#modal .fiche"); f2.style.animation = "none"; f2.parentElement.style.animation = "none"; }
+    return;
+  }
+  const fc = t.closest("[data-filtre-case]");
+  if (fc) { const l = S.f[fc.dataset.filtreCase], v = fc.dataset.v, i = l.indexOf(v); i >= 0 ? l.splice(i, 1) : l.push(v); vibrer("pas"); renderRecettes(); return ouvrirFiltres(); }
+  const rf = t.closest("[data-retire-f]");
+  if (rf) { const l = S.f[rf.dataset.retireF], i = l.indexOf(rf.dataset.v); if (i >= 0) l.splice(i, 1); vibrer("decoche"); return flip("#liste .ligne", renderRecettes); }
+  const bq = t.closest("[data-base-q] button");
+  if (bq) { bq.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === bq)); vibrer("pas"); return; }
   const coche = t.closest("[data-coche]");
   if (coche) return cocher(coche.dataset.coche, coche);
   const sugg = t.closest("[data-sugg]");
   if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); vibrer("ajout"); flip("#main .it", renderCourses); $("#ajout-art").focus(); } return; }
+  const sb = t.closest("[data-sugg-base]");
+  if (sb) { const li = sb.closest(".li"), c = li.querySelector("input"); c.value = "[" + sb.dataset.suggBase + "]"; li.querySelector("img").outerHTML = dessinIng(c.value); majSuggIng(null); c.focus(); return; }
   const suggIng = t.closest("[data-sugg-ing]");
   if (suggIng) return choisirSuggIng(suggIng);
   const rc = t.closest("[data-rc]");
   if (rc) { vibrer(rc.classList.toggle("on") ? "pas" : "decoche"); return; }
   const bqOuvrir = t.closest("[data-bq-ouvrir]");
   if (bqOuvrir) { S.bq.scroll = $("#bq-corps").scrollTop; S.bq.detail = bqOuvrir.dataset.bqOuvrir; S.bq.suppr = null; return majBanque(); }
+  const vp = t.closest("[data-var-propo]");
+  if (vp) { const x = S.propo.repas[+vp.dataset.varPropo], r = recette(vp.dataset.v); if (x && r) { x.id = r.id; if (!veutAccomp(r)) x.side = null; else if (!x.side) x.side = tirerAccomp(accompsPris()); sauverPropo(); vibrer("pas"); renderMenu(); } return; }
   const bqRayon = t.closest("[data-bq-rayon]");
   if (bqRayon) { majEntree(S.bq.detail, { rayon: bqRayon.dataset.bqRayon }); return majBanque(); }
   const bqIcone = t.closest("[data-bq-icone]");
@@ -1997,6 +2145,7 @@ document.addEventListener("click", e => {
   if (!el) return;
   switch (el.dataset.act) {
     case "nouveau-menu": nouveauMenu(); break;
+    case "bases-ok": if ($("#modal").suite) $("#modal").suite(); break;
     case "accepter": accepter(+el.dataset.i); break;
     case "accepter-tout": accepterTout(); break;
     case "choisir-plat": ouvrirChoix(); break;
@@ -2036,6 +2185,9 @@ document.addEventListener("click", e => {
     case "menu3": $("#menu3").hidden = !$("#menu3").hidden; break;
     case "modifier": modifier(); break;
     case "dupliquer": dupliquer(); break;
+    case "variante": nouvelleVariante(); break;
+    case "filtres": ouvrirFiltres(); break;
+    case "filtres-effacer": S.f.cats = []; S.f.prots = []; renderRecettes(); ouvrirFiltres(); break;
     case "supprimer": supprimer(); break;
     case "enregistrer": enregistrer(); break;
     case "autre": pastilleAutre(el); break;
@@ -2065,8 +2217,8 @@ document.addEventListener("click", e => {
     case "confirmer-import": confirmerImport(); break;
     case "favori": basculerFavori(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
-    case "fermer": fermerDoux(); break;
-    case "fermer-fond": if (t === el) fermerDoux(); break; // toucher le fond grisé ferme, pas la fiche elle-même
+    case "fermer": if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste .ligne", renderRecettes); } fermerDoux(); break;
+    case "fermer-fond": if (t === el) { delete $("#modal").dataset.filtres; fermerDoux(); } break; // toucher le fond grisé ferme, pas la fiche elle-même
   }
 });
 document.addEventListener("change", e => {
