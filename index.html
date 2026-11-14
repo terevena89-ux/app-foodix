@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Pas de zoom (ni pincer, ni double-toucher) : l'appli est calée sur la largeur du téléphone -->
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Foodix</title>
 <meta name="description" content="Mes recettes, le menu de la semaine et la liste de courses.">
 <meta name="theme-color" content="#2D6A4C">
@@ -30,18 +31,24 @@
     <div class="titre"><h1 id="titre">Foodix</h1><div class="sub" id="sub"></div></div>
     <button class="ib" data-act="reglages" aria-label="Réglages"><svg class="ic" viewBox="0 0 24 24"><use href="#i-gear"/></svg></button>
   </div>
-  <nav class="tabs" id="tabs">
-    <button data-tab="menu"><svg class="ic" viewBox="0 0 24 24"><use href="#i-cal"/></svg>Menu</button>
-    <button data-tab="courses"><svg class="ic" viewBox="0 0 24 24"><use href="#i-cart"/></svg>Courses</button>
-    <button data-tab="recettes"><svg class="ic" viewBox="0 0 24 24"><use href="#i-book"/></svg>Recettes</button>
-  </nav>
 </header>
 <main id="main"><div class="vide">Chargement…</div></main>
+<!-- Onglets en bas, à portée de pouce -->
+<nav class="tabs" id="tabs">
+  <span class="tind" id="tind" aria-hidden="true"></span>
+  <button data-tab="courses"><svg class="ic" viewBox="0 0 24 24"><use href="#i-cart"/></svg>Courses</button>
+  <button data-tab="recettes"><svg class="ic" viewBox="0 0 24 24"><use href="#i-book"/></svg>Recettes</button>
+  <button data-tab="menu"><svg class="ic" viewBox="0 0 24 24"><use href="#i-cal"/></svg>Menu</button>
+</nav>
 <div id="modal"></div>
 
 <!-- Icônes trait fin, dessinées une seule fois et réutilisées partout avec <use href="#i-…"> -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-carrot" viewBox="0 0 24 24"><path d="M2.27 21.7s9.87-3.5 12.73-6.36a4.5 4.5 0 0 0-6.36-6.37C5.77 11.84 2.27 21.7 2.27 21.7zM8.64 14l-2.05-2.04M15.34 15l-2.46-2.46"/><path d="M22 9s-1.33-2-3.5-2C16.86 7 15 9 15 9s1.33 2 3.5 2S22 9 22 9z"/><path d="M15 2s-2 1.33-2 3.5S15 9 15 9s2-1.84 2-3.5C17 3.33 15 2 15 2z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></symbol>
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
   <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></symbol>
   <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></symbol>
