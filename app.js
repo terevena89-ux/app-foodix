@@ -21,11 +21,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
-import { norm, parseItem, keyOf, aisleOf, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg } from "./pixel.js";
+import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.5.1";
+const VERSION = "0.5.2";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -61,7 +61,7 @@ const S = {
   prefs: Object.assign({}, PREFS_DEFAUT),
   toujours: [],                           // ancien réglage « Toujours dans la liste » : repris dans la banque au 1er lancement
   banque: [],                             // banque d'ingrédients : seulement ce qui est noté à la main (voir banque())
-  bq: { ouvert: false, onglet: "ing", rec: false, detail: null, suppr: null, scroll: 0 },  // écran de la banque (voir 4 quater)
+  bq: { ouvert: false, onglet: "ing", rec: false, placard: false, detail: null, suppr: null, scroll: 0 },  // écran de la banque (voir 4 quater)
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
   onglet: lireLocal("fx-onglet", "menu"),
   // filtres de l'écran Recettes
@@ -526,7 +526,7 @@ function articles(m) {
     (r.ingredients || []).forEach(txt => {
       const it = parseItem(txt); if (!it) return;
       const cle = it.key + "|" + it.unit;
-      const e = map.get(cle) || { cle, nom: it.name, unite: it.unit, qte: null, recettes: [], rayon: idx.has(it.key) ? idx.get(it.key).rayon : aisleOf(it.name) };
+      const e = map.get(cle) || { cle, nom: it.name, unite: it.unit, qte: null, recettes: [], rayon: idx.has(it.key) ? idx.get(it.key).rayon : aisleOf(it.name), placard: idx.has(it.key) ? idx.get(it.key).placard : auPlacard(it.name) };
       if (it.qty != null) e.qte = (e.qte || 0) + it.qty * k;
       if (!e.recettes.includes(r.nom)) e.recettes.push(r.nom);
       map.set(cle, e);
@@ -558,23 +558,43 @@ function renderCourses() {
     c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
   };
   if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Pas encore de menu.</div>`; return finir(); }
-  const coches = m.coches || {};
-  const groupes = {};
-  articles(m).forEach(e => (groupes[e.rayon] ??= []).push(e));
+  const coches = m.coches || {}, dispo = m.dispo || {};
+  const groupes = {}, placard = [];
+  // Un article « souvent au placard » reste à part tant que je n'ai pas dit « il me faut » ; alors il rejoint son rayon.
+  articles(m).forEach(e => {
+    if (e.placard && !e.ajout && dispo[e.cle] !== "non") placard.push(e);
+    else (groupes[e.rayon] ??= []).push(e);
+  });
   const ligne = e => `<div class="it ${coches[e.cle] ? "fait" : ""}">
       <button class="cb" data-coche="${esc(e.cle)}" aria-label="${coches[e.cle] ? "Pas encore pris" : "Pris"}">${coches[e.cle] ? icone("check") : ""}</button>
       ${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span>
       <span class="q num">${esc(fmtQty(e.qte, e.unite))}</span>
-      ${e.ajout ? `<button class="ib" data-retirer-art="${esc(e.nom)}" aria-label="Retirer">${icone("x")}</button>` : ""}</div>`;
+      ${e.ajout ? `<button class="ib" data-retirer-art="${esc(e.nom)}" aria-label="Retirer">${icone("x")}</button>` : ""}
+      ${e.placard && !e.ajout ? `<button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui" aria-label="Finalement je l'ai (remettre au placard)">${icone("box")}</button>` : ""}</div>`;
+  const lignePlacard = e => `<div class="pl ${dispo[e.cle] === "oui" ? "fait" : ""}">
+      <div class="pl-h">${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></div>
+      <div class="pl-b"><button class="chip ${dispo[e.cle] === "oui" ? "on" : ""}" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui">${icone("check")}Je l'ai</button>
+        <button class="chip" data-act="dispo" data-cle="${esc(e.cle)}" data-v="non">${icone("cart")}Il me faut</button></div></div>`;
   const tri = l => l.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
   let html = "";
-  AISLE_ORDER.filter(a => a !== "placard" && groupes[a]).forEach(a => {
+  AISLE_ORDER.filter(a => groupes[a]).forEach(a => {
     html += `<div class="rayon"><h3>${aisleLabel(a)}</h3>${tri(groupes[a]).map(ligne).join("")}</div>`;
   });
-  // Ce qu'on a sans doute déjà : replié tout en bas
-  if (groupes.placard) html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Sans doute au placard (${groupes.placard.length})</summary>${tri(groupes.placard).map(ligne).join("")}</details>`;
+  // Ce que j'ai peut-être déjà : replié tout en bas. Pour chacun : « je l'ai » ou « il me faut ».
+  if (placard.length) {
+    const aVerifier = placard.filter(e => !dispo[e.cle]).length;
+    html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier ? aVerifier + " à vérifier" : placard.length})</summary>${tri(placard).map(lignePlacard).join("")}</details>`;
+  }
   $("#main").innerHTML = ajout + (html || `<div class="vide">Rien à acheter.</div>`);
   finir();
+}
+
+// « Je l'ai » / « Il me faut » pour un article du placard (valable pour cette liste seulement ; retoucher le même choix l'annule)
+function definirDispo(cle, v) {
+  const m = menuEnCours(); if (!m) return;
+  m.dispo = m.dispo || {};
+  if (m.dispo[cle] === v) delete m.dispo[cle]; else m.dispo[cle] = v;
+  ecrireMenu(m); renderCourses();
 }
 
 // Sous le champ d'ajout : les articles de la banque qui correspondent à ce qu'on tape.
@@ -636,6 +656,7 @@ function retirerArticle(nom) {
 // Dans S.banque, on ne garde que ce qui est noté à la main : { nom, cle, menage, rec, rayon?, icone? }
 //   menage : produit ménager   rec : « récurrent » (proposé à chaque nouvelle liste)
 //   rayon : rayon choisi (sinon deviné d'après le nom)   icone : dessin choisi (sinon deviné)
+//   placard : « souvent déjà au placard » (vrai / faux choisi à la main, sinon deviné d'après le nom)
 
 const cleBanque = nom => { const it = parseItem(nom); return it && it.key ? it.key : norm(nom); };
 // Une entrée correspond à ce qui est tapé (q = texte déjà normalisé) : même au pluriel, « tomates » trouve « tomate »
@@ -663,12 +684,14 @@ function banque() {
   });
   S.banque.forEach(b => {
     const cle = b.cle || cleBanque(b.nom), e = out.get(cle) || { cle, recettes: [] };
-    Object.assign(e, { nom: b.nom || e.nom, menage: !!b.menage, rec: !!b.rec, rayon: b.rayon, icone: b.icone });
+    Object.assign(e, { nom: b.nom || e.nom, menage: !!b.menage, rec: !!b.rec, rayon: b.rayon, icone: b.icone, pl: b.placard });
     out.set(cle, e);
   });
   out.forEach(e => {
     const it = parseItem(e.nom); e.court = it && it.name ? it.name : e.nom;  // sans la quantité
     if (!rayonsDe(e.menage).includes(e.rayon)) e.rayon = rayonAuto(e.court, e.menage);
+    e.placard = typeof e.pl === "boolean" ? e.pl : auPlacard(e.court);  // choix à la main, sinon deviné d'après le nom
+    delete e.pl;
   });
   return [...out.values()].sort(parNom);
 }
@@ -684,7 +707,7 @@ function ajouterBanque(texte, menage = false, rayon = "") {
   sauverBanque();
   return banque().find(e => e.cle === cle);
 }
-// Change des réglages d'une entrée (rec, rayon, icone). Elle est créée dans S.banque si elle ne venait que des recettes.
+// Change des réglages d'une entrée (rec, rayon, icone, placard). Elle est créée dans S.banque si elle ne venait que des recettes.
 function majEntree(cle, chg) {
   const e = banque().find(x => x.cle === cle); if (!e) return;
   let b = entreeDe(cle);
@@ -692,7 +715,7 @@ function majEntree(cle, chg) {
   Object.assign(b, chg);
   ["rayon", "icone"].forEach(k => { if (!b[k]) delete b[k]; });
   // rien de particulier et déjà dans une recette : l'entrée à la main ne sert plus à rien
-  if (!b.rec && !b.menage && !b.rayon && !b.icone && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
+  if (!b.rec && !b.menage && !b.rayon && !b.icone && typeof b.placard !== "boolean" && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
   sauverBanque();
 }
 // Un ancien « Toujours dans la liste » devient des articles récurrents de la banque (une seule fois)
@@ -803,16 +826,16 @@ function htmlListeBanque(tous) {
   $("#bq-onglets").innerHTML = `<div class="seg bq-seg">
       <button class="${men ? "" : "on"}" data-act="bq-onglet" data-v="ing">Ingrédients</button>
       <button class="${men ? "on" : ""}" data-act="bq-onglet" data-v="menage">Produits ménagers</button></div>
-    <div class="defile" style="margin:0;padding:0"><button class="chip ${S.bq.rec ? "on" : ""}" data-act="bq-rec">${icone("refresh")}Récurrents</button></div>`;
-  const liste = tous.filter(e => e.menage === men && (!q || correspond(e, q)) && (!S.bq.rec || e.rec));
+    <div class="defile" style="margin:0;padding:0"><button class="chip ${S.bq.rec ? "on" : ""}" data-act="bq-rec">${icone("refresh")}Récurrents</button><button class="chip ${S.bq.placard ? "on" : ""}" data-act="bq-placard">${icone("box")}Placard</button></div>`;
+  const liste = tous.filter(e => e.menage === men && (!q || correspond(e, q)) && (!S.bq.rec || e.rec) && (!S.bq.placard || e.placard));
   let html = "";
   rayonsDe(men).forEach(r => {
     const l = liste.filter(e => e.rayon === r); if (!l.length) return;
     html += `<div class="rayon"><h3>${esc(libelleRayon(r))}</h3><div class="bq-grid">${l.map(e =>
-      `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span>${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
+      `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
   });
-  if (!html) html = `<div class="vide" style="padding:28px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : "Rien ici pour l'instant."}</div>`;
-  const idees = men && !q && !S.bq.rec ? MENAGER_IDEES.filter(([n]) => !tous.some(e => e.cle === cleBanque(n))) : [];
+  if (!html) html = `<div class="vide" style="padding:28px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : S.bq.placard ? "Rien au placard." : "Rien ici pour l'instant."}</div>`;
+  const idees = men && !q && !S.bq.rec && !S.bq.placard ? MENAGER_IDEES.filter(([n]) => !tous.some(e => e.cle === cleBanque(n))) : [];
   if (idees.length) html += `<div class="rayon"><h3>Idées</h3><div class="sugg">${idees.map(([n, r]) => `<button class="chip nouv" data-bq-idee="${esc(n)}" data-r="${r}">${icone("plus")}${esc(n)}</button>`).join("")}</div></div>`;
   return html;
 }
@@ -829,6 +852,7 @@ function htmlFicheIngredient(e) {
     <div class="champ"><span class="lbl">Rayon</span><div class="pastilles">${rayons}</div></div>
     <div class="champ"><span class="lbl">Icône</span><div class="bq-icones">${icones}</div></div>
     <button type="button" class="btn ${e.rec ? "pri" : ""}" data-act="bq-rec-fiche" style="justify-content:flex-start">${icone("refresh")}${e.rec ? "Récurrent : proposé à chaque nouvelle liste" : "Proposer à chaque nouvelle liste"}</button>
+    <button type="button" class="btn ${e.placard ? "pri" : ""}" data-act="bq-placard-fiche" style="justify-content:flex-start">${icone("box")}${e.placard ? "Souvent au placard : à vérifier à chaque liste" : "Souvent au placard ?"}</button>
     ${n ? `<div class="champ"><span class="lbl">Recettes</span><div>${recettes}</div></div>` : ""}
     <button type="button" class="btn danger-btn" data-act="bq-suppr">${icone("trash")}${confirme ? (n ? `Confirmer : retirer de ${n} recette${n > 1 ? "s" : ""}` : "Confirmer la suppression") : "Supprimer"}</button>
   </div>`;
@@ -1431,6 +1455,9 @@ document.addEventListener("click", e => {
     case "ajouter-banque": ajouterDepuisBanque(); break;
     case "bq-onglet": S.bq.onglet = el.dataset.v; majBanque(); break;
     case "bq-rec": S.bq.rec = !S.bq.rec; majBanque(); break;
+    case "bq-placard": S.bq.placard = !S.bq.placard; majBanque(); break;
+    case "bq-placard-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { placard: !e.placard }); majBanque(); } break; }
+    case "dispo": definirDispo(el.dataset.cle, el.dataset.v); break;
     case "bq-retour": retourBanque(); break;
     case "bq-rec-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { rec: !e.rec }); majBanque(); } break; }
     case "bq-suppr":

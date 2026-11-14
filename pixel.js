@@ -32,7 +32,7 @@ function keyOf(name){ return norm(name).replace(/^(de |d')/,"").split(" ").map(w
 /* ---------- Rayons et quantités ---------- */
 // Rayons : mots-clés testés dans cet ordre (le premier qui correspond gagne)
 const AISLES = [
-  ["placard","Placard (épices, huiles…)",/(^| )(sel|poivre|huile|vinaigre|farine|sucre|moutarde|sauce soja|herbe|epice|cumin|paprika|muscade|thym|bouquet garni|cube|bouillon|levure|chapelure|miel|cinq epice|safran|anis|cannelle|piment|mayonnaise|zaatar|menthe sechee|tahini|nuoc|cognac|pate de curry)/],
+  ["epices","Épices et condiments",/(^| )(sel|poivre|moutarde|sauce soja|herbe|epice|cumin|paprika|muscade|thym|bouquet garni|cube|bouillon|levure|cinq epice|safran|anis|cannelle|piment|mayonnaise|zaatar|menthe sechee|tahini|nuoc|pate de curry)/],
   ["conserves","Conserves",/(boite|conserve|concass|lait de coco|(^| )thon|sardine|(^| )mais|coulis|pelee|cornichon|olive)/],
   ["epicerie","Épicerie",/(sechee|seches|beurre de cacah|morilles|champignons noirs|vin |cidre|croutons|sauce )/],
   ["boucherie","Boucherie, charcuterie, poisson",/(^| )(boeuf|veau|porc|poulet|lardon|jambon|chorizo|saucisse|merguez|chipolata|boudin|magret|steak|cordon|chair a saucisse|petit sale|crevette|saumon|morue|poisson|surimi|rillette|canard|dinde)/],
@@ -43,7 +43,10 @@ const AISLES = [
 ];
 // Produits ménagers : catégories
 const RAYONS_MENAGE = [["m-vaisselle","Vaisselle"],["m-linge","Linge"],["m-nettoyage","Nettoyage"],["m-papier","Papier et sacs"],["m-hygiene","Hygiène"]];
-const AISLES_FOOD = ["fruits","legumes","boucherie","cremerie","boulangerie","conserves","epicerie","placard"];
+const AISLES_FOOD = ["fruits","legumes","boucherie","cremerie","boulangerie","conserves","epicerie","epices"];
+// « Souvent déjà au placard » : une option d'un ingrédient (pas un rayon). Départ deviné d'après le nom.
+const RE_PLACARD = /(^| )(sel|poivre|huile|vinaigre|farine|sucre|moutarde|sauce soja|herbe|epice|cumin|paprika|muscade|thym|bouquet garni|cube|bouillon|levure|chapelure|miel|cinq epice|safran|anis|cannelle|piment|mayonnaise|zaatar|menthe sechee|tahini|nuoc|cognac|pate de curry)/;
+function auPlacard(name){ return RE_PLACARD.test(norm(name)); }
 const AISLE_ORDER = [...AISLES_FOOD,"perso",...RAYONS_MENAGE.map(r=>r[0])];
 function aisleOf(name){ const n=norm(name); for(const [id,,re] of AISLES) if(re.test(n)) return id; return "epicerie"; }
 function rayonMenage(name){
@@ -194,7 +197,7 @@ function dishImg(r, px = 40) {
     const type = dishType(r);
     const cols = [];
     for (const txt of r.ingredients || []) {
-      const it = parseItem(txt); if (!it || aisleOf(it.name) === "placard") continue;
+      const it = parseItem(txt); if (!it || auPlacard(it.name)) continue;
       const col = mainColor(ingSprite(it.name));
       if (!cols.includes(col)) cols.push(col);
       if (cols.length === 3) break;
@@ -207,4 +210,4 @@ function dishImg(r, px = 40) {
   return `<img class="px dish" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
 
-export { norm, parseItem, keyOf, aisleOf, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType };
+export { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType };
