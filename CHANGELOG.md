@@ -1,5 +1,9 @@
 # Foodix — journal des nouveautés
 
+## 0.9.1 — 2026-11-15
+- Excel : nouvel onglet **« Banque d'ingrédients »** (Nom, Type ingrédient / ménager, Rayon, Récurrent, Souvent au placard, Nb de recettes, Recettes), rangé par rayon.
+- Il est relu à l'import : on peut y changer le type, le rayon, « récurrent » et « souvent au placard », ou ajouter des articles (une case vide ne change rien). L'aperçu avant import compte les articles nouveaux et les réglages changés.
+
 ## 0.9.0 — 2026-11-15
 Assembler un plat complet (un plat principal + un ou plusieurs accompagnements).
 - Fiche d'un plat principal ou d'un accompagnement › « Avec quoi ? Assembler un plat complet ». L'appli propose ce qui va avec : d'abord ce que j'ai déjà mangé ensemble (« déjà ensemble »), puis les favoris, puis ce qui est de saison (« Tout voir » pour le reste).

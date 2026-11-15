@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AI
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.0";
+const VERSION = "0.9.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -1756,6 +1756,9 @@ function versCase(type, k, v) {
   if (type === "liste") return (v || []).join("; ");
   return v ?? "";
 }
+// Colonnes de l'onglet « Banque d'ingrédients »
+const COLONNES_BANQUE = [["nom", "Nom", 28], ["type", "Type", 12], ["rayon", "Rayon", 26], ["rec", "Récurrent", 11], ["placard", "Souvent au placard", 18], ["nb", "Nb de recettes", 14], ["recettes", "Recettes", 60]];
+
 async function classeurRecettes() {
   const ExcelJS = await chargerExcelJS();
   const wb = new ExcelJS.Workbook();
@@ -1771,6 +1774,15 @@ async function classeurRecettes() {
     const l = S.recettes.filter(r => r.famille === f);
     return { famille: f, variantes: l.map(r => r.variante || r.nom).join("; "), communs: (l[0].ingredients || []).filter(t => l.every(x => (x.ingredients || []).includes(t))).join("; ") };
   });
+  // Onglet « Banque d'ingrédients » : tout ce que la banque connaît (ingrédients des recettes + ajouts à la main + produits ménagers).
+  // Relu à l'import : on peut y changer le type, le rayon, « récurrent » et « souvent au placard », ou ajouter des articles.
+  const ordre = r => AISLE_ORDER.indexOf(r) < 0 ? 99 : AISLE_ORDER.indexOf(r);
+  const bq = banque().sort((a, b) => a.menage - b.menage || ordre(a.rayon) - ordre(b.rayon) || parNom(a, b)).map(e => ({
+    nom: e.nom, type: e.menage ? "Ménager" : "Ingrédient", rayon: libelleRayon(e.rayon), rec: e.rec ? "Oui" : "Non",
+    placard: e.menage ? "" : e.placard ? "Oui" : "Non", nb: e.recettes.length || "", recettes: e.recettes.map(r => r.nom).join("; ")
+  }));
+  const wsB = ajouterFeuille(wb, "Banque d'ingrédients", COLONNES_BANQUE.map(([k, h, w]) => ({ header: h, key: k, width: w })), bq);
+  wsB.getColumn("recettes").alignment = { wrapText: true, vertical: "middle" };
   if (fams.length) ajouterFeuille(wb, "Familles", [{ header: "Famille", key: "famille", width: 20 }, { header: "Variantes", key: "variantes", width: 36 }, { header: "Ingrédients communs", key: "communs", width: 70 }], fams);
   return wb;
 }
@@ -1827,6 +1839,57 @@ function lireRecettes(wb) {
   return out;
 }
 
+// Relit l'onglet « Banque d'ingrédients » (s'il est là) : [{ nom, menage, rayon, rec, placard }]. Une case vide ne change rien.
+function lireBanque(wb) {
+  const ws = wb.worksheets.find(w => norm(w.name).startsWith("banque"));
+  if (!ws) return [];
+  const parEntete = {}, cols = [];
+  COLONNES_BANQUE.forEach(c => { parEntete[norm(c[1])] = c[0]; });
+  ws.getRow(1).eachCell((c, i) => { cols[i] = parEntete[norm(valeurCase(c.value))]; });
+  const out = [];
+  ws.eachRow((rang, n) => {
+    if (n === 1) return;
+    const o = {};
+    cols.forEach((k, i) => { if (k) o[k] = String(valeurCase(rang.getCell(i).value)).trim(); });
+    if (!o.nom) return;
+    const oui = v => v === "" || v == null ? undefined : /^(oui|1|x|vrai|true)$/i.test(v);
+    const menage = o.type ? /menag/.test(norm(o.type)) : undefined;
+    const e = { nom: o.nom, menage, rec: oui(o.rec), placard: oui(o.placard) };
+    if (o.rayon) { const id = [...rayonsDe(true), ...rayonsDe(false)].find(r => norm(libelleRayon(r)) === norm(o.rayon) || r === o.rayon); if (id) e.rayon = id; }
+    out.push(e);
+  });
+  return out;
+}
+// Applique la banque relue : articles inconnus ajoutés, réglages des autres mis à jour (simuler = juste compter)
+function fusionBanque(lignes, simuler) {
+  let ajout = 0, maj = 0;
+  const tous = new Map(banque().map(e => [e.cle, e]));
+  lignes.forEach(l => {
+    const cle = cleBanque(l.nom), e = tous.get(cle);
+    if (!e) {
+      ajout++;
+      if (simuler) return;
+      const b = { nom: l.nom, cle, menage: !!l.menage, rec: !!l.rec };
+      if (l.rayon && rayonsDe(b.menage).includes(l.rayon)) b.rayon = l.rayon;
+      if (typeof l.placard === "boolean" && !b.menage) b.placard = l.placard;
+      S.banque.push(b); return;
+    }
+    const chg = {};
+    if (l.menage !== undefined && l.menage !== e.menage) chg.menage = l.menage;
+    if (l.rec !== undefined && l.rec !== e.rec) chg.rec = l.rec;
+    if (l.rayon && l.rayon !== e.rayon && rayonsDe(l.menage ?? e.menage).includes(l.rayon)) chg.rayon = l.rayon;
+    if (l.placard !== undefined && !(l.menage ?? e.menage) && l.placard !== e.placard) chg.placard = l.placard;
+    if (!Object.keys(chg).length) return;
+    maj++;
+    if (simuler) return;
+    let b = entreeDe(cle);
+    if (!b) { b = { nom: e.nom, cle, menage: e.menage, rec: false }; S.banque.push(b); }
+    Object.assign(b, chg);
+  });
+  if (!simuler && (ajout || maj)) sauverBanque();
+  return { ajout, maj };
+}
+
 function fusion(lignes, simuler) {
   const data = S.recettes.map(r => Object.assign({}, r));
   const parId = {}, parNomN = {};
@@ -1862,11 +1925,13 @@ async function importerFichier(fichier) {
   const box = $("#imp");
   box.innerHTML = `<div class="infos">Lecture du fichier…</div>`;
   try {
-    const lignes = lireRecettes(await lireClasseur(fichier));
-    if (!lignes.length) { box.innerHTML = `<div class="infos">Aucune recette trouvée (il faut une colonne « Nom »).</div>`; return; }
-    const r = fusion(lignes, true);
-    importEnAttente = lignes;
-    box.innerHTML = `<div class="infos">${r.ajout} nouvelle${r.ajout > 1 ? "s" : ""}, ${r.maj} mise${r.maj > 1 ? "s" : ""} à jour</div>
+    const wb = await lireClasseur(fichier);
+    const lignes = lireRecettes(wb), bq = lireBanque(wb);
+    if (!lignes.length && !bq.length) { box.innerHTML = `<div class="infos">Aucune recette trouvée (il faut une colonne « Nom »).</div>`; return; }
+    const r = fusion(lignes, true), b = fusionBanque(bq, true);
+    importEnAttente = { lignes, bq };
+    const pl = (n, mot) => n + " " + mot + (n > 1 ? "s" : "");
+    box.innerHTML = `<div class="infos">Recettes : ${pl(r.ajout, "nouvelle")}, ${pl(r.maj, "mise")} à jour${bq.length ? `<br>Banque d'ingrédients : ${pl(b.ajout, "nouvel article")}, ${pl(b.maj, "réglage")} ${b.maj > 1 ? "changés" : "changé"}` : ""}</div>
       <div class="pied" style="margin-top:8px"><button class="btn pri" data-act="confirmer-import">Importer</button></div>`;
   } catch (e) {
     box.innerHTML = `<div class="infos">Impossible de lire ce fichier (${esc(e && e.message || e)}).</div>`;
@@ -1874,10 +1939,12 @@ async function importerFichier(fichier) {
 }
 function confirmerImport() {
   if (!importEnAttente) return;
-  const r = fusion(importEnAttente, false);
+  const { lignes, bq } = importEnAttente;
+  const r = lignes.length ? fusion(lignes, false) : { ajout: 0, maj: 0 };
+  const b = fusionBanque(bq, false);  // après les recettes : les ingrédients des nouvelles recettes sont déjà connus
   importEnAttente = null;
   fermer(); render();
-  toast(`Import terminé : ${r.ajout + r.maj} recettes`);
+  toast(`Import terminé : ${r.ajout + r.maj} recettes${b.ajout + b.maj ? `, ${b.ajout + b.maj} articles de la banque` : ""}`);
 }
 
 /* ---------- 7 bis. Gestes au doigt : changer d'onglet, retirer un article ---------- */
@@ -2391,7 +2458,7 @@ if ("serviceWorker" in navigator && !MODE_DEMO && location.protocol === "https:"
 }
 
 // Mode démo uniquement : accès pour les tests automatiques (préparer et vérifier un fichier Excel)
-if (MODE_DEMO) window.foodixTest = { S, classeurRecettes, lireRecettes, fusion, render, candidats };
+if (MODE_DEMO) window.foodixTest = { S, lireBanque, fusionBanque, banque, classeurRecettes, lireRecettes, fusion, render, candidats };
 
 if (MODE_DEMO) demarrerDemo(); else demarrerFirebase();
 
