@@ -1,5 +1,16 @@
 # Foodix — journal des nouveautés
 
+## 0.9.0 — 2026-11-15
+Assembler un plat complet (un plat principal + un ou plusieurs accompagnements).
+- Fiche d'un plat principal ou d'un accompagnement › « Avec quoi ? Assembler un plat complet ». L'appli propose ce qui va avec : d'abord ce que j'ai déjà mangé ensemble (« déjà ensemble »), puis les favoris, puis ce qui est de saison (« Tout voir » pour le reste).
+- Plusieurs accompagnements possibles. Nom automatique « Saumon à l'oseille & riz basmati, haricots verts », modifiable.
+- Deux boutons :
+  - **Juste au menu** (par défaut, provisoire) : le plat arrive dans les propositions, rien n'est créé dans mes recettes ;
+  - **Garder dans mes recettes** : une vraie recette « Plat complet » (étiquette « Assemblé »), liée à ses morceaux : `[Saumon à l'oseille]; [Riz basmati]`. Si je modifie le riz, le plat suit. Elle va aussi au menu.
+- Menu › toucher un plat principal › « Assembler avec d'autres accompagnements ».
+- Liste de courses : chaque morceau à son échelle (portions), et leurs bases (« je la fais / je l'achète ») comprises.
+- Correctif : après un changement d'onglet, la page pouvait glisser sur le côté.
+
 ## 0.8.0 — 2026-11-14
 Filtres multiples, variantes d'un plat, bases (sous-recettes).
 - **Filtres** : bouton « Filtres » dans Recettes. Une feuille avec des cases : plusieurs catégories et protéines à la fois (l'une ou l'autre). Les filtres choisis restent en pastilles, une croix pour les enlever.
