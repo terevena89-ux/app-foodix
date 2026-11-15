@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AI
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.8.0";
+const VERSION = "0.9.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -385,7 +385,20 @@ const estBase = r => norm(r.categorie) === "base";
 const nomCrochets = txt => { const m = /^\s*\[(.+)\]\s*$/.exec(txt || ""); return m ? m[1].trim() : null; };
 const recetteParNom = nom => S.recettes.find(r => norm(r.nom) === norm(nom));
 const sousRecette = txt => { const n = nomCrochets(txt); const r = n && recetteParNom(n); return r && r.ingredients ? r : null; };
-const basesDe = r => r ? (r.ingredients || []).map(sousRecette).filter(Boolean) : [];
+// Les bases d'un plat. Un plat assemblé (« Saumon & riz ») appelle des plats entre crochets : on va chercher leurs bases à eux.
+const basesDe = r => {
+  if (!r) return [];
+  const out = [];
+  (r.ingredients || []).map(sousRecette).filter(Boolean).forEach(b => {
+    if (estBase(b)) out.push(b);
+    else if (b !== r) (b.ingredients || []).map(sousRecette).filter(x => x && estBase(x)).forEach(x => out.push(x));
+  });
+  return [...new Set(out)];
+};
+// Plat assemblé : ses ingrédients sont seulement des plats entre crochets ([Saumon]; [Riz]). Reconnu aussi après un import Excel.
+const estAssemble = r => !!r && (r.assemble || ((r.ingredients || []).length > 1 && r.ingredients.every(t => { const b = sousRecette(t); return b && !estBase(b); })));
+// Les accompagnements d'un plat du menu ou de la liste : un seul tiré au sort (side), ou plusieurs choisis en l'assemblant (sides)
+const accompsDe = x => x.sides && x.sides.length ? x.sides : x.side ? [x.side] : [];
 // Familles (variantes) : des recettes qui sont des versions du même plat (Burger bœuf / végé / poulet), même « famille »
 const familleDe = r => r && r.famille ? S.recettes.filter(x => norm(x.famille) === norm(r.famille)).sort((a, b) => (a.variante || a.nom).localeCompare(b.variante || b.nom, "fr")) : (r ? [r] : []);
 const cleFamille = r => r.famille ? "f:" + norm(r.famille) : r.id;
@@ -393,7 +406,7 @@ const estAccomp = r => /accompagnement/.test(norm(r.categorie));
 const veutAccomp = r => /principal/.test(norm(r.categorie));
 // Les plats déjà pris : propositions + liste en cours (pour ne pas proposer deux fois le même)
 const platsPris = () => [...S.propo.repas.map(x => x.id), ...((menuEnCours() || {}).repas || []).map(x => x.id)];
-const accompsPris = () => [...S.propo.repas, ...((menuEnCours() || {}).repas || [])].map(x => x.side).filter(Boolean);
+const accompsPris = () => [...S.propo.repas, ...((menuEnCours() || {}).repas || [])].flatMap(accompsDe);
 
 // Les plats que le tirage peut proposer (de saison, et selon Végé / Rapide)
 function candidats() {
@@ -403,7 +416,7 @@ function candidats() {
 // Plats des listes récentes (en cours, précédente, et les 2 d'avant gardées dans S.histo) : ils sortiront moins souvent
 function recents() {
   const ids = new Set();
-  S.menus.slice(-2).forEach(m => m.repas.forEach(x => { ids.add(x.id); if (x.side) ids.add(x.side); }));
+  S.menus.slice(-2).forEach(m => m.repas.forEach(x => { ids.add(x.id); accompsDe(x).forEach(a => ids.add(a)); }));
   S.histo.forEach(l => l.forEach(id => ids.add(id)));
   return ids;
 }
@@ -489,13 +502,13 @@ function accepterTout(choixFait) {
 }
 
 // Un plat qui entre dans la liste : { id, side, fait, achete: [bases achetées toutes prêtes] }
-const repasListe = x => { const o = { id: x.id, side: x.side || null, fait: false }; if (x.achete && x.achete.length) o.achete = x.achete; return o; };
+const repasListe = x => { const o = { id: x.id, side: x.side || null, fait: false }; if (x.sides) o.sides = x.sides; if (x.achete && x.achete.length) o.achete = x.achete; return o; };
 
 // Avant d'ajouter des plats qui utilisent une base (pâte, sauce…) : « je la fais » ou « je l'achète toute prête » ?
 // On demande à chaque fois (rien n'est retenu). Le choix est noté sur le plat (x.achete), puis on continue.
 function demanderBases(plats, ensuite) {
   const q = [];
-  plats.forEach((x, n) => [x.id, x.side].filter(Boolean).forEach(id => basesDe(recette(id)).forEach(b => q.push({ n, plat: recette(id).nom, b }))));
+  plats.forEach((x, n) => [x.id, ...accompsDe(x)].forEach(id => basesDe(recette(id)).forEach(b => q.push({ n, plat: recette(id).nom, b }))));
   if (!q.length) return ensuite();
   const md = $("#modal");
   ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete md.dataset[k]);
@@ -541,10 +554,10 @@ function renderMenu() {
       <span class="spacer"></span><button class="btn pri" data-act="nouveau-menu">${icone("shuffle")}Nouveau menu</button></div>
     <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "À l'avance")}${pastille("invites", "glass", "Invités")}</div>`;
   if (!S.recettes.length) { $("#main").innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
-  const infos = (r, s) => `${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s.nom)}</span>` : ""}</span>
+  const infos = (r, s) => `${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s)}</span>` : ""}</span>
         <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span>`;
   const propos = pr.map((x, i) => {
-    const r = recette(x.id), s = x.side && recette(x.side);
+    const r = recette(x.id), s = accompsDe(x).map(recette).filter(Boolean).map(a => a.nom).join(", ");
     if (!r) return "";
     const fam = familleDe(r).filter(v => !S.prefs.vege || v.vege);
     const vars = fam.length > 1 ? `<span class="vars">${fam.map(v => `<button class="chip ${v.id === r.id ? "on" : ""}" data-var-propo="${i}" data-v="${esc(v.id)}">${esc(v.variante || v.nom)}</button>`).join("")}</span>` : "";
@@ -552,7 +565,7 @@ function renderMenu() {
       <button class="accepte" data-act="accepter" data-i="${i}" aria-label="Ajouter ${esc(r.nom)} à la liste">${icone("plus")}Liste</button></div>`;
   }).join("");
   const dansListe = ((m && m.repas) || []).map((x, i) => {
-    const r = recette(x.id), s = x.side && recette(x.side);
+    const r = recette(x.id), s = accompsDe(x).map(recette).filter(Boolean).map(a => a.nom).join(", ");
     if (!r) return "";
     return `<div class="rp ${x.fait ? "fait" : ""}">
       <button class="cb" data-act="fait" data-i="${i}" aria-label="${x.fait ? "Pas encore cuisiné" : "Cuisiné"}">${x.fait ? icone("check") : ""}</button>
@@ -579,17 +592,18 @@ function ouvrirRepas(i, src) {
   const l = src === "p" ? S.propo.repas : ((menuEnCours() || {}).repas || []);
   const x = l[i], r = x && recette(x.id);
   if (!r) return;
-  const s = x.side && recette(x.side);
+  const s = accompsDe(x).map(recette).filter(Boolean).map(a => a.nom).join(", ");
   const md = $("#modal");
   md.dataset.rep = i; md.dataset.src = src; delete md.dataset.recette; delete md.dataset.form;
   md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
-    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>${s ? `<div class="sub">+ ${esc(s.nom)}</div>` : ""}</div>
+    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>${s ? `<div class="sub">+ ${esc(s)}</div>` : ""}</div>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="actions">
       ${src === "p" ? `<button class="act pri" data-act="accepter" data-i="${i}">${icone("cart")}Ajouter à la liste de courses</button>
       <button class="act" data-act="remplacer">${icone("refresh")}Remplacer (au hasard)</button>
       <button class="act" data-act="choisir">${icone("search")}Choisir un autre plat…</button>` : ""}
-      ${veutAccomp(r) ? `<button class="act" data-act="accomp">${icone("refresh")}Changer l'accompagnement</button>` : ""}
+      ${veutAccomp(r) && !x.sides ? `<button class="act" data-act="accomp">${icone("refresh")}Changer l'accompagnement</button>` : ""}
+      ${veutAccomp(r) ? `<button class="act" data-act="asm-repas">${icone("utensils")}${x.sides ? "Modifier l'assemblage" : "Assembler avec d'autres accompagnements"}</button>` : ""}
       <button class="act" data-act="voir">${icone("book")}Voir la recette</button>
       <button class="act danger" data-act="retirer">${icone("trash")}${src === "p" ? "Retirer des propositions" : "Retirer de la liste de courses"}</button>
     </div></div></div>`;
@@ -658,6 +672,83 @@ function auMenu() {
   });
 }
 
+/* ---------- 4 bis bis. Assembler un plat complet (principal + un ou plusieurs accompagnements) ---------- */
+// Depuis la fiche d'un plat principal ou d'un accompagnement : je vois ce qui va avec, je compose,
+// puis « Juste au menu » (provisoire, par défaut : rien n'est créé dans mes recettes)
+// ou « Garder dans mes recettes » (une vraie recette « Plat complet » : [Principal]; [Accompagnement]…, liée à ses morceaux).
+// Dans les deux cas, le plat arrive dans les propositions du menu.
+
+// Ce qui va avec : d'abord ce que j'ai déjà mangé ensemble, puis les favoris, puis ce qui est de saison
+function vaAvec(cherche, avec) {
+  const ensemble = new Map();
+  const noter = (p, a) => { const k = p + "|" + a; ensemble.set(k, (ensemble.get(k) || 0) + 1); };
+  [...S.menus.flatMap(m => m.repas), ...S.propo.repas].forEach(x => accompsDe(x).forEach(a => noter(x.id, a)));
+  S.recettes.filter(estAssemble).forEach(r => { const [p, ...as] = (r.ingredients || []).map(sousRecette).filter(Boolean); if (p) as.forEach(a => noter(p.id, a.id)); });
+  const l = S.recettes.filter(cherche === "accomp" ? estAccomp : veutAccomp);
+  const score = r => {
+    const deja = avec.reduce((n, id) => n + (ensemble.get(cherche === "accomp" ? id + "|" + r.id : r.id + "|" + id) || 0), 0);
+    return { r, deja, s: deja * 10 + (r.favori ? 3 : 0) + (deSaison(r) ? 1 : 0) };
+  };
+  return l.map(score).sort((a, b) => b.s - a.s || parNom(a.r, b.r));
+}
+const nomAssemble = (p, as) => p.nom + " & " + as.map(a => a.nom.charAt(0).toLowerCase() + a.nom.slice(1)).join(", ");
+
+function ouvrirAssembler(depart, accs = [], repasI = null) {
+  const r = recette(depart); if (!r) return;
+  S.asm = { princ: veutAccomp(r) ? r.id : null, accs: estAccomp(r) ? [r.id] : accs.slice(), nom: "", tout: false, repasI };
+  vibrer("pas");
+  majAssembler(true);
+}
+function majAssembler(premier) {
+  const a = S.asm, md = $("#modal"), haut = !premier && $("#modal .fiche") ? $("#modal .fiche").scrollTop : 0;
+  const p = a.princ && recette(a.princ), as = a.accs.map(recette).filter(Boolean);
+  const chips = (cherche, avec, choisis, attr) => {
+    const l = vaAvec(cherche, avec), n = a.tout ? l.length : 8;
+    // ce qui est déjà choisi reste visible même s'il est loin dans la liste
+    const vus = l.slice(0, n), reste = l.slice(n).filter(o => choisis.includes(o.r.id));
+    return [...vus, ...reste].map(o => `<button class="chip ${choisis.includes(o.r.id) ? "on" : ""}" data-${attr}="${esc(o.r.id)}">${choisis.includes(o.r.id) ? icone("check") : ""}${esc(o.r.nom)}${o.deja ? ` <small>déjà ensemble</small>` : o.r.favori ? icone("star") : ""}</button>`).join("")
+      + (l.length > n ? `<button class="chip nouv" data-act="asm-tout">Tout voir (${l.length})</button>` : "");
+  };
+  const nom = a.nom || (p && as.length ? nomAssemble(p, as) : "");
+  const pret = p && as.length;
+  md.dataset.asm = "1";
+  ["recette", "form", "rep", "src", "choix", "archive", "filtres"].forEach(k => delete md.dataset[k]);
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche asm" role="dialog" aria-label="Assembler un plat complet">
+    <div class="fi-hd"><div class="txt"><h2>Assembler un plat complet</h2><div class="sub">Provisoire tant que je ne le garde pas</div></div>
+      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="sect">Plat principal</div><div class="pastilles">${chips("princ", a.accs, a.princ ? [a.princ] : [], "asm-p")}</div>
+    <div class="sect">Accompagnements <i>· un ou plusieurs</i></div><div class="pastilles">${chips("accomp", a.princ ? [a.princ] : [], a.accs, "asm-a")}</div>
+    ${pret ? `<div class="asm-apercu">${[p, ...as].map((x, k) => `${k ? `<span class="asm-plus">+</span>` : ""}<div class="asm-bloc">${dishImg(x, 26)}<div><b>${esc(x.nom)}</b><small>${(x.ingredients || []).length} ingrédient${(x.ingredients || []).length > 1 ? "s" : ""} · pour ${x.portions || 2}</small></div></div>`).join("")}</div>
+    <div class="champ"><label for="asm-nom">Nom</label><input class="saisie" id="asm-nom" value="${esc(nom)}" autocomplete="off"></div>` : `<p class="infos">Choisis un plat principal et au moins un accompagnement.</p>`}
+    <div class="pied2"><button class="btn" data-act="asm-garder" ${pret ? "" : "disabled"}>${icone("book")}Garder dans mes recettes</button>
+      <button class="btn pri" data-act="asm-menu" ${pret ? "" : "disabled"}>${icone("cal")}Juste au menu</button></div>
+  </div></div>`;
+  if (!premier) { const f = $("#modal .fiche"); f.style.animation = "none"; f.parentElement.style.animation = "none"; f.scrollTop = haut; }
+}
+// Le plat assemblé arrive dans les propositions (ou remplace le plat du menu qu'on était en train d'assembler)
+function poserAuMenu(x, msg) {
+  const i = S.asm.repasI, avant = S.propo.repas.slice();
+  if (i != null && S.propo.repas[i]) S.propo.repas[i] = x; else S.propo.repas.push(x);
+  S.cascade = false; sauverPropo(); fermer(); render();
+  vibrer("ajout");
+  toast(msg, () => { S.propo.repas = avant; sauverPropo(); render(); });
+}
+function assemblerAuMenu() {
+  const a = S.asm; if (!a.princ || !a.accs.length) return;
+  poserAuMenu({ id: a.princ, side: a.accs[0], sides: a.accs.slice() }, "Au menu (provisoire)");
+}
+function assemblerGarder() {
+  const a = S.asm, p = recette(a.princ), as = a.accs.map(recette).filter(Boolean); if (!p || !as.length) return;
+  const nom = ($("#asm-nom").value || "").trim() || nomAssemble(p, as);
+  let id = idDe(nom), n = 2;
+  while (S.recettes.some(x => x.id === id)) id = idDe(nom) + "-" + n++;
+  const r = { id, nom, categorie: "Plat complet", assemble: true, portions: p.portions || 2, ingredients: [p, ...as].map(x => "[" + x.nom + "]"), ingredientsSource: "app",
+    favori: false, vege: !!(p.vege && as.every(x => x.vege)), prep: false, date: false };
+  ["proteine", "saison", "origine"].forEach(k => { if (p[k]) r[k] = p[k]; });
+  S.recettes.push(r); ecrireRecette(r);
+  poserAuMenu({ id: r.id, side: null }, "Gardé dans mes recettes et mis au menu");
+}
+
 /* ---------- 4 ter. Liste de courses ---------- */
 // Additionne les ingrédients des repas pas encore cuisinés (plats + accompagnements),
 // à l'échelle du nombre de personnes, puis les range par rayon du magasin.
@@ -669,22 +760,25 @@ const cleAjout = a => "perso|" + norm(a);
 function articles(m) {
   const map = new Map();
   const idx = new Map(banque().map(e => [e.cle, e]));
-  m.repas.filter(x => !x.fait).forEach(x => [x.id, x.side].filter(Boolean).forEach(id => {
+  m.repas.filter(x => !x.fait).forEach(x => [x.id, ...accompsDe(x)].forEach(id => {
     const r = recette(id); if (!r) return;
-    const k = (m.pers || 2) / (r.portions || 2);       // ex. recette pour 2, on est 4 : ×2
-    // Une base entre crochets : ses ingrédients à elle (même échelle que le plat), ou elle-même si je l'achète toute prête
+    const pers = m.pers || 2;
+    // Chaque ligne avec son échelle (ex. recette pour 2, on est 4 : ×2).
+    // Une base entre crochets : ses ingrédients (même échelle que le plat), ou elle-même si je l'achète toute prête.
+    // Un plat entre crochets (plat assemblé) : ses ingrédients à son échelle à lui, et ses bases à lui.
     const lignes = [];
-    (r.ingredients || []).forEach(txt => {
-      const b = sousRecette(txt);
-      if (!b) return lignes.push(txt);
-      if ((x.achete || []).includes(b.nom)) return lignes.push(b.nom.replace(/\s+maison$/i, "") + " (tout prêt)");
-      (b.ingredients || []).forEach(t => lignes.push(nomCrochets(t) || t));
+    const deplier = (rec, k, niveau) => (rec.ingredients || []).forEach(txt => {
+      const b = niveau < 2 && sousRecette(txt);
+      if (!b || b === rec) return lignes.push([nomCrochets(txt) || txt, k]);
+      if (estBase(b) && (x.achete || []).includes(b.nom)) return lignes.push([b.nom.replace(/\s+maison$/i, "") + " (tout prêt)", null]);
+      deplier(b, estBase(b) ? k : pers / (b.portions || 2), estBase(b) ? 2 : niveau + 1);
     });
-    lignes.forEach(txt => {
+    deplier(r, pers / (r.portions || 2), 0);
+    lignes.forEach(([txt, k]) => {
       const it = parseItem(txt); if (!it) return;
       const cle = it.key + "|" + it.unit;
       const e = map.get(cle) || { cle, nom: it.name, unite: it.unit, qte: null, recettes: [], rayon: idx.has(it.key) ? idx.get(it.key).rayon : aisleOf(it.name), placard: idx.has(it.key) ? idx.get(it.key).placard : auPlacard(it.name) };
-      if (it.qty != null) e.qte = (e.qte || 0) + it.qty * k;
+      if (it.qty != null) e.qte = (e.qte || 0) + it.qty * (k || 1);
       if (!e.recettes.includes(r.nom)) e.recettes.push(r.nom);
       map.set(cle, e);
     });
@@ -872,7 +966,7 @@ function nouvelleListeChoix(garder) {
 }
 function creerNouvelleListe(plats, arts) {
   const avant = menuEnCours(), nv = creerListe();
-  nv.repas = plats.map(x => ({ id: x.id, side: x.side || null, fait: false }));
+  nv.repas = plats.map(repasListe);
   arts.forEach(a => { if (!nv.ajouts.some(x => cleBanque(x) === cleBanque(a))) nv.ajouts.push(a); });
   // Un ingrédient d'un plat gardé, déjà pris dans l'ancienne liste, reste coché
   if (avant) articles(nv).forEach(e => { if ((avant.coches || {})[e.cle]) nv.coches[e.cle] = true; });
@@ -1220,7 +1314,7 @@ function majListe() {
     const fam = familleDe(r), nom = fam.length > 1 ? r.famille : r.nom;
     return `<button class="ligne" data-fiche="${esc(r.id)}" data-k="${esc(cleFamille(r))}">${dishImg(r, 28)}
       <span class="nm">${esc(nom)}${fam.length > 1 ? `<small>${fam.map(x => esc(x.variante || x.nom)).join(" · ")}</small>` : ""}</span>
-      <span class="ri">${fam.length > 1 ? `<span class="t acc">${fam.length} variantes</span>` : ""}${estBase(r) ? `<span class="t fav">Base</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
+      <span class="ri">${fam.length > 1 ? `<span class="t acc">${fam.length} variantes</span>` : ""}${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
   };
   const plats = l.filter(r => !estBase(r)), bases = l.filter(estBase);
   $("#liste").innerHTML = l.length ? plats.map(ligne).join("") + (bases.length ? `<div class="sec-t"><h3>Bases (sous-recettes)</h3></div>` + bases.map(ligne).join("") : "")
@@ -1285,6 +1379,7 @@ function ouvrirFiche(id) {
     <div><div class="h4">Ingrédients <i>pour ${r.portions || 2}${r.ingredientsSource === "suggestion" ? " · suggérés" : ""}</i></div>
       ${communs ? `<div class="legende"><i></i>propre à « ${esc(r.variante || r.nom)} » · le reste est commun</div>` : ""}
       ${ings ? `<ul class="ings">${ings}</ul>` : `<div class="sub">Aucun ingrédient.</div>`}</div>
+    ${veutAccomp(r) || estAccomp(r) ? `<button class="btn asm-btn" data-act="assembler">${icone("utensils")}${estAccomp(r) ? "Avec quel plat ? Assembler un plat complet" : "Avec quoi ? Assembler un plat complet"}</button>` : ""}
     ${r.notes ? `<p class="notes">${esc(r.notes)}</p>` : ""}
     ${/^https?:\/\//.test(r.lien || "") ? `<a class="lien" href="${esc(r.lien)}" target="_blank" rel="noopener">${icone("link")}Voir la recette en ligne</a>` : ""}
     <div class="gros"><button class="btn ${r.favori ? "fav-on" : ""}" data-act="favori">${icone("star")}${r.favori ? "Favori" : "Mettre en favori"}</button>
@@ -1304,7 +1399,7 @@ function basculerFavori() {
 
 function fermer() {
   $("#modal").innerHTML = "";
-  ["recette", "form", "rep", "src", "choix", "archive", "filtres"].forEach(k => delete $("#modal").dataset[k]);
+  ["recette", "form", "rep", "src", "choix", "archive", "filtres", "asm"].forEach(k => delete $("#modal").dataset[k]);
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -2115,6 +2210,10 @@ document.addEventListener("click", e => {
   if (rc) { vibrer(rc.classList.toggle("on") ? "pas" : "decoche"); return; }
   const bqOuvrir = t.closest("[data-bq-ouvrir]");
   if (bqOuvrir) { S.bq.scroll = $("#bq-corps").scrollTop; S.bq.detail = bqOuvrir.dataset.bqOuvrir; S.bq.suppr = null; return majBanque(); }
+  const ap = t.closest("[data-asm-p]");
+  if (ap) { S.asm.princ = S.asm.princ === ap.dataset.asmP ? null : ap.dataset.asmP; S.asm.nom = ""; vibrer("pas"); return majAssembler(); }
+  const aa = t.closest("[data-asm-a]");
+  if (aa) { const l = S.asm.accs, v = aa.dataset.asmA, i = l.indexOf(v); i >= 0 ? l.splice(i, 1) : l.push(v); S.asm.nom = ""; vibrer(i >= 0 ? "decoche" : "pas"); return majAssembler(); }
   const vp = t.closest("[data-var-propo]");
   if (vp) { const x = S.propo.repas[+vp.dataset.varPropo], r = recette(vp.dataset.v); if (x && r) { x.id = r.id; if (!veutAccomp(r)) x.side = null; else if (!x.side) x.side = tirerAccomp(accompsPris()); sauverPropo(); vibrer("pas"); renderMenu(); } return; }
   const bqRayon = t.closest("[data-bq-rayon]");
@@ -2186,6 +2285,11 @@ document.addEventListener("click", e => {
     case "modifier": modifier(); break;
     case "dupliquer": dupliquer(); break;
     case "variante": nouvelleVariante(); break;
+    case "assembler": ouvrirAssembler($("#modal").dataset.recette); break;
+    case "asm-tout": S.asm.tout = true; majAssembler(); break;
+    case "asm-menu": assemblerAuMenu(); break;
+    case "asm-garder": assemblerGarder(); break;
+    case "asm-repas": { const o = repasOuvert(); if (o) { const x = o.l[o.i]; ouvrirAssembler(x.id, accompsDe(x), o.src === "p" ? o.i : null); } break; }
     case "filtres": ouvrirFiltres(); break;
     case "filtres-effacer": S.f.cats = []; S.f.prots = []; renderRecettes(); ouvrirFiltres(); break;
     case "supprimer": supprimer(); break;
@@ -2228,6 +2332,7 @@ document.addEventListener("change", e => {
   if (filtre) { S.f[filtre] = e.target.value; renderRecettes(); }
 });
 document.addEventListener("input", e => {
+  if (e.target.id === "asm-nom") S.asm.nom = e.target.value;
   if (e.target.id === "q") { S.f.q = e.target.value; majListe(); }
   if (e.target.id === "q-choix") majChoix();
   if (e.target.id === "ajout-art") majSuggArt();
