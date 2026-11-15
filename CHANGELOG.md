@@ -1,5 +1,11 @@
 # Foodix — journal des nouveautés
 
+## 0.8.1 — 2026-11-15
+Icônes Minecraft (facultatif).
+- Les dessins des **ingrédients** et des **plats** peuvent être remplacés par des textures du jeu ou de mods : il suffit de déposer des PNG dans `icones/mc/` (noms attendus dans `icones/mc/LISEZ-MOI.md`).
+- Un fichier absent : Foodix garde son dessin d'origine. On peut donc n'en mettre que quelques-uns.
+- Page d'aperçu `icones/mc/` : montre quels fichiers sont trouvés et lesquels manquent.
+
 ## 0.8.0 — 2026-11-14
 Filtres multiples, variantes d'un plat, bases (sous-recettes).
 - **Filtres** : bouton « Filtres » dans Recettes. Une feuille avec des cases : plusieurs catégories et protéines à la fois (l'une ou l'autre). Les filtres choisis restent en pastilles, une croix pour les enlever.

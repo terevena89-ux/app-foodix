@@ -2,7 +2,7 @@
 // Foodix — outils de cuisine repris du prototype « Carnet de recettes » :
 //  - lecture d'un ingrédient (« 250 g de pâtes » -> quantité, unité, nom)
 //  - rayons du magasin et affichage des quantités
-//  - dessins pixel art, fabriqués par le code (aucun fichier image) :
+//  - dessins pixel art, fabriqués par le code (remplacés par les textures de icones/mc/ quand elles existent) :
 //    chaque dessin est une grille de lettres, chaque lettre = une couleur de la palette PAL.
 // =========================================================
 
@@ -125,24 +125,24 @@ roast:["","","","","     bbbbb","   bbtttttbb","  btttttttttb"," btttwtttttttb",
 fish:["","","","","","","    1111111   1","  111111111111 1"," 1k1111111111111","  22222222222 22","wwww2222222wwwww","wwwwwwwwwwwwwwwW"," WWWWWWWWWWWWWW"],
 };
 const ING_SPR=[
- [/vaisselle|lessive|adoucissant|savon|javel|nettoyant|detartrant|desinfectant|produit wc|multi-usage/,"bouteille",{y:"l",Y:"L"}],
- [/pomme de terre|patate/,"patate"],[/chataigne/,"patate",{t:"b",b:"B"}],[/petit(s)? poi/,"noix",{B:"G",b:"g"}],[/pois chiche/,"noix",{B:"b",b:"t"}],
- [/lentille/,"noix",{B:"G",b:"v"}],[/olive/,"noix",{B:"k",b:"G"}],[/tomate/,"tomate"],[/poivron|piment/,"poivron"],[/betterave/,"tomate",{r:"u",R:"U"}],
- [/potimarron|courge/,"tomate",{r:"o",R:"O"}],[/oignon|echalote/,"oignon"],[/(^| )ail( |$)/,"ail"],[/carotte/,"carotte"],[/aubergine/,"courgette",{g:"u",G:"U"}],
- [/courgette|concombre|cornichon/,"courgette"],[/poireau/,"courgette",{g:"v"}],[/champignon|morille/,"champignon"],[/melon/,"pomme",{r:"v",R:"G"}],
- [/peche/,"pomme",{r:"o",R:"O"}],[/pomme|grenade/,"pomme"],[/citron vert/,"citron",{y:"g",Y:"G"}],[/citron/,"citron"],[/avocat/,"avocat"],
- [/chou-fleur|chou fleur/,"salade",{g:"w",G:"W"}],[/salade|roquette|epinard|chou|romaine/,"salade"],[/navet/,"oignon",{t:"w",b:"u"}],
- [/persil|basilic|coriandre|menthe|ciboulette|aneth|estragon|sauge|thym|herbe|bouquet/,"herbe"],[/pousse|vermicelle/,"pates",{t:"w",Y:"W"}],
- [/(^| )oeuf/,"oeuf"],[/mozzarella|feta|tofu|chevre/,"fromage",{y:"w",Y:"W",c:"W"}],[/fromage blanc|yaourt|creme/,"pot",{y:"w",B:"l"}],
- [/lait de coco/,"boite",{r:"w"}],[/lait/,"lait"],[/beurre de cacah/,"pot",{y:"b"}],[/beurre/,"beurre"],
- [/gruyere|parmesan|cheddar|fromage|roquefort|bleu|reblochon/,"fromage"],[/crevette/,"crevette"],[/saumon/,"poisson",{s:"p",S:"P"}],
- [/thon/,"boite",{r:"l"}],[/poisson|morue|cabillaud/,"poisson"],[/surimi/,"saucisse",{P:"w",p:"r",R:"r"}],[/poulet|dinde|cordon|nugget/,"poulet"],
+ [/vaisselle|lessive|adoucissant|savon|javel|nettoyant|detartrant|desinfectant|produit wc|multi-usage/,"bouteille",{y:"l",Y:"L"},"produit"],
+ [/pomme de terre|patate/,"patate"],[/chataigne/,"patate",{t:"b",b:"B"},"chataigne"],[/petit(s)? poi/,"noix",{B:"G",b:"g"},"petitpois"],[/pois chiche/,"noix",{B:"b",b:"t"},"poischiche"],
+ [/lentille/,"noix",{B:"G",b:"v"},"lentille"],[/olive/,"noix",{B:"k",b:"G"},"olive"],[/tomate/,"tomate"],[/poivron|piment/,"poivron"],[/betterave/,"tomate",{r:"u",R:"U"},"betterave"],
+ [/potimarron|courge/,"tomate",{r:"o",R:"O"},"courge"],[/oignon|echalote/,"oignon"],[/(^| )ail( |$)/,"ail"],[/carotte/,"carotte"],[/aubergine/,"courgette",{g:"u",G:"U"},"aubergine"],
+ [/courgette|concombre|cornichon/,"courgette"],[/poireau/,"courgette",{g:"v"},"poireau"],[/champignon|morille/,"champignon"],[/melon/,"pomme",{r:"v",R:"G"},"melon"],
+ [/peche/,"pomme",{r:"o",R:"O"},"peche"],[/pomme|grenade/,"pomme"],[/citron vert/,"citron",{y:"g",Y:"G"},"citronvert"],[/citron/,"citron"],[/avocat/,"avocat"],
+ [/chou-fleur|chou fleur/,"salade",{g:"w",G:"W"},"choufleur"],[/salade|roquette|epinard|chou|romaine/,"salade"],[/navet/,"oignon",{t:"w",b:"u"},"navet"],
+ [/persil|basilic|coriandre|menthe|ciboulette|aneth|estragon|sauge|thym|herbe|bouquet/,"herbe"],[/pousse|vermicelle/,"pates",{t:"w",Y:"W"},"vermicelle"],
+ [/(^| )oeuf/,"oeuf"],[/mozzarella|feta|tofu|chevre/,"fromage",{y:"w",Y:"W",c:"W"},"mozzarella"],[/fromage blanc|yaourt|creme/,"pot",{y:"w",B:"l"},"creme"],
+ [/lait de coco/,"boite",{r:"w"},"laitcoco"],[/lait/,"lait"],[/beurre de cacah/,"pot",{y:"b"},"beurrecacahuete"],[/beurre/,"beurre"],
+ [/gruyere|parmesan|cheddar|fromage|roquefort|bleu|reblochon/,"fromage"],[/crevette/,"crevette"],[/saumon/,"poisson",{s:"p",S:"P"},"saumon"],
+ [/thon/,"boite",{r:"l"},"thon"],[/poisson|morue|cabillaud/,"poisson"],[/surimi/,"saucisse",{P:"w",p:"r",R:"r"},"surimi"],[/poulet|dinde|cordon|nugget/,"poulet"],
  [/lardon|jambon|chorizo|saucisse|merguez|chipolata|boudin|rillette|chair/,"saucisse"],[/boeuf|veau|porc|steak|magret|canard|petit sale|viande/,"viande"],
  [/boite|concass|haricot|ravioli/,"boite"],[/pate brisee|galette|tortilla|pain|baguette|crouton/,"pain"],
  [/pates|spaghetti|tagliatelle|nouille|orzo|crozet|gnocchi|ravioles/,"pates"],[/riz|semoule|arborio/,"riz"],
- [/noix|cacahu|sesame/,"noix"],[/sauce soja|nuoc/,"bouteille",{y:"B",Y:"k"}],[/(^| )vin|cidre|cognac/,"bouteille",{y:"u",Y:"U"}],
+ [/noix|cacahu|sesame/,"noix"],[/sauce soja|nuoc/,"bouteille",{y:"B",Y:"k"},"saucesoja"],[/(^| )vin|cidre|cognac/,"bouteille",{y:"u",Y:"U"},"vin"],
  [/huile|vinaigre/,"bouteille"],[/sauce|mayonnaise|moutarde|miel|tahini|pate de curry/,"pot"],
- [/(^| )sel|poivre|epice|cumin|paprika|muscade|safran|anis|cannelle|cinq|zaatar|curry/,"pot",{y:"o",Y:"O"}],
+ [/(^| )sel|poivre|epice|cumin|paprika|muscade|safran|anis|cannelle|cinq|zaatar|curry/,"pot",{y:"o",Y:"O"},"epice"],
 ];
 // Icônes qu'on peut choisir à la main pour un ingrédient
 const ICONES={tomate:"Tomate",poivron:"Poivron",oignon:"Oignon",ail:"Ail",carotte:"Carotte",courgette:"Courgette",champignon:"Champignon",patate:"Pomme de terre",
@@ -150,6 +150,28 @@ const ICONES={tomate:"Tomate",poivron:"Poivron",oignon:"Oignon",ail:"Ail",carott
   poulet:"Poulet",viande:"Viande",saucisse:"Saucisse",poisson:"Poisson",crevette:"Crevette",boite:"Conserve",pates:"Pâtes",riz:"Riz",pain:"Pain",
   noix:"Noix, graines",bouteille:"Bouteille",sachet:"Sachet"};
 const spriteCache=new Map();
+/* ---------- textures Minecraft (facultatif) ----------
+   Si un fichier icones/mc/<nom>.png existe, il remplace le dessin fait par le code.
+   S'il manque, l'image ne se charge pas : on remet le dessin, et on ne redemande plus ce fichier.
+   Liste des noms attendus : icones/mc/LISEZ-MOI.md (aperçu : icones/mc/index.html). */
+const MC_DIR="icones/mc/";
+const mcAbsents=new Set();
+const attr = s => String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;");
+function pxImg(fichier, cle, px, cls){
+  if(mcAbsents.has(fichier)) return `<img class="${cls}" src="${spriteCache.get(cle)}" width="${px}" height="${px}" alt="">`;
+  return `<img class="${cls} mc" src="${MC_DIR}${fichier}.png" data-mc="${fichier}" data-secours="${attr(cle)}" width="${px}" height="${px}" alt="">`;
+}
+document.addEventListener("error", e => {
+  const im=e.target; if(!im || im.tagName!=="IMG" || !im.dataset.mc) return;
+  mcAbsents.add(im.dataset.mc); delete im.dataset.mc; im.classList.remove("mc");
+  const secours=spriteCache.get(im.dataset.secours); if(secours) im.src=secours;
+}, true);
+// Tous les noms de fichier reconnus (pour la page d'aperçu)
+const MC_NOMS = () => ({
+  ingredients: [...new Set([...Object.keys(SPR), ...ING_SPR.map(r => r[3] || r[1])])],
+  plats: Object.keys(DISH).map(t => "plat-" + t),
+});
+
 function drawGrid(rows, size, map={}, fill=[]){
   const cv=document.createElement("canvas"); cv.width=cv.height=size; const cx=cv.getContext("2d");
   rows.forEach((row,y)=>{ [...row].forEach((ch,x)=>{
@@ -162,16 +184,16 @@ function drawGrid(rows, size, map={}, fill=[]){
 function ingSprite(name){
   const n=norm(name);
   const m=ING_SPR.find(([re])=>re.test(n)) || [null,"sachet"];
-  return {name:m[1], map:m[2]||{}};
+  return {name:m[1], map:m[2]||{}, mc:m[3]||m[1]};
 }
 function mainColor(spr){
   const cnt={}; SPR[spr.name].join("").split("").forEach(ch=>{ if(ch!==" "&&ch!=="k") cnt[ch]=(cnt[ch]||0)+1; });
   const ch=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0]; return spr.map[ch]||ch;
 }
 function ingImg(name, px=22, icone){
-  const s=(icone && SPR[icone]) ? {name:icone,map:{}} : ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
+  const s=(icone && SPR[icone]) ? {name:icone,map:{},mc:icone} : ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
   if(!spriteCache.has(key)) spriteCache.set(key, drawGrid(SPR[s.name],12,s.map));
-  return `<img class="px" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
+  return pxImg(s.mc, key, px, "px");
 }
 function dishType(r){
   const n=r.id, c=norm(r.categorie);
@@ -207,7 +229,7 @@ function dishImg(r, px = 40) {
     const fill = type === "fish" ? (/saumon/.test(r.id) ? ["p", "P"] : ["s", "S"]) : cols;
     spriteCache.set(key, drawGrid(DISH[type], 16, {}, fill));
   }
-  return `<img class="px dish" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
+  return pxImg("plat-" + dishType(r), key, px, "px dish");
 }
 
-export { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType };
+export { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType, MC_NOMS, MC_DIR };

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foodix — textures Minecraft</title>
+<style>
+  body { font: 15px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; background: #FAFAF7; color: #2b211c; }
+  h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 24px 0 8px; }
+  p { margin: 0 0 8px; color: #5c5148; }
+  .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .case { background: #fff; border: 1px solid #e3ded3; border-radius: 10px; padding: 10px 6px; text-align: center; }
+  .case img { width: 48px; height: 48px; image-rendering: pixelated; display: block; margin: 0 auto 6px; }
+  .case code { font-size: 12px; word-break: break-all; }
+  .case.absent { opacity: .55; border-style: dashed; }
+  .case.absent img { visibility: hidden; }
+  .case small { display: block; color: #9c2a1f; font-size: 11px; }
+  .case:not(.absent) small { color: #2D6A4C; }
+</style>
+</head>
+<body>
+<h1>Textures Minecraft de Foodix</h1>
+<p id="bilan">Vérification…</p>
+<p>Une case en pointillés = fichier absent : Foodix garde alors son dessin d'origine. Les noms sont expliqués dans <a href="LISEZ-MOI.md">LISEZ-MOI.md</a>.</p>
+<h2>Ingrédients</h2><div class="grille" id="ingredients"></div>
+<h2>Plats</h2><div class="grille" id="plats"></div>
+<script type="module">
+import { MC_NOMS } from "../../pixel.js";
+const noms = MC_NOMS();
+let total = 0, ok = 0, vus = 0;
+const bilan = () => { if (vus === total) document.getElementById("bilan").textContent = `${ok} fichier${ok > 1 ? "s" : ""} trouvé${ok > 1 ? "s" : ""} sur ${total}.`; };
+for (const [id, liste] of Object.entries(noms)) {
+  const zone = document.getElementById(id);
+  for (const nom of liste) {
+    total++;
+    const c = document.createElement("div"); c.className = "case";
+    const im = new Image(); const etat = document.createElement("small");
+    im.onload = () => { ok++; vus++; etat.textContent = `${im.naturalWidth}×${im.naturalHeight}`; bilan(); };
+    im.onerror = () => { vus++; c.classList.add("absent"); etat.textContent = "absent"; bilan(); };
+    im.src = nom + ".png?" + Date.now();
+    const code = document.createElement("code"); code.textContent = nom + ".png";
+    c.append(im, code, etat); zone.append(c);
+  }
+}
+</script>
+</body>
+</html>
