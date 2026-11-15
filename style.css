@@ -44,9 +44,9 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: pan-x pan-y; background: var(--fond); }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: pan-x pan-y; background: var(--fond); overflow-x: hidden; overflow-x: clip; }
 body {
-  margin: 0 auto; max-width: 640px; min-height: 100vh; min-height: 100dvh; overflow-x: hidden;
+  margin: 0 auto; max-width: 640px; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; overflow-x: clip;
   background: var(--fond); color: var(--encre);
   font: 15px/1.35 var(--texte); touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -171,7 +171,7 @@ select.chip { appearance: none; -webkit-appearance: none; padding-right: 22px; f
 .pied { display: flex; justify-content: flex-end; }
 
 /* Message en bas (« Enregistré », « Annuler »…) */
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 9;
+.toast { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 9;
   background: var(--encre); color: var(--fond); padding: 11px 18px; border-radius: 999px; font-weight: 700; font-size: 14px;
   display: flex; gap: 12px; align-items: center; max-width: calc(100vw - 32px); }
 .toast button { border: 0; background: none; color: var(--fav-doux); font-weight: 800; padding: 0; }
@@ -464,3 +464,17 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .rp.propo .vars { order: 3; flex: 1 1 100%; display: flex; gap: 5px; flex-wrap: wrap; padding-left: 40px; }
 .rp.propo .vars .chip { height: 30px; font-size: 12px; padding: 0 10px; }
 .duo2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ---------- v0.9.0 : assembler un plat complet ---------- */
+.btn.asm-btn { width: 100%; justify-content: flex-start; color: var(--accent); border-style: dashed; background: none; }
+.asm .sect i { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.asm .pastilles .chip small { font-size: 10.5px; font-weight: 800; color: var(--fav); }
+.asm .pastilles .chip.on small { color: inherit; opacity: .8; }
+.asm .pastilles .chip .ic { width: 14px; height: 14px; }
+.asm-apercu { display: flex; flex-direction: column; gap: 2px; background: var(--creux); border-radius: 12px; padding: 8px 10px; }
+.asm-bloc { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.asm-bloc div { min-width: 0; display: flex; flex-direction: column; }
+.asm-bloc b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asm-bloc small { color: var(--discret); font-size: 12px; }
+.asm-plus { align-self: flex-start; margin-left: 12px; color: var(--accent); font-weight: 800; line-height: 1; }
+.asm .pied2 .btn { white-space: normal; line-height: 1.15; }
