@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.5";
+const VERSION = "0.9.6";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -874,6 +874,7 @@ function renderCourses() {
       ${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${sousNom(e) ? `<span class="for">${esc(sousNom(e))}</span>` : ""}</span>
       <span class="q num">${esc(fmtQty(reste(e), e.unite))}</span>
       ${e.ajout ? `<button class="ib" data-retirer-art="${esc(e.nom)}" aria-label="Retirer">${icone("x")}</button>` : ""}
+      ${!e.ajout ? `<button class="ib souris" data-masquer="${esc(e.cle)}" aria-label="Retirer de cette liste">${icone("x")}</button>` : ""}
       ${e.placard && !e.ajout ? `<button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui" aria-label="Finalement je l'ai (remettre au placard)">${icone("box")}</button>` : ""}</div>`;
   const lignePlacard = e => `<div class="pl ${dispo[e.cle] === "oui" ? "fait" : ""}">
       <div class="pl-h">${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></div>
@@ -2350,6 +2351,8 @@ document.addEventListener("click", e => {
   if (bqIdee) { ajouterBanque(bqIdee.dataset.bqIdee, true, bqIdee.dataset.r); return majBanque(); }
   const retArt = t.closest("[data-retirer-art]");
   if (retArt) return retirerArticle(retArt.dataset.retirerArt);
+  const msq = t.closest("[data-masquer]");  // croix au survol de la souris (PC) : comme glisser au doigt
+  if (msq) return masquer(msq.dataset.masquer);
   const repas = t.closest("[data-repas]");
   if (repas) return ouvrirRepas(+repas.dataset.repas, repas.dataset.src);
   const pick = t.closest("[data-bq-pick]");

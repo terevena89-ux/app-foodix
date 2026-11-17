@@ -1,5 +1,8 @@
 # Foodix — journal des nouveautés
 
+## 0.9.6 — 2026-11-17
+- Sur PC : une petite croix apparaît au survol d'un ingrédient de la liste de courses pour le retirer (au doigt, on glisse toujours).
+
 ## 0.9.5 — 2026-11-17
 - Bouton **Retour** d'Android : ferme la fenêtre ou l'écran ouvert (fiche, Réglages, Thème, banque, Compléter, Notes) au lieu de quitter l'appli. Sur un formulaire, il faut appuyer deux fois (pour ne pas perdre la saisie). Rien d'ouvert : quitte comme avant.
 
