@@ -11,30 +11,59 @@ const norm = s => String(s ?? "").replace(/œ/g,"oe").replace(/Œ/g,"oe").replac
 
 /* ---------- Ingrédients ---------- */
 // Unités reconnues (et leur écriture propre)
-const UNITS = {"g":"g","gr":"g","kg":"kg","ml":"ml","cl":"cl","dl":"dl","l":"L","c.a.s":"c. à s.","cas":"c. à s.","c.a.c":"c. à c.","cac":"c. à c.","boite":"boîte","boites":"boîte","tranche":"tranche","tranches":"tranche","gousse":"gousse","gousses":"gousse","sachet":"sachet","sachets":"sachet","pot":"pot","pots":"pot","paquet":"paquet","paquets":"paquet","botte":"botte","bottes":"botte","plaque":"plaque","plaques":"plaque"};
+const UNITS = {"g":"g","gr":"g","kg":"kg","ml":"ml","cl":"cl","dl":"dl","l":"L","c.a.s":"c. à s.","cas":"c. à s.","cs":"c. à s.","c.a.c":"c. à c.","cac":"c. à c.","cc":"c. à c.","boite":"boîte","boites":"boîte","tranche":"tranche","tranches":"tranche","gousse":"gousse","gousses":"gousse","sachet":"sachet","sachets":"sachet","pot":"pot","pots":"pot","paquet":"paquet","paquets":"paquet","botte":"botte","bottes":"botte","plaque":"plaque","plaques":"plaque","pincee":"pincée","pincees":"pincée","verre":"verre","verres":"verre","brin":"brin","brins":"brin"};
+// Cuillères écrites avec des espaces (« c. à s. », « cuillère à soupe »…) : reconnues à part
+const CUILLERES = [
+  [/^(?:c\.?\s*(?:a|à)\s*s\.?|cuill?(?:e|è)?r?e?s?\.?\s+(?:a|à)\s+soupe)\s+(?:de\s+|d')?/i, "c. à s."],
+  [/^(?:c\.?\s*(?:a|à)\s*c\.?|cuill?(?:e|è)?r?e?s?\.?\s+(?:a|à)\s+caf(?:e|é))\s+(?:de\s+|d')?/i, "c. à c."],
+];
+// Un nombre : « 2 », « 1,5 », « 1/2 », « ½ », « 1 ½ »
+const NOMBRE = String.raw`(?:\d+\s*[½¼¾]|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?|[½¼¾])`;
+function lireNombre(t){
+  t=t.replace(/\s+/g,"");
+  const f={"½":.5,"¼":.25,"¾":.75};
+  let m=t.match(/^(\d+)([½¼¾])$/); if(m) return +m[1]+f[m[2]];
+  m=t.match(/^(\d+)\/(\d+)$/); if(m) return +m[2] ? m[1]/m[2] : +m[1];
+  return f[t] ?? parseFloat(t.replace(",","."));
+}
 function parseItem(txt){
   let s=txt.trim(); if(!s) return null;
-  const m=s.match(/^(\d+(?:[.,]\d+)?|½|¼|¾)\s*(.*)$/);
+  // Une fourchette (« 2-3 », « 2 à 3 ») : on garde le plus grand, pour ne jamais en manquer
+  const m=s.match(new RegExp(`^(${NOMBRE})(?:\\s*(?:-|–|à|a)\\s*(${NOMBRE}))?(?=\\s|[a-zA-Zàâéèêîôûç]|$)\\s*(.*)$`));
   let qty=null, unit="", name=s;
   if(m){
-    qty={"½":.5,"¼":.25,"¾":.75}[m[1]] ?? parseFloat(m[1].replace(",","."));
-    name=m[2];
-    const um=name.match(/^([^\s]+)\s+(?:de\s+|d')?(.+)$/i);
-    if(um && UNITS[norm(um[1])]){ unit=UNITS[norm(um[1])]; name=um[2]; }
+    qty=lireNombre(m[1]);
+    if(m[2]!=null) qty=Math.max(qty, lireNombre(m[2]));
+    name=m[3];
+    const cu=CUILLERES.find(([re])=>re.test(name));
+    if(cu){ unit=cu[1]; name=name.replace(cu[0],""); }
+    else {
+      const um=name.match(/^([^\s]+)\s+(?:de\s+|d')?(.+)$/i);
+      if(um && UNITS[norm(um[1])]){ unit=UNITS[norm(um[1])]; name=um[2]; }
+    }
   }
   if(unit==="kg"){ qty*=1000; unit="g"; }
   if(unit==="L"){ qty*=100; unit="cl"; } if(unit==="ml"){ qty/=10; unit="cl"; } if(unit==="dl"){ qty*=10; unit="cl"; }
   name=name.trim();
   return {qty, unit, name, key:keyOf(name)};
 }
-function keyOf(name){ return norm(name).replace(/^(de |d')/,"").split(" ").map(w=>w.length>3?w.replace(/[sx]$/,""):w).join(" "); }
+// Clé de regroupement : le nom au singulier (« tomates » = « tomate »).
+// Exceptions : des mots dont le pluriel veut dire autre chose (« pâtes » ≠ « pâte » brisée).
+const GARDER_PLURIEL = new Set(["pates"]);
+function keyOf(name){ return norm(name).replace(/^(de |d')/,"").split(" ").map(w=>w.length>3&&!GARDER_PLURIEL.has(w)?w.replace(/[sx]$/,""):w).join(" "); }
+// L'ancienne clé (avant 0.9.4), pour retrouver les réglages de la banque enregistrés avec elle
+function keyOfAncien(name){ return norm(name).replace(/^(de |d')/,"").split(" ").map(w=>w.length>3?w.replace(/[sx]$/,""):w).join(" "); }
 
 /* ---------- Rayons et quantités ---------- */
 // Rayons : mots-clés testés dans cet ordre (le premier qui correspond gagne)
+// (testés sur le nom tel quel ET au singulier : « pommes de terre » trouve « pomme de terre »)
 const AISLES = [
+  ["surgeles","Surgelés",/surgele/],
   ["epices","Épices et condiments",/(^| )(sel|poivre|moutarde|sauce soja|herbe|epice|cumin|paprika|muscade|thym|bouquet garni|cube|bouillon|levure|cinq epice|safran|anis|cannelle|piment|mayonnaise|zaatar|menthe sechee|tahini|nuoc|pate de curry)/],
-  ["conserves","Conserves",/(boite|conserve|concass|lait de coco|(^| )thon|sardine|(^| )mais|coulis|pelee|cornichon|olive)/],
-  ["epicerie","Épicerie",/(sechee|seches|beurre de cacah|morilles|champignons noirs|vin |cidre|croutons|sauce )/],
+  ["conserves","Conserves",/(boite|conserve|concass|lait de coco|(^| )thon|sardine|(^| )mais|coulis|pelee|cornichon|(^| )olive)/],
+  ["boissons","Boissons",/(^| )(jus(?! de citron)|eau( |$)|eau gazeuse|vin( |$)|biere|cidre|sirop(?! d.erable)|soda|limonade|cafe|the( |$)|tisane|cognac|rhum|whisky|porto|champagne|martini|pastis)/],
+  ["sucre","Sucré",/(^| )(sucre|chocolat|biscuit|confiture|miel|cacao|vanille|caramel|bonbon|gateau|cookie|nutella|pate a tartiner|sirop d.erable|pepites|cassonade|vergeoise|meringue|speculoos|madeleine|praline|creme de marron)/],
+  ["epicerie","Épicerie",/(sechee|seches|beurre de cacah|morilles|champignons noirs|croutons|sauce )/],
   ["boucherie","Boucherie, charcuterie, poisson",/(^| )(boeuf|veau|porc|poulet|lardon|jambon|chorizo|saucisse|merguez|chipolata|boudin|magret|steak|cordon|chair a saucisse|petit sale|crevette|saumon|morue|poisson|surimi|rillette|canard|dinde)/],
   ["cremerie","Crèmerie, œufs, frais",/(^| )(oeuf|lait|beurre|creme|fromage|gruyere|parmesan|mozzarella|feta|chevre|roquefort|bleu|reblochon|cheddar|yaourt|pate brisee|ravioles|gnocchi|tofu)/],
   ["boulangerie","Boulangerie",/(^| )(pain|baguette|tortilla)/],
@@ -43,12 +72,13 @@ const AISLES = [
 ];
 // Produits ménagers : catégories
 const RAYONS_MENAGE = [["m-vaisselle","Vaisselle"],["m-linge","Linge"],["m-nettoyage","Nettoyage"],["m-papier","Papier et sacs"],["m-hygiene","Hygiène"]];
-const AISLES_FOOD = ["fruits","legumes","boucherie","cremerie","boulangerie","conserves","epicerie","epices"];
+// Ordre des rayons dans la liste (à peu près celui d'un magasin, surgelés à la fin)
+const AISLES_FOOD = ["fruits","legumes","boucherie","cremerie","boulangerie","conserves","epicerie","sucre","epices","boissons","surgeles"];
 // « Souvent déjà au placard » : une option d'un ingrédient (pas un rayon). Départ deviné d'après le nom.
 const RE_PLACARD = /(^| )(sel|poivre|huile|vinaigre|farine|sucre|moutarde|sauce soja|herbe|epice|cumin|paprika|muscade|thym|bouquet garni|cube|bouillon|levure|chapelure|miel|cinq epice|safran|anis|cannelle|piment|mayonnaise|zaatar|menthe sechee|tahini|nuoc|cognac|pate de curry)/;
 function auPlacard(name){ return RE_PLACARD.test(norm(name)); }
 const AISLE_ORDER = [...AISLES_FOOD,"perso",...RAYONS_MENAGE.map(r=>r[0])];
-function aisleOf(name){ const n=norm(name); for(const [id,,re] of AISLES) if(re.test(n)) return id; return "epicerie"; }
+function aisleOf(name){ const n=norm(name), s=keyOf(name); for(const [id,,re] of AISLES) if(re.test(n)||re.test(s)) return id; return "epicerie"; }
 function rayonMenage(name){
   const n=norm(name);
   if(/vaisselle|eponge|lave-vaisselle/.test(n)) return "m-vaisselle";
@@ -64,11 +94,12 @@ function aisleLabel(id){
 }
 function fmtQty(q, unit){
   if(q==null) return "";
-  if(unit==="g"){ if(q>=1000) return (Math.round(q/100)/10).toLocaleString("fr-FR")+" kg"; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+" g"; }
-  if(unit==="cl"){ if(q>=100) return (Math.round(q/10)/10).toLocaleString("fr-FR")+" L"; return Math.round(q)+" cl"; }
+  // Arrondis pour faire les courses, mais jamais jusqu'à 0 (« 2 g sel » reste « 2 g »)
+  if(unit==="g"){ if(q>=1000) return (Math.round(q/100)/10).toLocaleString("fr-FR")+" kg"; return (q<10?Math.max(1,Math.round(q)):q<50?Math.round(q/5)*5:Math.round(q/10)*10)+" g"; }
+  if(unit==="cl"){ if(q>=100) return (Math.round(q/10)/10).toLocaleString("fr-FR")+" L"; if(q<1) return Math.max(1,Math.round(q*10))+" ml"; return (q<10?Math.round(q*2)/2:Math.round(q)).toLocaleString("fr-FR")+" cl"; }
   let v;
   if(!unit && q<1){ v = q<=.25?"¼":q<=.5?"½":q<=.75?"¾":"1"; }
-  else v = !unit ? String(Math.ceil(q-0.05)) : (Math.round(q*2)/2).toLocaleString("fr-FR");
+  else v = !unit ? String(Math.ceil(q-0.05)) : Math.max(.5, Math.round(q*2)/2).toLocaleString("fr-FR");
   if(!unit) return v;
   const plural = q>1 && !unit.includes(".") ? (unit.endsWith("s")?"":"s") : "";
   return `${v} ${unit}${plural}`;
@@ -126,9 +157,9 @@ fish:["","","","","","","    1111111   1","  111111111111 1"," 1k1111111111111",
 };
 const ING_SPR=[
  [/vaisselle|lessive|adoucissant|savon|javel|nettoyant|detartrant|desinfectant|produit wc|multi-usage/,"bouteille",{y:"l",Y:"L"}],
- [/pomme de terre|patate/,"patate"],[/chataigne/,"patate",{t:"b",b:"B"}],[/petit(s)? poi/,"noix",{B:"G",b:"g"}],[/pois chiche/,"noix",{B:"b",b:"t"}],
+ [/pommes? de terre|patate/,"patate"],[/chataigne/,"patate",{t:"b",b:"B"}],[/petit(s)? poi/,"noix",{B:"G",b:"g"}],[/pois chiche/,"noix",{B:"b",b:"t"}],
  [/lentille/,"noix",{B:"G",b:"v"}],[/olive/,"noix",{B:"k",b:"G"}],[/tomate/,"tomate"],[/poivron|piment/,"poivron"],[/betterave/,"tomate",{r:"u",R:"U"}],
- [/potimarron|courge/,"tomate",{r:"o",R:"O"}],[/oignon|echalote/,"oignon"],[/(^| )ail( |$)/,"ail"],[/carotte/,"carotte"],[/aubergine/,"courgette",{g:"u",G:"U"}],
+ [/potimarron|courges?( |$)/,"tomate",{r:"o",R:"O"}],[/oignon|echalote/,"oignon"],[/(^| )ail( |$)/,"ail"],[/carotte/,"carotte"],[/aubergine/,"courgette",{g:"u",G:"U"}],
  [/courgette|concombre|cornichon/,"courgette"],[/poireau/,"courgette",{g:"v"}],[/champignon|morille/,"champignon"],[/melon/,"pomme",{r:"v",R:"G"}],
  [/peche/,"pomme",{r:"o",R:"O"}],[/pomme|grenade/,"pomme"],[/citron vert/,"citron",{y:"g",Y:"G"}],[/citron/,"citron"],[/avocat/,"avocat"],
  [/chou-fleur|chou fleur/,"salade",{g:"w",G:"W"}],[/salade|roquette|epinard|chou|romaine/,"salade"],[/navet/,"oignon",{t:"w",b:"u"}],
@@ -210,4 +241,4 @@ function dishImg(r, px = 40) {
   return `<img class="px dish" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
 
-export { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType };
+export { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType };

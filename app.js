@@ -19,11 +19,11 @@ let initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedir
   collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch;
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
-import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg } from "./pixel.js";
+import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.3";
+const VERSION = "0.9.4";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -807,6 +807,13 @@ function articles(m) {
     // « tomate » ajouté à la main alors qu'une recette en demande déjà : une seule ligne (celle des recettes)
     const seul = parseItem(a);
     if (seul && seul.name === a.trim() && [...map.values()].some(x => !x.ajout && x.cle.split("|")[0] === seul.key)) return;
+    // « 2 L lait » ajouté à la main alors qu'une recette demande « 50 cl lait » : les quantités s'additionnent
+    const meme = seul && seul.qty != null && map.get(seul.key + "|" + seul.unit);
+    if (meme && !meme.ajout && meme.qte != null) {
+      meme.qte += seul.qty;
+      if (!meme.recettes.includes("à la main")) meme.recettes.push("à la main");
+      return;
+    }
     const e = idx.get(cleBanque(a));
     map.set(cleAjout(a), { cle: cleAjout(a), nom: a, unite: "", qte: null, recettes: [], rayon: e ? e.rayon : "perso", ajout: true });
   });
@@ -1085,12 +1092,15 @@ function restaurerArchive() {
 //   placard : « souvent déjà au placard » (vrai / faux choisi à la main, sinon deviné d'après le nom)
 
 const cleBanque = nom => { const it = parseItem(nom); return it && it.key ? it.key : norm(nom); };
+// Clé d'une entrée enregistrée. Si elle date d'avant 0.9.4 (ancienne façon de mettre au singulier,
+// ex. « pâtes » rangé comme « pâte »), on la recalcule pour qu'elle retrouve son ingrédient.
+const cleStockee = b => { if (!b.cle) return cleBanque(b.nom); const it = parseItem(b.nom), n = it && it.name ? it.name : b.nom; return b.cle === keyOfAncien(n) ? cleBanque(b.nom) : b.cle; };
 // Une entrée correspond à ce qui est tapé (q = texte déjà normalisé) : même au pluriel, « tomates » trouve « tomate »
 const correspond = (e, q) => norm(e.nom).includes(q) || e.cle.includes(keyOf(q));
 const rayonAuto = (nom, menage) => menage ? rayonMenage(nom) : aisleOf(nom);
 const rayonsDe = menage => menage ? RAYONS_MENAGE.map(r => r[0]) : AISLES_FOOD;
 const libelleRayon = id => { const m = RAYONS_MENAGE.find(r => r[0] === id); return m ? m[1] : aisleLabel(id); };
-const entreeDe = cle => S.banque.find(x => (x.cle || cleBanque(x.nom)) === cle);
+const entreeDe = cle => S.banque.find(x => cleStockee(x) === cle);
 // Dessin d'un ingrédient (celui choisi dans la banque, sinon deviné d'après le nom)
 const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return ingImg(nom, px, b && b.icone); };
 
@@ -1110,7 +1120,7 @@ function banque() {
     out.set(cle, { cle, nom, menage: false, rec: false, recettes: e.recettes.sort(parNom) });
   });
   S.banque.forEach(b => {
-    const cle = b.cle || cleBanque(b.nom), e = out.get(cle) || { cle, recettes: [] };
+    const cle = cleStockee(b), e = out.get(cle) || { cle, recettes: [] };
     Object.assign(e, { nom: b.nom || e.nom, menage: !!b.menage, rec: !!b.rec, rayon: b.rayon, icone: b.icone, pl: b.placard });
     out.set(cle, e);
   });
@@ -1191,7 +1201,7 @@ function supprimerIngredient(cle) {
     const ings = (r.ingredients || []).filter(t => { const i = parseItem(t); return !(i && i.key === cle); });
     if (ings.length !== (r.ingredients || []).length) { avant.push({ r, ings: r.ingredients, src: r.ingredientsSource }); r.ingredients = ings; r.ingredientsSource = "app"; ecrireRecette(r); }
   });
-  S.banque = S.banque.filter(x => (x.cle || cleBanque(x.nom)) !== cle);
+  S.banque = S.banque.filter(x => cleStockee(x) !== cle);
   sauverBanque();
   S.bq.detail = null; S.bq.suppr = null; majBanque();
   toast("« " + e.court + " » supprimé", () => {

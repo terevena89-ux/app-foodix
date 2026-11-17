@@ -1,5 +1,14 @@
 # Foodix — journal des nouveautés
 
+## 0.9.4 — 2026-11-17
+Lecture des ingrédients plus juste :
+- Fractions (« 1/2 citron », « 1 ½ ») et fourchettes (« 2-3 carottes », « 2 à 3 » : on garde le plus grand).
+- Unités reconnues en plus : « c. à s. », « càs », « cuillère à soupe », « c. à c. », pincée, verre, brin.
+- Petites quantités jamais arrondies à 0 (« 2 g sel » reste 2 g, « 2 ml vanille » s'affiche 2 ml).
+- « pâtes » et « pâte » ne sont plus additionnées ; pluriels mieux rangés (« pommes de terre » en Légumes, « huile d'olive » en Épicerie) ; dessin des courgettes corrigé.
+- Nouveaux rayons : **Sucré**, **Boissons**, **Surgelés** (ce qui contient « surgelé »).
+- Un article tapé à la main avec une quantité (« 2 L lait ») s'additionne au même ingrédient venu des recettes.
+
 ## 0.9.3 — 2026-11-17
 - Démarrage : si les serveurs de Google ne répondent pas, message « Impossible de joindre le serveur » avec un bouton **Réessayer** (au lieu de rester sur « Chargement… »). Le mode démo n'en dépend plus.
 - Réseau lent : au bout de 3 secondes, l'appli s'ouvre avec la copie gardée sur l'appareil (la nouvelle version est rangée pour la fois suivante).
