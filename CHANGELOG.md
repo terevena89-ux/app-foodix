@@ -1,5 +1,8 @@
 # Foodix — journal des nouveautés
 
+## 0.9.7 — 2026-11-17
+- Excel, onglet « Banque d'ingrédients » : nouvelle colonne **Icône** (le dessin choisi à la main). Relue à l'import : on peut y écrire un nom de dessin (« Oignon », « Pot »…) ou « Auto » pour revenir au dessin automatique.
+
 ## 0.9.6 — 2026-11-17
 - Sur PC : une petite croix apparaît au survol d'un ingrédient de la liste de courses pour le retirer (au doigt, on glisse toujours).
 

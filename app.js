@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.6";
+const VERSION = "0.9.7";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -1817,7 +1817,7 @@ function versCase(type, k, v) {
   return v ?? "";
 }
 // Colonnes de l'onglet « Banque d'ingrédients »
-const COLONNES_BANQUE = [["nom", "Nom", 28], ["type", "Type", 12], ["rayon", "Rayon", 26], ["rec", "Récurrent", 11], ["placard", "Souvent au placard", 18], ["nb", "Nb de recettes", 14], ["recettes", "Recettes", 60]];
+const COLONNES_BANQUE = [["nom", "Nom", 28], ["type", "Type", 12], ["rayon", "Rayon", 26], ["rec", "Récurrent", 11], ["placard", "Souvent au placard", 18], ["icone", "Icône", 16], ["nb", "Nb de recettes", 14], ["recettes", "Recettes", 60]];
 
 async function classeurRecettes() {
   const ExcelJS = await chargerExcelJS();
@@ -1839,7 +1839,7 @@ async function classeurRecettes() {
   const ordre = r => AISLE_ORDER.indexOf(r) < 0 ? 99 : AISLE_ORDER.indexOf(r);
   const bq = banque().sort((a, b) => a.menage - b.menage || ordre(a.rayon) - ordre(b.rayon) || parNom(a, b)).map(e => ({
     nom: e.nom, type: e.menage ? "Ménager" : "Ingrédient", rayon: libelleRayon(e.rayon), rec: e.rec ? "Oui" : "Non",
-    placard: e.menage ? "" : e.placard ? "Oui" : "Non", nb: e.recettes.length || "", recettes: e.recettes.map(r => r.nom).join("; ")
+    placard: e.menage ? "" : e.placard ? "Oui" : "Non", icone: e.icone && ICONES[e.icone] ? ICONES[e.icone] : "", nb: e.recettes.length || "", recettes: e.recettes.map(r => r.nom).join("; ")
   }));
   const wsB = ajouterFeuille(wb, "Banque d'ingrédients", COLONNES_BANQUE.map(([k, h, w]) => ({ header: h, key: k, width: w })), bq);
   wsB.getColumn("recettes").alignment = { wrapText: true, vertical: "middle" };
@@ -1916,6 +1916,11 @@ function lireBanque(wb) {
     const menage = o.type ? /menag/.test(norm(o.type)) : undefined;
     const e = { nom: o.nom, menage, rec: oui(o.rec), placard: oui(o.placard) };
     if (o.rayon) { const id = [...rayonsDe(true), ...rayonsDe(false)].find(r => norm(libelleRayon(r)) === norm(o.rayon) || r === o.rayon); if (id) e.rayon = id; }
+    // Icône : son nom (« Oignon »), ou « Auto » pour revenir au dessin deviné d'après le nom. Vide = pas de changement.
+    if (o.icone) {
+      if (norm(o.icone) === "auto") e.icone = null;
+      else { const id = Object.keys(ICONES).find(k => norm(ICONES[k]) === norm(o.icone) || k === norm(o.icone)); if (id) e.icone = id; }
+    }
     out.push(e);
   });
   return out;
@@ -1932,6 +1937,7 @@ function fusionBanque(lignes, simuler) {
       const b = { nom: l.nom, cle, menage: !!l.menage, rec: !!l.rec };
       if (l.rayon && rayonsDe(b.menage).includes(l.rayon)) b.rayon = l.rayon;
       if (typeof l.placard === "boolean" && !b.menage) b.placard = l.placard;
+      if (l.icone) b.icone = l.icone;
       S.banque.push(b); return;
     }
     const chg = {};
@@ -1939,12 +1945,14 @@ function fusionBanque(lignes, simuler) {
     if (l.rec !== undefined && l.rec !== e.rec) chg.rec = l.rec;
     if (l.rayon && l.rayon !== e.rayon && rayonsDe(l.menage ?? e.menage).includes(l.rayon)) chg.rayon = l.rayon;
     if (l.placard !== undefined && !(l.menage ?? e.menage) && l.placard !== e.placard) chg.placard = l.placard;
+    if (l.icone !== undefined && (l.icone || null) !== (e.icone || null)) chg.icone = l.icone;  // null = revenir au dessin automatique
     if (!Object.keys(chg).length) return;
     maj++;
     if (simuler) return;
     let b = entreeDe(cle);
     if (!b) { b = { nom: e.nom, cle, menage: e.menage, rec: false }; S.banque.push(b); }
     Object.assign(b, chg);
+    if (b.icone === null) delete b.icone;
   });
   if (!simuler && (ajout || maj)) sauverBanque();
   return { ajout, maj };
