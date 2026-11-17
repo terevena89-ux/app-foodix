@@ -1,5 +1,9 @@
 # Foodix — journal des nouveautés
 
+## 0.9.8 — 2026-11-17
+- La saison (Été / Hiver) est recalculée à chaque fois, et plus seulement à l'ouverture de l'appli.
+- Nettoyage : code qui ne servait plus retiré.
+
 ## 0.9.7 — 2026-11-17
 - Excel, onglet « Banque d'ingrédients » : nouvelle colonne **Icône** (le dessin choisi à la main). Relue à l'import : on peut y écrire un nom de dessin (« Oignon », « Pot »…) ou « Auto » pour revenir au dessin automatique.
 

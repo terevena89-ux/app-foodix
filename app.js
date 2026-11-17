@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.7";
+const VERSION = "0.9.8";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -274,9 +274,10 @@ function toast(msg, annuler) {
 }
 
 // Saison : d'avril à septembre = Été, sinon Hiver
-const SAISON = (() => { const m = new Date().getMonth() + 1; return m >= 4 && m <= 9 ? "ete" : "hiver"; })();
+// (recalculée à chaque fois : l'appli peut rester ouverte des semaines sur le téléphone)
+const saisonActuelle = () => { const m = new Date().getMonth() + 1; return m >= 4 && m <= 9 ? "ete" : "hiver"; };
 function deSaison(r) {
-  const s = norm(r.saison);
+  const s = norm(r.saison), SAISON = saisonActuelle();
   return !s || s === "annuel" || s === SAISON || (s === "automne" && SAISON === "hiver") || (s === "printemps" && SAISON === "ete");
 }
 
@@ -2465,8 +2466,6 @@ document.addEventListener("click", e => {
 document.addEventListener("change", e => {
   if (e.target.id === "fichier" && e.target.files[0]) importerFichier(e.target.files[0]);
   if (e.target.id === "bq-nom") renommerIngredient(S.bq.detail, e.target.value);
-  const filtre = e.target.dataset && e.target.dataset.filtre;
-  if (filtre) { S.f[filtre] = e.target.value; renderRecettes(); }
 });
 document.addEventListener("input", e => {
   if (e.target.id === "asm-nom") S.asm.nom = e.target.value;
