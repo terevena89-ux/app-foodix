@@ -4,7 +4,7 @@
 // même sans réseau. (Les données, elles, sont gérées par Firebase.)
 // À CHAQUE NOUVELLE VERSION : changer le numéro ci-dessous.
 // =========================================================
-const CACHE = "foodix-v0.9.4";
+const CACHE = "foodix-v0.9.5";
 
 // Fichiers de l'appli à garder dès l'installation
 const FICHIERS = [

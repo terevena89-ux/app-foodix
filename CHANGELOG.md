@@ -1,5 +1,8 @@
 # Foodix — journal des nouveautés
 
+## 0.9.5 — 2026-11-17
+- Bouton **Retour** d'Android : ferme la fenêtre ou l'écran ouvert (fiche, Réglages, Thème, banque, Compléter, Notes) au lieu de quitter l'appli. Sur un formulaire, il faut appuyer deux fois (pour ne pas perdre la saisie). Rien d'ouvert : quitte comme avant.
+
 ## 0.9.4 — 2026-11-17
 Lecture des ingrédients plus juste :
 - Fractions (« 1/2 citron », « 1 ½ ») et fourchettes (« 2-3 carottes », « 2 à 3 » : on garde le plus grand).

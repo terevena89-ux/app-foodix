@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.4";
+const VERSION = "0.9.5";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -2492,6 +2492,48 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && $("#modal").innerHTML && !$("#modal").dataset.form) fermer();
   else if (e.key === "Escape" && S.bq.ouvert && !$("#modal").innerHTML) retourBanque();
 });
+
+/* ---------- Bouton Retour d'Android ---------- */
+// Le navigateur a un « historique » (la pile des pages visitées). Retour = dépiler une page.
+// Dès qu'une fenêtre ou un écran s'ouvre, on empile une fausse page : Retour la dépile
+// et on ferme la fenêtre du dessus, au lieu de quitter l'appli. Rien d'ouvert : Retour quitte, comme d'habitude.
+// (Un « observateur » regarde la page changer, ce qui évite de toucher à chaque fonction qui ouvre quelque chose.)
+let gardeRetour = false, ignorerPop = false, retourFormT = 0;
+const quelqueChoseOuvert = () => !!($("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran") || $(".ni-ecran"));
+function majGardeRetour() {
+  const ouvert = quelqueChoseOuvert();
+  if (ouvert && !gardeRetour) { history.pushState({ foodix: 1 }, ""); gardeRetour = true; }
+  else if (!ouvert && gardeRetour) { gardeRetour = false; ignorerPop = true; history.back(); } // fermé par un bouton : on retire la fausse page
+}
+function fermerDessus() {
+  const notes = $(".ni-ecran [data-ni='retour']");
+  if (notes) return notes.click();
+  const md = $("#modal");
+  if (md.innerHTML) {
+    const retour = md.querySelector(".retour");  // sous-écran (ex. Thème) : on remonte d'un cran
+    if (retour) return retour.click();
+    if (md.dataset.form && Date.now() - retourFormT > 3000) {  // formulaire : pour ne pas perdre la saisie, il faut appuyer deux fois
+      retourFormT = Date.now();
+      return toast("Encore Retour pour abandonner la saisie");
+    }
+    const x = md.querySelector('[data-act="fermer"]');
+    return x ? x.click() : fermer();
+  }
+  if ($("#cp-ecran")) return fermerCompleter();
+  if (S.bq.ouvert) return retourBanque();
+}
+window.addEventListener("popstate", () => {
+  if (ignorerPop) { ignorerPop = false; return; }
+  gardeRetour = false;
+  fermerDessus();
+  setTimeout(majGardeRetour, 50); // encore quelque chose d'ouvert (fenêtre sur la banque…) : on remet une fausse page
+});
+let gardeRetourPrevue = false;
+new MutationObserver(() => {
+  if (gardeRetourPrevue) return;
+  gardeRetourPrevue = true;
+  setTimeout(() => { gardeRetourPrevue = false; majGardeRetour(); }, 30);
+}).observe(document.body, { childList: true, subtree: true });
 
 // Le « gardien » hors ligne (service worker) : garde une copie des fichiers de l'appli
 // et installe tout seul les nouvelles versions.
