@@ -25,7 +25,7 @@ import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AI
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.1";
+const VERSION = "0.9.2";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -798,6 +798,25 @@ function articles(m) {
   return [...map.values()];
 }
 
+// Coches et ingrédients retirés retiennent la QUANTITÉ du moment (ex. 2 pour « 2 oignons »),
+// ou `true` pour un article sans quantité (et pour les anciennes listes).
+// Si la liste en demande plus ensuite (un plat ajouté), la ligne revient pour ce qui manque.
+const PRECIS = 1e-6; // marge pour les nombres à virgule (0,1 + 0,2 ne fait pas tout à fait 0,3 en informatique)
+const marque = e => e.qte != null ? e.qte : true;
+// Ce qui est déjà pris : true = tout, un nombre = une partie, 0 = rien
+function dejaPris(m, e) {
+  const v = (m.coches || {})[e.cle];
+  if (!v) return 0;
+  if (v === true || e.qte == null || v + PRECIS >= e.qte) return true;
+  return v;
+}
+const estPris = (m, e) => dejaPris(m, e) === true;
+// Retiré d'un glissement, et la recette n'en demande pas plus depuis
+function estMasque(m, e) {
+  const v = (m.masques || {})[e.cle];
+  return !!v && (v === true || e.qte == null || v + PRECIS >= e.qte);
+}
+
 function renderCourses() {
   const m = menuEnCours();
   // ce qui était tapé dans le champ d'ajout reste (la liste peut se redessiner quand l'autre appareil modifie quelque chose)
@@ -812,19 +831,26 @@ function renderCourses() {
     c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
   };
   if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`; return finir(); }
-  const coches = m.coches || {}, dispo = m.dispo || {};
+  const dispo = m.dispo || {};
   const groupes = {}, placard = [];
   // Un article « souvent au placard » reste à part tant que je n'ai pas dit « il me faut » ; alors il rejoint son rayon.
-  const masques = m.masques || {}, nbMasques = Object.keys(masques).length;
+  let nbMasques = 0;
   articles(m).forEach(e => {
-    if (masques[e.cle]) return;  // retiré d'un glissement (ingrédient d'une recette)
+    if (estMasque(m, e)) { nbMasques++; return; }  // retiré d'un glissement (ingrédient d'une recette)
+    e.pris = dejaPris(m, e);  // true, un nombre (une partie déjà prise) ou 0
     if (e.placard && !e.ajout && dispo[e.cle] !== "non") placard.push(e);
     else (groupes[e.rayon] ??= []).push(e);
   });
+  const coches = {}; // pour le tri : seulement les lignes entièrement prises
+  Object.values(groupes).flat().concat(placard).forEach(e => { if (e.pris === true) coches[e.cle] = true; });
+  // Une partie déjà prise : on affiche ce qui manque, et « 2 déjà pris » sous le nom
+  const partiel = e => typeof e.pris === "number" && e.pris > 0;
+  const reste = e => partiel(e) ? e.qte - e.pris : e.qte;
+  const sousNom = e => [partiel(e) ? fmtQty(e.pris, e.unite) + " déjà pris" : "", ...e.recettes].filter(Boolean).join(" · ");
   const ligne = e => `<div class="it ${coches[e.cle] ? "fait" : ""}" data-k="${esc(e.cle)}" ${e.ajout ? `data-ajout="${esc(e.nom)}"` : ""}>
       <button class="cb" data-coche="${esc(e.cle)}" aria-label="${coches[e.cle] ? "Pas encore pris" : "Pris"}">${coches[e.cle] ? icone("check") : ""}</button>
-      ${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span>
-      <span class="q num">${esc(fmtQty(e.qte, e.unite))}</span>
+      ${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${sousNom(e) ? `<span class="for">${esc(sousNom(e))}</span>` : ""}</span>
+      <span class="q num">${esc(fmtQty(reste(e), e.unite))}</span>
       ${e.ajout ? `<button class="ib" data-retirer-art="${esc(e.nom)}" aria-label="Retirer">${icone("x")}</button>` : ""}
       ${e.placard && !e.ajout ? `<button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui" aria-label="Finalement je l'ai (remettre au placard)">${icone("box")}</button>` : ""}</div>`;
   const lignePlacard = e => `<div class="pl ${dispo[e.cle] === "oui" ? "fait" : ""}">
@@ -877,7 +903,11 @@ let cocheT;
 function cocher(cle, btn) {
   const m = menuEnCours(); if (!m) return;
   m.coches = m.coches || {};
-  if (m.coches[cle]) delete m.coches[cle]; else m.coches[cle] = true;
+  // Cocher retient la quantité affichée en ce moment ; décocher une ligne entièrement prise l'efface
+  const e = articles(m).find(x => x.cle === cle);
+  if (!e) delete m.coches[cle];
+  else if (estPris(m, e)) delete m.coches[cle];
+  else m.coches[cle] = marque(e);
   const fait = !!m.coches[cle];
   vibrer(fait ? "coche" : "decoche");
   ecrireMenu(m);
@@ -913,7 +943,9 @@ function ajouterArticle(menage = false) {
 // Retirer un ingrédient venu d'une recette (glissement) : il est caché de cette liste, « remettre » le fait revenir
 function masquer(cle) {
   const m = menuEnCours(); if (!m) return;
-  m.masques = Object.assign({}, m.masques, { [cle]: true });
+  // On retient la quantité : si un plat ajouté plus tard en redemande, l'ingrédient revient
+  const e = articles(m).find(x => x.cle === cle);
+  m.masques = Object.assign({}, m.masques, { [cle]: e ? marque(e) : true });
   vibrer("retire"); ecrireMenu(m); renderCourses();
   toast("Ingrédient retiré", () => { delete m.masques[cle]; ecrireMenu(m); flip("#main .it", renderCourses); });
 }
@@ -969,7 +1001,8 @@ function creerNouvelleListe(plats, arts) {
   nv.repas = plats.map(repasListe);
   arts.forEach(a => { if (!nv.ajouts.some(x => cleBanque(x) === cleBanque(a))) nv.ajouts.push(a); });
   // Un ingrédient d'un plat gardé, déjà pris dans l'ancienne liste, reste coché
-  if (avant) articles(nv).forEach(e => { if ((avant.coches || {})[e.cle]) nv.coches[e.cle] = true; });
+  // (avec sa quantité déjà prise)
+  if (avant) articles(nv).forEach(e => { const v = (avant.coches || {})[e.cle]; if (v) nv.coches[e.cle] = v; });
   // On ne garde que la liste précédente : les plus anciennes sont effacées (leurs plats restent dans l'historique du tirage)
   const aEffacer = avant ? S.menus.filter(x => x !== avant) : [], histoAvant = S.histo;
   if (aEffacer.length) S.histo = [...S.histo, ...aEffacer.map(x => x.repas.map(y => y.id))].slice(-2);
@@ -993,8 +1026,9 @@ function ouvrirArchive() {
   const md = $("#modal");
   ["recette", "form", "rep", "choix"].forEach(k => delete md.dataset[k]);
   md.dataset.archive = "1";
-  const m = menuEnCours(), deja = new Set(m ? articles(m).filter(e => !(m.coches || {})[e.cle]).map(e => cleBanque(e.nom)) : []);
-  const coches = a.coches || {};
+  const m = menuEnCours(), deja = new Set(m ? articles(m).filter(e => !estPris(m, e)).map(e => cleBanque(e.nom)) : []);
+  // Banque calculée une seule fois (et pas une fois par ligne)
+  const menagers = new Set(banque().filter(b => b.menage).map(b => b.cle));
   const l = articles(a).sort((x, y) => AISLE_ORDER.indexOf(x.rayon) - AISLE_ORDER.indexOf(y.rayon) || x.nom.localeCompare(y.nom, "fr"));
   const plats = a.repas.map(x => recette(x.id)).filter(Boolean);
   md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Liste précédente">
@@ -1003,8 +1037,8 @@ function ouvrirArchive() {
     ${plats.length ? `<div class="tg">${plats.map(r => `<span class="t">${esc(r.nom)}</span>`).join("")}</div>` : ""}
     <div class="rc-l">${l.map(e => {
       const txt = e.qte != null ? (fmtQty(e.qte, e.unite) + " " + e.nom) : e.nom, dedans = deja.has(cleBanque(e.nom));
-      return `<button class="rc arch ${dedans ? "on" : ""}" data-repris="${esc(txt)}" data-menage="${banque().some(b => b.cle === cleBanque(e.nom) && b.menage) ? 1 : ""}">
-        <span class="cb">${icone("check")}</span>${imgIng(e.nom, 18)}<span class="nm ${coches[e.cle] ? "barre" : ""}">${esc(e.nom)}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></button>`;
+      return `<button class="rc arch ${dedans ? "on" : ""}" data-repris="${esc(txt)}" data-menage="${menagers.has(cleBanque(e.nom)) ? 1 : ""}">
+        <span class="cb">${icone("check")}</span>${imgIng(e.nom, 18)}<span class="nm ${estPris(a, e) ? "barre" : ""}">${esc(e.nom)}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></button>`;
     }).join("") || `<div class="vide">Elle était vide.</div>`}</div>
     <div class="pied2"><button class="btn" data-act="fermer">Fermer</button><button class="btn pri" data-act="restaurer">${icone("history")}Remettre cette liste</button></div>
   </div></div>`;
@@ -2458,7 +2492,7 @@ if ("serviceWorker" in navigator && !MODE_DEMO && location.protocol === "https:"
 }
 
 // Mode démo uniquement : accès pour les tests automatiques (préparer et vérifier un fichier Excel)
-if (MODE_DEMO) window.foodixTest = { S, lireBanque, fusionBanque, banque, classeurRecettes, lireRecettes, fusion, render, candidats };
+if (MODE_DEMO) window.foodixTest = { S, lireBanque, fusionBanque, banque, classeurRecettes, lireRecettes, fusion, render, candidats, articles, cocher, masquer, dejaPris, estMasque, menuEnCours, listeEnCours, repasListe, renderCourses };
 
 if (MODE_DEMO) demarrerDemo(); else demarrerFirebase();
 

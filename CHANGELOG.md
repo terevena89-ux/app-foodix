@@ -1,5 +1,10 @@
 # Foodix — journal des nouveautés
 
+## 0.9.2 — 2026-11-17
+- Liste de courses : une coche retient la **quantité prise**. Si un plat ajouté ensuite en demande plus, la ligne redevient à prendre pour ce qui manque (« 3 » avec « 2 déjà pris » sous le nom).
+- Un ingrédient retiré d'un glissement revient si un nouveau plat en redemande.
+- Liste précédente : s'ouvre plus vite (banque calculée une seule fois).
+
 ## 0.9.1 — 2026-11-15
 - Excel : nouvel onglet **« Banque d'ingrédients »** (Nom, Type ingrédient / ménager, Rayon, Récurrent, Souvent au placard, Nb de recettes, Recettes), rangé par rayon.
 - Il est relu à l'import : on peut y changer le type, le rayon, « récurrent » et « souvent au placard », ou ajouter des articles (une case vide ne change rien). L'aperçu avant import compte les articles nouveaux et les réglages changés.
