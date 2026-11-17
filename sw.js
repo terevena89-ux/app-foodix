@@ -4,7 +4,7 @@
 // même sans réseau. (Les données, elles, sont gérées par Firebase.)
 // À CHAQUE NOUVELLE VERSION : changer le numéro ci-dessous.
 // =========================================================
-const CACHE = "foodix-v0.9.2";
+const CACHE = "foodix-v0.9.3";
 
 // Fichiers de l'appli à garder dès l'installation
 const FICHIERS = [
@@ -54,16 +54,24 @@ self.addEventListener("fetch", e => {
   // Fichiers de l'appli : réseau d'abord (pour avoir la dernière version),
   // copie en secours si pas de réseau.
   // On passe req.url et pas req : le navigateur refuse de modifier une demande d'ouverture de page.
+  // Réseau trop lent (sous-sol de magasin…) : au bout de 3 secondes on sert la copie,
+  // et la réponse du réseau, si elle finit par arriver, est rangée pour la prochaine fois.
   if (url.origin === location.origin) {
-    e.respondWith(
-      fetch(req.url, { cache: "no-cache" }).then(rep => {
-        if (!url.search) {
-          const clone = rep.clone();
-          caches.open(CACHE).then(c => c.put(req, clone));
-        }
-        return rep;
-      }).catch(() => caches.match(req, { ignoreSearch: true }))
-    );
+    const reseau = fetch(req.url, { cache: "no-cache" }).then(rep => {
+      if (!url.search && rep.ok) {
+        const clone = rep.clone();
+        caches.open(CACHE).then(c => c.put(req, clone));
+      }
+      return rep;
+    });
+    e.waitUntil(reseau.catch(() => {})); // laisse le temps de ranger la réponse tardive
+    e.respondWith(new Promise(resoudre => {
+      let fini = false;
+      const copie = () => caches.match(req, { ignoreSearch: true });
+      const minuteur = setTimeout(() => copie().then(c => { if (c && !fini) { fini = true; resoudre(c); } }), 3000);
+      reseau.then(rep => { if (!fini) { fini = true; clearTimeout(minuteur); resoudre(rep); } })
+        .catch(() => copie().then(c => { if (!fini) { fini = true; clearTimeout(minuteur); resoudre(c || Response.error()); } }));
+    }));
   }
   // Le reste (connexion Google, base de données) passe sans être touché.
 });

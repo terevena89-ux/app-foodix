@@ -1,5 +1,10 @@
 # Foodix — journal des nouveautés
 
+## 0.9.3 — 2026-11-17
+- Démarrage : si les serveurs de Google ne répondent pas, message « Impossible de joindre le serveur » avec un bouton **Réessayer** (au lieu de rester sur « Chargement… »). Le mode démo n'en dépend plus.
+- Réseau lent : au bout de 3 secondes, l'appli s'ouvre avec la copie gardée sur l'appareil (la nouvelle version est rangée pour la fois suivante).
+- Mise à jour automatique : attend aussi que je ne sois pas en train de taper, ni dans la banque, « Compléter » ou les Notes.
+
 ## 0.9.2 — 2026-11-17
 - Liste de courses : une coche retient la **quantité prise**. Si un plat ajouté ensuite en demande plus, la ligne redevient à prendre pour ce qui manque (« 3 » avec « 2 déjà pris » sous le nom).
 - Un ingrédient retiré d'un glissement revient si un nouveau plat en redemande.

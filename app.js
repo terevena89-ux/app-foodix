@@ -10,22 +10,20 @@
 //   4. Affichage général       8. Clics et démarrage
 // =========================================================
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
-  onAuthStateChanged, signOut
-} from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
-import {
+// Firebase n'est PAS chargé ici d'office : il arrive « à la demande » dans chargerFirebase() (partie 2).
+// Ainsi, si ses serveurs ne répondent pas, l'appli démarre quand même et affiche un message
+// (et le mode démo, qui n'en a pas besoin, marche toujours).
+const FB = "https://www.gstatic.com/firebasejs/12.4.0/";
+let initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut,
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch
-} from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+  collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch;
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
 import { norm, parseItem, keyOf, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.2";
+const VERSION = "0.9.3";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -205,7 +203,24 @@ function ecouter() {
   }, err => console.error(err)));
 }
 
-function demarrerFirebase() {
+// Va chercher les 3 morceaux de Firebase (appli, connexion, base de données).
+// Une fois venus, le « gardien » hors ligne (sw.js) en garde une copie pour toujours.
+async function chargerFirebase() {
+  const [a, au, fs] = await Promise.all(["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map(f => import(FB + f)));
+  ({ initializeApp } = a);
+  ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } = au);
+  ({ initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch } = fs);
+}
+
+async function demarrerFirebase() {
+  try { await chargerFirebase(); }
+  catch (e) {
+    // Pas de réseau à la toute première ouverture, ou serveurs de Google injoignables
+    $("#titre").textContent = "Foodix";
+    $("#main").innerHTML = `<div class="vide">Impossible de joindre le serveur.<br>Vérifie le réseau.
+      <div><button class="btn pri" onclick="location.reload()">Réessayer</button></div></div>`;
+    return;
+  }
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   // Cache local permanent : l'appli marche hors ligne avec la dernière copie connue
@@ -2479,12 +2494,18 @@ if ("serviceWorker" in navigator && !MODE_DEMO && location.protocol === "https:"
     });
   }).catch(() => {}); // pas de gardien possible : l'appli marche quand même
   // Nouvelle version installée : on recharge une fois (pas à la 1re installation),
-  // en attendant qu'aucune fiche ne soit ouverte.
+  // en attendant que je ne sois pas en train de faire quelque chose
+  // (fiche ouverte, banque, Notes, « Compléter », ou une case où je tape).
   const avaitUneVersion = !!navigator.serviceWorker.controller;
   let dejaRecharge = false;
+  const occupe = () => {
+    const a = document.activeElement;
+    return !!$("#modal").innerHTML || S.bq.ouvert || !!$(".ni-ecran") || !!$("#cp-ecran")
+      || !!(a && (a.matches("input, textarea, select") || a.isContentEditable));
+  };
   const recharger = () => {
     if (dejaRecharge) return;
-    if ($("#modal").innerHTML) return setTimeout(recharger, 3000);
+    if (occupe()) return setTimeout(recharger, 3000);
     dejaRecharge = true;
     location.reload();
   };
