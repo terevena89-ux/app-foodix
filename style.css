@@ -298,6 +298,21 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .sugg { display: flex; flex-wrap: wrap; gap: 5px; margin: -2px 0 8px; }
 .sugg:empty { display: none; }
 .chip.nouv { border-style: dashed; color: var(--accent); }
+/* Ajout d'article : liste déroulante par-dessus la liste de courses */
+.ajout-art { position: relative; z-index: 5; }
+.deroul { position: absolute; top: 46px; left: 0; right: 0; max-height: 252px; overflow-y: auto; background: var(--carte); border: 1px solid var(--trait); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); padding: 3px 0; }
+.deroul:empty { display: none; }
+.dr { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 12px; border: 0; background: none; color: var(--encre); font: inherit; text-align: left; }
+button.dr:active, .dr-l:active, .dr-b:active { background: var(--creux); }
+.dr .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dr small { color: var(--discret); font-size: 12px; }
+.dr.nouv { padding: 0; gap: 0; border-top: 1px solid var(--trait); }
+.dr.nouv:first-child { border-top: 0; }
+.dr-l, .dr-b { display: flex; align-items: center; gap: 8px; min-height: 40px; border: 0; background: none; color: var(--accent); font: inherit; padding: 0 12px; }
+.dr-l { flex: 1; min-width: 0; text-align: left; }
+.dr-b { flex-shrink: 0; border-left: 1px solid var(--trait); font-weight: 600; font-size: 14px; }
+.dr .ic { width: 18px; height: 18px; flex-shrink: 0; }
+.it [data-art-fiche] { cursor: pointer; }
 .chip small { font-size: 10.5px; font-weight: 600; opacity: .8; }
 .bq-seg button { flex: 1; }
 /* La banque : une vraie fenêtre plein écran (v0.5.1) */

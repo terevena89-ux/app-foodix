@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.14.0";
+const VERSION = "0.16.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -925,8 +925,9 @@ function articles(m) {
       if (!meme.recettes.includes("à la main")) meme.recettes.push("à la main");
       return;
     }
-    const e = idx.get(cleBanque(a));
-    map.set(cleAjout(a), { cle: cleAjout(a), nom: a, unite: "", qte: null, recettes: [], rayon: e ? e.rayon : "perso", ajout: true });
+    // rayon choisi pour cette liste seulement (m.rayonsAjouts), sinon celui de la banque, sinon « Ajouts »
+    const e = idx.get(cleBanque(a)), choisi = (m.rayonsAjouts || {})[cleAjout(a)];
+    map.set(cleAjout(a), { cle: cleAjout(a), nom: a, unite: "", qte: null, recettes: [], rayon: choisi || (e ? e.rayon : "perso"), ajout: true, enBanque: !!e });
   });
   return [...map.values()];
 }
@@ -954,8 +955,8 @@ function renderCourses() {
   const m = menuEnCours();
   // ce qui était tapé dans le champ d'ajout reste (la liste peut se redessiner quand l'autre appareil modifie quelque chose)
   const champ = $("#ajout-art"), tape = champ ? champ.value : "", avaitFocus = !!champ && document.activeElement === champ;
-  const ajout = `<div class="srow"><label class="cherche">${icone("plus")}<input id="ajout-art" placeholder="Ajouter un article" autocomplete="off" enterkeyhint="done"></label>
-    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div><div class="sugg" id="sugg-art"></div>
+  const ajout = `<div class="ajout-art"><div class="srow"><label class="cherche">${icone("plus")}<input id="ajout-art" placeholder="Ajouter un article" autocomplete="off" enterkeyhint="done"></label>
+    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div><div class="deroul" id="sugg-art"></div></div>
     <div class="outils3"><button class="btn" data-act="parcourir">${icone("grid")}Parcourir</button>
       <button class="btn" data-act="nouvelle-liste">${icone("file-plus")}Nouvelle liste</button>
       <button class="btn ${listeArchive() ? "" : "inactif"}" data-act="archive" aria-label="Liste précédente">${icone("history")}Précédente</button></div>`;
@@ -982,8 +983,9 @@ function renderCourses() {
   const sousNom = e => [partiel(e) ? fmtQty(e.pris, e.unite) + " déjà pris" : "", ...e.recettes].filter(Boolean).join(" · ");
   const ligne = e => `<div class="it ${coches[e.cle] ? "fait" : ""}" data-k="${esc(e.cle)}" ${e.ajout ? `data-ajout="${esc(e.nom)}"` : ""}>
       <button class="cb" data-coche="${esc(e.cle)}" aria-label="${coches[e.cle] ? "Pas encore pris" : "Pris"}">${coches[e.cle] ? icone("check") : ""}</button>
-      ${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${sousNom(e) ? `<span class="for">${esc(sousNom(e))}</span>` : ""}</span>
+      ${imgIng(e.nom, 18)}<span class="w" ${e.ajout ? `data-art-fiche="${esc(e.nom)}"` : ""}><span class="nm">${esc(e.nom)}</span>${sousNom(e) ? `<span class="for">${esc(sousNom(e))}</span>` : ""}</span>
       <span class="q num">${esc(fmtQty(reste(e), e.unite))}</span>
+      ${e.ajout && !e.enBanque ? `<button class="ib" data-art-banque="${esc(e.nom)}" aria-label="Ajouter à la banque">${icone("carrot")}</button>` : ""}
       ${e.ajout ? `<button class="ib" data-retirer-art="${esc(e.nom)}" aria-label="Retirer">${icone("x")}</button>` : ""}
       ${!e.ajout ? `<button class="ib souris" data-masquer="${esc(e.cle)}" aria-label="Retirer de cette liste">${icone("x")}</button>` : ""}
       ${e.placard && !e.ajout ? `<button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui" aria-label="Finalement je l'ai (remettre au placard)">${icone("box")}</button>` : ""}</div>`;
@@ -1028,9 +1030,11 @@ function majSuggArt() {
   const l = tous.filter(e => correspond(e, q) && !deja.has(e.cle))
     .sort((a, b) => (norm(a.court).startsWith(q) ? 0 : 1) - (norm(b.court).startsWith(q) ? 0 : 1) || b.recettes.length - a.recettes.length || parNom(a, b)).slice(0, 8);
   const existe = tous.some(e => e.cle === cleBanque(v));
-  box.innerHTML = l.map(e => `<button class="chip" data-sugg="${esc(e.cle)}">${esc(e.nom)}${e.menage ? " <small>ménager</small>" : ""}</button>`).join("")
-    + (existe ? "" : `<button class="chip nouv" data-act="art-ingredient">${icone("plus")}« ${esc(v)} »</button><button class="chip nouv" data-act="art-menage">${icone("plus")}« ${esc(v)} » ménager</button>`);
+  // Liste déroulante par-dessus la liste : icône + nom ; en bas, l'article tapé tel quel (liste seule, ou + banque)
+  box.innerHTML = l.map(e => `<button class="dr" data-sugg="${esc(e.cle)}">${ingImg(e.nom, 20, e.icone, e.mc, e.menage)}<span class="nm">${esc(e.nom)}</span>${e.menage ? "<small>ménager</small>" : ""}</button>`).join("")
+    + (existe ? "" : `<div class="dr nouv"><button class="dr-l" data-act="ajouter-art">${icone("plus")}<span class="nm">« ${esc(v)} »</span></button><button class="dr-b" data-act="art-banque">${icone("carrot")}+ Banque</button></div>`);
 }
+const fermerSuggArt = () => { const b = $("#sugg-art"); if (b) b.innerHTML = ""; };
 
 // Cocher : la case se remplit avec un rebond, le nom se barre, puis l'article descend en bas de son rayon
 let cocheT;
@@ -1053,28 +1057,55 @@ function cocher(cle, btn) {
   clearTimeout(cocheT);
   cocheT = setTimeout(() => flip(zid() + " .it", renderCourses), 480);  // on laisse voir la coche avant de ranger
 }
-// Ajoute un article à la liste en cours. Un article connu de la banque garde son nom d'origine ;
-// un article nouveau y entre (en produit ménager si on l'a demandé), pour être proposé la prochaine fois.
-function ajouterALaListe(texte, menage = false) {
+// Ajoute un article à la liste en cours. Un article connu de la banque garde son nom d'origine.
+// Un article inconnu ne va dans la banque que si on le demande (versBanque).
+function ajouterALaListe(texte, menage = false, versBanque = false) {
   const v = texte.trim(); if (!v) return;
   const it = parseItem(v), avecQte = !!it && it.name !== v;  // « 2 L lait » : la quantité reste dans la liste, pas dans la banque
   const cle = cleBanque(v), connu = banque().find(e => e.cle === cle);
   let nom = v;
-  if (connu) { if (!avecQte) nom = connu.nom; }
-  else { ajouterBanque(avecQte ? it.name : v, menage); toast(menage ? "Ajouté à la banque (ménager)" : "Ajouté à la banque d'ingrédients"); }
+  if (connu && !avecQte) nom = connu.nom;
   const m = listeEnCours();
   m.ajouts = m.ajouts || [];
   if (!m.ajouts.some(a => cleBanque(a) === cleBanque(nom))) m.ajouts.push(nom);
   ecrireMenu(m);
-  return connu ? null : cleBanque(avecQte ? it.name : v);  // clé du nouvel article de la banque
+  return !connu && versBanque ? versLaBanque(nom, menage) : null;
 }
-function ajouterArticle(menage = false) {
+// Article ajouté à la main → banque (avec le rayon choisi pour la liste, s'il y en a un). Renvoie sa clé.
+function versLaBanque(nom, menage = false) {
+  const it = parseItem(nom), court = it && it.name ? it.name : nom.trim();
+  const m = menuEnCours(), r = m && (m.rayonsAjouts || {})[cleAjout(nom)];
+  ajouterBanque(court, menage, r && rayonsDe(menage).includes(r) ? r : "");
+  if (m && r) { delete m.rayonsAjouts[cleAjout(nom)]; ecrireMenu(m); }  // la banque prend le relais
+  toast("Ajouté à la banque");
+  return cleBanque(court);
+}
+function ajouterArticle(versBanque = false) {
   const champ = $("#ajout-art"), v = champ.value.trim();
   if (!v) return champ.focus();
-  const nouveau = ajouterALaListe(v, menage); vibrer("ajout");
+  const nouveau = ajouterALaListe(v, false, versBanque); vibrer("ajout");
   champ.value = ""; flip(zid() + " .it", renderCourses);
-  if (nouveau) return ouvrirFicheBanque(nouveau, true);  // article inconnu : on règle tout de suite rayon, icône…
+  if (nouveau) return ouvrirFicheBanque(nouveau, true);  // on règle tout de suite rayon, icône, ménager…
   $("#ajout-art").focus(); // on peut enchaîner les ajouts au clavier
+}
+// Toucher un article ajouté à la main : petite fiche pour le ranger dans un rayon (cette liste seulement)
+function ouvrirArtFiche(nom) {
+  const m = menuEnCours(); if (!m) return;
+  const e = articles(m).find(x => x.ajout && x.nom === nom); if (!e) return;
+  const md = $("#modal");
+  fermer(); md.dataset.art = nom;
+  const rayons = [...AISLES_FOOD, "perso", ...RAYONS_MENAGE.map(r => r[0])];
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(nom)}">
+    <div class="fi-hd">${imgIng(nom, 28)}<div class="txt"><h2>${esc(nom)}</h2><div class="sub">Rayon pour cette liste</div></div>
+      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="pastilles">${rayons.map(r => `<button class="chip ${r === e.rayon ? "on" : ""}" data-art-rayon="${r}">${esc(libelleRayon(r))}</button>`).join("")}</div>
+    ${e.enBanque ? "" : `<div class="pied2"><button class="btn pri" data-art-banque="${esc(nom)}">${icone("carrot")}Ajouter à la banque</button></div>`}</div></div>`;
+}
+function rangerArt(rayon) {
+  const m = menuEnCours(), nom = $("#modal").dataset.art; if (!m || !nom) return;
+  m.rayonsAjouts = Object.assign({}, m.rayonsAjouts);
+  m.rayonsAjouts[cleAjout(nom)] = rayon;
+  ecrireMenu(m); fermer(); vibrer("ajout"); flip(zid() + " .it", renderCourses);
 }
 // Retirer un ingrédient venu d'une recette (glissement) : il est caché de cette liste, « remettre » le fait revenir
 function masquer(cle) {
@@ -1412,6 +1443,7 @@ function htmlFicheIngredient(e) {
     <div class="champ"><span class="lbl">Rayon</span><div class="pastilles">${rayons}</div></div>
     <div class="champ"><span class="lbl">Icône</span>${mcActif() ? icones : `<div class="bq-icones">${icones}</div>`}</div>
     <button type="button" class="btn ${e.rec ? "pri" : ""}" data-act="bq-rec-fiche" style="justify-content:flex-start">${icone("refresh")}${e.rec ? "Récurrent : proposé à chaque nouvelle liste" : "Proposer à chaque nouvelle liste"}</button>
+    ${n ? "" : `<button type="button" class="btn ${e.menage ? "pri" : ""}" data-act="bq-menage-fiche" style="justify-content:flex-start">${icone("drop")}${e.menage ? "Produit ménager" : "Produit ménager ?"}</button>`}
     <button type="button" class="btn ${e.placard ? "pri" : ""}" data-act="bq-placard-fiche" style="justify-content:flex-start">${icone("box")}${e.placard ? "Souvent au placard : à vérifier à chaque liste" : "Souvent au placard ?"}</button>
     ${n ? `<div class="champ"><span class="lbl">Recettes</span><div>${recettes}</div></div>` : ""}
     <button type="button" class="btn danger-btn" data-act="bq-suppr">${icone("trash")}${confirme ? (n ? `Confirmer : retirer de ${n} recette${n > 1 ? "s" : ""}` : "Confirmer la suppression") : "Supprimer"}</button>
@@ -1590,7 +1622,7 @@ function basculerFavori() {
 
 function fermer() {
   $("#modal").innerHTML = "";
-  ["recette", "form", "rep", "src", "choix", "archive", "filtres", "asm"].forEach(k => delete $("#modal").dataset[k]);
+  ["recette", "form", "rep", "src", "choix", "archive", "filtres", "asm", "art"].forEach(k => delete $("#modal").dataset[k]);
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -2158,11 +2190,24 @@ function lireBanque(wb) {
   wb.worksheets.forEach(ws => {
     const nomF = norm(ws.name);
     const menageF = nomF.startsWith("produits menager") ? true : nomF.startsWith("ingredient") ? false : nomF.startsWith("banque") ? undefined : null;
-    if (menageF !== null) lireUneBanque(ws, menageF, out);
+    if (menageF !== null) lireUneBanque(wb, ws, menageF, out);
   });
   return out;
 }
-function lireUneBanque(ws, menageF, out) {
+// Image posée dans une ligne (1re colonne) -> data URL. ExcelJS les range à part : ancrage (ligne) + fichier du classeur.
+function imagesParLigne(wb, ws) {
+  const m = new Map();
+  ws.getImages().forEach(im => {
+    const f = wb.getImage(Number(im.imageId));
+    if (!f || !f.buffer || !/png|jpe?g|gif/i.test(f.extension || "")) return;
+    const o = new Uint8Array(f.buffer); let s = "";
+    for (let i = 0; i < o.length; i += 0x8000) s += String.fromCharCode.apply(null, o.subarray(i, i + 0x8000));
+    m.set(Math.round(im.range.tl.nativeRow ?? im.range.tl.row) + 1, `data:image/${f.extension === "jpg" ? "jpeg" : f.extension};base64,` + btoa(s));
+  });
+  return m;
+}
+function lireUneBanque(wb, ws, menageF, out) {
+  const images = imagesParLigne(wb, ws);
   const parEntete = {}, cols = [];
   COLONNES_BANQUE.forEach(c => { parEntete[norm(c[1])] = c[0]; });
   parEntete[norm("Souvent au placard")] = "placard";  // en-tête des fichiers d'avant 0.13.0
@@ -2181,6 +2226,7 @@ function lireUneBanque(ws, menageF, out) {
       if (norm(o.icone) === "auto") e.icone = null;
       else { const id = Object.keys(ICONES).find(k => norm(ICONES[k]) === norm(o.icone) || k === norm(o.icone)); if (id) e.icone = id; }
     }
+    if (images.has(n)) e.img = images.get(n);  // devient une texture (imagesVersTextures)
     out.push(e);
   });
 }
@@ -2188,7 +2234,7 @@ function lireUneBanque(ws, menageF, out) {
 //   ajout     : seulement les articles inconnus
 //   fusion    : + réglages des articles connus mis à jour (une case vide ne change rien)
 //   remplacer : la banque devient celle du fichier ; ce qui n'y est pas perd ses réglages (ou disparaît s'il n'est dans aucune recette).
-//               La texture Minecraft choisie à la main (pas dans l'Excel) est gardée.
+//               Une texture choisie à la main est gardée, sauf si le fichier donne une image pour cet article.
 function fusionBanque(lignes, simuler, mode = "fusion") {
   let ajout = 0, maj = 0, retire = 0, efface = 0;
   let ancien = null;
@@ -2209,6 +2255,7 @@ function fusionBanque(lignes, simuler, mode = "fusion") {
       if (l.rayon && rayonsDe(b.menage).includes(l.rayon)) b.rayon = l.rayon;
       if (typeof l.placard === "boolean" && !b.menage) b.placard = l.placard;
       if (l.icone) b.icone = l.icone;
+      if (l.mc) b.mc = l.mc;
       S.banque.push(b); tous.set(cle, b); return;
     }
     if (mode === "ajout") return;
@@ -2220,6 +2267,7 @@ function fusionBanque(lignes, simuler, mode = "fusion") {
     if (l.rayon && l.rayon !== e.rayon && rayonsDe(l.menage ?? e.menage).includes(l.rayon)) chg.rayon = l.rayon;
     if (l.placard !== undefined && !(l.menage ?? e.menage) && l.placard !== e.placard) chg.placard = l.placard;
     if (l.icone !== undefined && (l.icone || null) !== (e.icone || null)) chg.icone = l.icone;  // null = revenir au dessin automatique
+    if (l.mc && l.mc !== e.mc) chg.mc = l.mc;
     if (!Object.keys(chg).length) return;
     maj++;
     if (simuler) return;
@@ -2234,7 +2282,7 @@ function fusionBanque(lignes, simuler, mode = "fusion") {
       const cle = cleStockee(b);
       let n = entreeDe(cle);
       if (!n) { const e = banque().find(x => x.cle === cle); n = { nom: e.nom, cle, menage: e.menage, rec: false }; S.banque.push(n); }
-      n.mc = b.mc;
+      if (!n.mc) n.mc = b.mc;  // l'image du fichier passe avant
     });
   }
   if (!simuler && (ajout || maj || ancien)) sauverBanque();
@@ -2291,6 +2339,39 @@ function fusion(lignes, simuler, mode = "fusion") {
   return { ajout, maj, suppr: aSuppr.length };
 }
 
+// Images de l'onglet Ingrédients / Produits ménagers -> icône (texture « mc ») de l'article.
+// Comparées pixel à pixel en 32 px : une image déjà dans les textures reprend son nom ; une image identique
+// au dessin que l'appli ferait de toute façon ne force rien ; une nouvelle devient la texture « xl_<clé> ».
+const signature = src => new Promise(ok => {
+  const im = new Image();
+  im.onload = () => {
+    const c = document.createElement("canvas"); c.width = c.height = 32;
+    const x = c.getContext("2d"); x.imageSmoothingEnabled = false; x.drawImage(im, 0, 0, 32, 32);
+    const d = new Uint32Array(x.getImageData(0, 0, 32, 32).data.buffer);
+    let h = 2166136261; for (const v of d) h = Math.imul(h ^ v, 16777619);
+    ok({ h: h >>> 0, url: c.toDataURL("image/png") });
+  };
+  im.onerror = () => ok(null);
+  im.src = src;
+});
+async function imagesVersTextures(bq) {
+  const avecImg = bq.filter(l => l.img);
+  if (!avecImg.length) return;
+  const parSig = new Map();
+  await Promise.all(Object.entries(MC.tex).map(async ([k, v]) => { const s = await signature(v); if (s && !parSig.has(s.h)) parSig.set(s.h, k); }));
+  for (const l of avecImg) {
+    const s = await signature(l.img); delete l.img;
+    if (!s) continue;
+    if (parSig.has(s.h)) { l.mc = parSig.get(s.h); continue; }
+    const b = entreeDe(cleBanque(l.nom));
+    const auto = await signature(await pngDe(ingImg(l.nom, 32, l.icone || (b && b.icone), "", l.menage ?? (b && b.menage))));
+    if (auto && auto.h === s.h) continue;  // dessin Foodix (export fait en style Foodix) : rien à figer
+    l.mc = "xl_" + cleBanque(l.nom).replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    l.tex = s.url;
+    parSig.set(s.h, l.mc);
+  }
+}
+
 // Après lecture : un résumé par mode et trois boutons. « Tout remplacer » demande un 2e appui (bouton rouge avec le décompte).
 async function importerFichier(fichier) {
   const box = $("#imp");
@@ -2299,6 +2380,7 @@ async function importerFichier(fichier) {
     const wb = await lireClasseur(fichier);
     const lignes = lireRecettes(wb), bq = lireBanque(wb);
     if (!lignes.length && !bq.length) { box.innerHTML = `<div class="infos">Aucune recette trouvée (il faut une colonne « Nom »).</div>`; return; }
+    await imagesVersTextures(bq);
     const res = {};
     ["ajout", "fusion", "remplacer"].forEach(m => { res[m] = { r: fusion(lignes, true, m), b: fusionBanque(bq, true, m) }; });
     importEnAttente = { lignes, bq, res };
@@ -2332,6 +2414,13 @@ function confirmerImport(el) {
     return;
   }
   const r = lignes.length || mode === "remplacer" ? fusion(lignes, false, mode) : { ajout: 0, maj: 0, suppr: 0 };
+  // Nouvelles textures venues des images : enregistrées avant la banque qui les cite (sauf « ajout » : articles connus non touchés)
+  const neuves = Object.fromEntries(bq.filter(l => l.tex).map(l => [l.mc, l.tex]));
+  if (Object.keys(neuves).length) {
+    MC.tex = Object.assign({}, MC.tex, neuves); sauverTextures();
+    if (lireLocal("fx-icones", "foodix") !== "minecraft") ecrireLocal("fx-icones", "minecraft");  // les images du fichier ne s'affichent qu'en style Minecraft
+    appliquerIcones();
+  }
   const b = fusionBanque(bq, false, mode);  // après les recettes : les ingrédients des nouvelles recettes sont déjà connus
   importEnAttente = null;
   fermer(); render();
@@ -2372,7 +2461,7 @@ document.addEventListener("touchstart", e => {
   geste = null;
   if (e.touches.length !== 1 || !S.pret || $("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran")) return;
   const t = e.target;
-  if (t.closest("header, #tabs, .toast, #modal, input, textarea, select, .defile, .pastilles, .sugg, .poignee")) return;
+  if (t.closest("header, #tabs, .toast, #modal, input, textarea, select, .defile, .pastilles, .sugg, .deroul, .poignee")) return;
   const p = e.touches[0];
   geste = { x0: p.clientX, y0: p.clientY, dx: 0, t0: Date.now(), mode: null, it: t.closest(".it"), seuil: false };
 }, { passive: true });
@@ -2686,6 +2775,13 @@ document.addEventListener("click", e => {
   const coche = t.closest("[data-coche]");
   if (coche) return cocher(coche.dataset.coche, coche);
   const sugg = t.closest("[data-sugg]");
+  if (!t.closest(".ajout-art")) fermerSuggArt();
+  const artF = t.closest("[data-art-fiche]");
+  if (artF) return ouvrirArtFiche(artF.dataset.artFiche);
+  const artR = t.closest("[data-art-rayon]");
+  if (artR) return rangerArt(artR.dataset.artRayon);
+  const artB = t.closest("[data-art-banque]");
+  if (artB) { const cle = versLaBanque(artB.dataset.artBanque); fermer(); renderCourses(); return ouvrirFicheBanque(cle, true); }
   if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); vibrer("ajout"); flip(zid() + " .it", renderCourses); $("#ajout-art").focus(); } return; }
   const sb = t.closest("[data-sugg-base]");
   if (sb) { const li = sb.closest(".li"), c = li.querySelector("input"); c.value = "[" + sb.dataset.suggBase + "]"; li.querySelector("img").outerHTML = dessinIng(c.value); majSuggIng(null); c.focus(); return; }
@@ -2747,8 +2843,9 @@ document.addEventListener("click", e => {
     case "archive": ouvrirArchive(); break;
     case "restaurer": restaurerArchive(); break;
     case "parcourir": ouvrirBanque(true); break;
-    case "ajouter-art": case "art-ingredient": ajouterArticle(); break;
-    case "art-menage": ajouterArticle(true); break;
+    case "ajouter-art": ajouterArticle(); break;
+    case "art-banque": ajouterArticle(true); break;
+    case "bq-menage-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { menage: !e.menage, rayon: "" }); majBanque(); } break; }
     case "banque": ouvrirBanque(); break;
     case "completer": ouvrirCompleter(); break;
     case "ajouter-banque": ajouterDepuisBanque(); break;
@@ -2827,6 +2924,8 @@ document.addEventListener("change", e => {
   if (e.target.id === "f-tex" && e.target.files.length) importerTextures([...e.target.files]);
   if (e.target.id === "bq-nom") renommerIngredient(S.bq.detail, e.target.value);
 });
+// Revenir dans la case d'ajout rouvre la liste déroulante (elle se ferme quand on touche ailleurs)
+document.addEventListener("focusin", e => { if (e.target.id === "ajout-art") majSuggArt(); });
 document.addEventListener("input", e => {
   if (e.target.id === "asm-nom") S.asm.nom = e.target.value;
   if (e.target.id === "q") { S.f.q = e.target.value; majListe(); }

@@ -1,5 +1,15 @@
 # Foodix — journal des nouveautés
 
+## 0.16.0 — 2026-11-21
+- Liste de courses : un article tapé à la main ne va plus tout seul dans la banque. Bouton « + Banque » dans la liste déroulante, ou icône carotte sur la ligne de l'article.
+- Les propositions pendant la saisie s'affichent en liste déroulante, avec l'icône de chaque ingrédient.
+- Toucher un article ajouté à la main : on choisit son rayon pour cette liste.
+- Fiche d'un article de la banque (hors recettes) : bouton « Produit ménager ».
+
+## 0.15.0 — 2026-11-21
+- Import Excel : l'image posée devant un ingrédient ou un produit (1re colonne des onglets Ingrédients / Produits ménagers) devient son icône. On choisit donc les icônes une fois pour toutes dans l'Excel, puis on importe.
+- Les images arrivent avec le fichier (rien d'autre à importer) et s'affichent avec le style d'icônes Minecraft, que l'import active sur l'appareil.
+
 ## 0.14.0 — 2026-11-21
 - Import Excel en trois façons : « Ajouter le nouveau » (rien d’existant n’est touché), « Fusionner » (ajoute et met à jour, comme avant) ou « Tout remplacer » (recettes et banque deviennent celles du fichier ; ce qui manque est supprimé). Chaque bouton montre ce qui va changer ; « Tout remplacer » demande un 2e appui.
 - Produits ménagers : nouveau rayon « Divers maison » (piles, ampoules, allumettes, bougies…).
