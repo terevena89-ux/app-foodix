@@ -19,7 +19,7 @@ let initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedir
   collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch;
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
-import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg } from "./pixel.js";
+import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, MC } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
@@ -116,6 +116,13 @@ function sauverBanque() {
   setDoc(refDonnees(), { banque: S.banque, toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
 }
 
+// Textures Minecraft : document à part (users/{uid}/app-foodix/donnees/textures/mc), lourd et rarement modifié,
+// pour ne pas le renvoyer à chaque coche. Jamais dans le code : le dépôt est public.
+const refTextures = () => doc(db, "users", uid, NOM_APPLI, "donnees", "textures", "mc");
+function sauverTextures() {
+  if (MODE_DEMO) { try { localStorage.setItem("fx-demo-tex", JSON.stringify(MC.tex)); } catch (e) { toast("Stockage plein"); } return; }
+  setDoc(refTextures(), { tex: MC.tex }).catch(erreurEcriture);
+}
 const lirePropo = p => ({ repas: p && Array.isArray(p.repas) ? p.repas : [] });
 
 function erreurEcriture(err) { console.error(err); toast("Échec de l’enregistrement"); }
@@ -157,6 +164,7 @@ function demarrerDemo() {
   S.histo = Array.isArray(d.histo) ? d.histo : [];
   migrerToujours();
   S.idees = d.idees || "";
+  try { MC.tex = JSON.parse(localStorage.getItem("fx-demo-tex")) || {}; } catch (e) { MC.tex = {}; }
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
   S.pret = true;
@@ -200,6 +208,10 @@ function ecouter() {
       migrerToujours();
       rerendre();
     }
+  }, err => console.error(err)));
+  arrets.push(onSnapshot(refTextures(), snap => {
+    const tex = (snap.exists() && snap.data().tex) || {};
+    if (JSON.stringify(tex) !== JSON.stringify(MC.tex)) { MC.tex = tex; rerendre(); }
   }, err => console.error(err)));
 }
 
@@ -1007,7 +1019,7 @@ function nouvelleListe() {
     <div class="rc-l">
       ${bloc("Plats pas encore cuisinés", plats.map(o => ligne("plat", o.i, dishImg(o.r, 22), o.r.nom)))}
       ${bloc("Articles pas encore pris", restants.map(a => ligne("art", a, imgIng(a, 18), a)))}
-      ${bloc("Articles récurrents", rec.map(e => ligne("art", e.nom, ingImg(e.nom, 18, e.icone), e.nom, e.menage ? `<span class="t">Ménager</span>` : "")))}
+      ${bloc("Articles récurrents", rec.map(e => ligne("art", e.nom, ingImg(e.nom, 18, e.icone, e.mc), e.nom, e.menage ? `<span class="t">Ménager</span>` : "")))}
     </div>
     <div class="infos">L'ancienne liste reste dans « Précédente ».</div>
     <div class="pied2"><button class="btn" data-act="liste-zero">Partir de zéro</button><button class="btn pri" data-act="liste-garder">${icone("check")}Nouvelle liste</button></div>
@@ -1106,7 +1118,7 @@ const rayonsDe = menage => menage ? RAYONS_MENAGE.map(r => r[0]) : AISLES_FOOD;
 const libelleRayon = id => { const m = RAYONS_MENAGE.find(r => r[0] === id); return m ? m[1] : aisleLabel(id); };
 const entreeDe = cle => S.banque.find(x => cleStockee(x) === cle);
 // Dessin d'un ingrédient (celui choisi dans la banque, sinon deviné d'après le nom)
-const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return ingImg(nom, px, b && b.icone); };
+const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return ingImg(nom, px, b && b.icone, b && b.mc); };
 
 function banque() {
   const auto = new Map();
@@ -1125,7 +1137,7 @@ function banque() {
   });
   S.banque.forEach(b => {
     const cle = cleStockee(b), e = out.get(cle) || { cle, recettes: [] };
-    Object.assign(e, { nom: b.nom || e.nom, menage: !!b.menage, rec: !!b.rec, rayon: b.rayon, icone: b.icone, pl: b.placard });
+    Object.assign(e, { nom: b.nom || e.nom, menage: !!b.menage, rec: !!b.rec, rayon: b.rayon, icone: b.icone, mc: b.mc, pl: b.placard });
     out.set(cle, e);
   });
   out.forEach(e => {
@@ -1154,9 +1166,9 @@ function majEntree(cle, chg) {
   let b = entreeDe(cle);
   if (!b) { b = { nom: e.nom, cle, menage: e.menage, rec: false }; S.banque.push(b); }
   Object.assign(b, chg);
-  ["rayon", "icone"].forEach(k => { if (!b[k]) delete b[k]; });
+  ["rayon", "icone", "mc"].forEach(k => { if (!b[k]) delete b[k]; });
   // rien de particulier et déjà dans une recette : l'entrée à la main ne sert plus à rien
-  if (!b.rec && !b.menage && !b.rayon && !b.icone && typeof b.placard !== "boolean" && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
+  if (!b.rec && !b.menage && !b.rayon && !b.icone && !b.mc && typeof b.placard !== "boolean" && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
   sauverBanque();
 }
 // Un ancien « Toujours dans la liste » devient des articles récurrents de la banque (une seule fois)
@@ -1285,8 +1297,8 @@ function htmlListeBanque(tous) {
   rayonsDe(men).forEach(r => {
     const l = liste.filter(e => e.rayon === r); if (!l.length) return;
     html += `<div class="rayon"><h3>${esc(libelleRayon(r))}</h3><div class="bq-grid">${l.map(e => S.bq.choisir
-      ? `<button class="bq-t pick ${dansListe.has(e.cle) ? "on" : ""}" data-bq-pick="${esc(e.cle)}" aria-pressed="${dansListe.has(e.cle)}">${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span><span class="cb">${icone("check")}</span></button>`
-      : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
+      ? `<button class="bq-t pick ${dansListe.has(e.cle) ? "on" : ""}" data-bq-pick="${esc(e.cle)}" aria-pressed="${dansListe.has(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc)}<span class="nm">${esc(e.nom)}</span><span class="cb">${icone("check")}</span></button>`
+      : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
   });
   if (!html) html = `<div class="vide" style="padding:28px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : S.bq.placard ? "Rien au placard." : "Rien ici pour l'instant."}</div>`;
   const idees = men && !q && !S.bq.rec && !S.bq.placard ? MENAGER_IDEES.filter(([n]) => !tous.some(e => e.cle === cleBanque(n))) : [];
@@ -1296,7 +1308,10 @@ function htmlListeBanque(tous) {
 
 function htmlFicheIngredient(e) {
   const rayons = rayonsDe(e.menage).map(r => `<button type="button" class="chip ${r === e.rayon ? "on" : ""}" data-bq-rayon="${r}">${esc(libelleRayon(r))}</button>`).join("");
-  const icones = `<button type="button" class="bq-ic auto ${e.icone ? "" : "on"}" data-bq-icone="" aria-label="Automatique">${ingImg(e.court, 24)}<small>Auto</small></button>`
+  // Style Minecraft : on choisit parmi les textures importées (champ « mc », indépendant de l'icône Foodix)
+  const icones = mcActif() ? `<button type="button" class="bq-ic auto ${e.mc ? "" : "on"}" data-bq-mc="" aria-label="Automatique">${ingImg(e.court, 24, e.icone)}<small>Auto</small></button>`
+    + Object.keys(MC.tex).map(k => `<button type="button" class="bq-ic ${e.mc === k ? "on" : ""}" data-bq-mc="${esc(k)}" aria-label="${esc(k.replace(/_/g, " "))}"><img class="px" src="${MC.tex[k]}" width="24" height="24" alt=""></button>`).join("")
+    : `<button type="button" class="bq-ic auto ${e.icone ? "" : "on"}" data-bq-icone="" aria-label="Automatique">${ingImg(e.court, 24)}<small>Auto</small></button>`
     + Object.keys(ICONES).map(k => `<button type="button" class="bq-ic ${e.icone === k ? "on" : ""}" data-bq-icone="${k}" aria-label="${ICONES[k]}">${ingImg(e.court, 24, k)}</button>`).join("");
   const recettes = e.recettes.map(r => `<button class="ligne" data-fiche="${esc(r.id)}">${dishImg(r, 28)}<span class="nm">${esc(r.nom)}</span><span class="chev">${icone("right")}</span></button>`).join("");
   const confirme = S.bq.suppr === e.cle;
@@ -1788,6 +1803,7 @@ function ouvrirReglages() {
     <div class="fi-hd"><h2 class="titre-r" style="flex:1">Réglages</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="sect">Apparence</div>
     <button class="reg" data-act="themes"><span>Thème</span><span class="val">${th[1]} ›</span></button>
+    <button class="reg" data-act="icones"><span>Icônes</span><span class="val">${lireLocal("fx-icones", "foodix") === "minecraft" ? "Minecraft" : "Foodix"} ›</span></button>
     <div class="reg"><span>Animations</span><span class="seg">
       <button class="${anim === "completes" ? "on" : ""}" data-act="anim" data-v="completes">Complètes</button>
       <button class="${anim === "simples" ? "on" : ""}" data-act="anim" data-v="simples">Simples</button></span></div>
@@ -1817,6 +1833,49 @@ function ouvrirThemes() {
     <h2 class="titre-r">Thème</h2>
     ${THEMES.map(([v, nom, desc]) => `<button class="choix ${v === c ? "on" : ""}" data-act="theme" data-v="${v}"><span class="rond"></span><span><b>${nom}</b>${desc ? `<small>${desc}</small>` : ""}</span></button>`).join("")}
   </div></div>`;
+}
+
+// Icônes : style de CET appareil (comme le thème) ; les textures, elles, sont synchronisées
+const mcActif = () => lireLocal("fx-icones", "foodix") === "minecraft" && Object.keys(MC.tex).length > 0;
+function appliquerIcones() { MC.actif = mcActif(); }
+function ouvrirIcones() {
+  const c = lireLocal("fx-icones", "foodix"), n = Object.keys(MC.tex).length;
+  const choix = [["foodix", "Foodix", ""], ["minecraft", "Minecraft", n ? "" : "Importer d'abord des textures"]];
+  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Icônes">
+    <button class="retour" data-act="reglages">‹ Réglages</button>
+    <h2 class="titre-r">Icônes</h2>
+    ${choix.map(([v, nom, desc]) => `<button class="choix ${v === c ? "on" : ""}" data-act="icones-style" data-v="${v}"><span class="rond"></span><span><b>${nom}</b>${desc ? `<small>${desc}</small>` : ""}</span></button>`).join("")}
+    ${n ? `<div class="mc-apercu">${Object.keys(MC.tex).slice(0, 40).map(k => `<img class="px" src="${MC.tex[k]}" width="20" height="20" alt="">`).join("")}</div>` : ""}
+    <div class="sect">Textures</div>
+    <div class="reg" style="justify-content:flex-start"><label class="btn">Importer<input type="file" id="f-tex" accept=".json,.png,application/json,image/png" multiple hidden></label>
+      ${n ? `<button class="btn" data-act="tex-effacer">Effacer</button>` : ""}</div>
+  </div></div>`;
+}
+// Import : un paquet .json ({ textures: { nom: "data:image/png;base64,…" } }) et/ou des .png (nom du fichier = nom de la texture)
+async function importerTextures(fichiers) {
+  const lire = f => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; f.type === "application/json" || /\.json$/i.test(f.name) ? r.readAsText(f) : r.readAsDataURL(f); });
+  const neuf = {};
+  try {
+    for (const f of fichiers) {
+      const v = await lire(f);
+      if (/\.json$/i.test(f.name)) {
+        const p = JSON.parse(v), t = (p && p.textures) || {};
+        Object.entries(t).forEach(([k, d]) => { if (typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 20000) neuf[k] = d; });
+      } else if (/\.png$/i.test(f.name) && v.length < 20000) neuf[f.name.replace(/\.png$/i, "").toLowerCase().replace(/[^a-z0-9_]/g, "_")] = v;
+    }
+  } catch (e) { console.error(e); return toast("Fichier illisible"); }
+  const n = Object.keys(neuf).length;
+  if (!n) return toast("Aucune texture trouvée");
+  MC.tex = Object.assign({}, MC.tex, neuf);
+  sauverTextures();
+  if (lireLocal("fx-icones", "foodix") !== "minecraft") ecrireLocal("fx-icones", "minecraft");  // on vient d'importer : on veut voir le résultat
+  appliquerIcones(); render(); ouvrirIcones();
+  toast(n + " texture" + (n > 1 ? "s" : "") + " importée" + (n > 1 ? "s" : ""));
+}
+function effacerTextures() {
+  const avant = MC.tex;
+  MC.tex = {}; sauverTextures(); appliquerIcones(); render(); ouvrirIcones();
+  toast("Textures effacées", () => { MC.tex = avant; sauverTextures(); appliquerIcones(); render(); if ($(".fiche[aria-label=Icônes]")) ouvrirIcones(); });
 }
 
 // --- Export : un vrai fichier .xlsx propre, au style commun de mes applis ---
@@ -2365,6 +2424,8 @@ document.addEventListener("click", e => {
   if (bqRayon) { majEntree(S.bq.detail, { rayon: bqRayon.dataset.bqRayon }); return majBanque(); }
   const bqIcone = t.closest("[data-bq-icone]");
   if (bqIcone) { majEntree(S.bq.detail, { icone: bqIcone.dataset.bqIcone }); return majBanque(); }
+  const bqMc = t.closest("[data-bq-mc]");
+  if (bqMc) { majEntree(S.bq.detail, { mc: bqMc.dataset.bqMc }); return majBanque(); }
   const bqIdee = t.closest("[data-bq-idee]");
   if (bqIdee) { const e = ajouterBanque(bqIdee.dataset.bqIdee, true, bqIdee.dataset.r); return e ? ouvrirFicheBanque(e.cle) : majBanque(); }
   const retArt = t.closest("[data-retirer-art]");
@@ -2460,6 +2521,9 @@ document.addEventListener("click", e => {
     case "deconnexion": fermer(); S.pret = false; signOut(auth); break;
     case "reglages": ouvrirReglages(); break;
     case "themes": ouvrirThemes(); break;
+    case "icones": ouvrirIcones(); break;
+    case "icones-style": ecrireLocal("fx-icones", el.dataset.v); appliquerIcones(); render(); ouvrirIcones(); break;
+    case "tex-effacer": effacerTextures(); break;
     case "idees": NotesIdees.ouvrir(S.idees, sauverIdees); break;
     case "theme": ecrireLocal("fx-theme", el.dataset.v); appliquerTheme(); ouvrirThemes(); break;
     case "vibr": ecrireLocal("fx-vibr", el.dataset.v); vibrer("coche"); ouvrirReglages(); break;
@@ -2474,6 +2538,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("change", e => {
   if (e.target.id === "fichier" && e.target.files[0]) importerFichier(e.target.files[0]);
+  if (e.target.id === "f-tex" && e.target.files.length) importerTextures([...e.target.files]);
   if (e.target.id === "bq-nom") renommerIngredient(S.bq.detail, e.target.value);
 });
 document.addEventListener("input", e => {
