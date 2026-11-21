@@ -613,25 +613,10 @@ body.pc .accepte { height: 30px; }
 .btn.imp-mode small { font-size: 12px; font-weight: 400; opacity: .8; }
 .btn.imp-mode.sur { background: var(--danger); color: var(--fond, #fff); border-color: var(--danger); }
 
-/* ---------- Liste de courses v0.17.0 : panier, compact, rayons ---------- */
+/* ---------- Liste de courses v0.17 : panier, compact ---------- */
 .compact-b { width: 44px; height: 44px; border: 1px solid var(--trait); background: var(--carte); }
 .compact-b.on { background: var(--accent-doux); border-color: var(--accent); color: var(--accent); }
 .compact-b .ic { width: 18px; height: 18px; }
-/* Barre du haut : boutons fins sans cadre, une seule ligne discrète */
-.outils3 { gap: 2px; margin: -2px 0 10px; }
-.outils3 .btn { height: 32px; border: 0; background: none; color: var(--discret); font-weight: 700; font-size: 12.5px; }
-.outils3 .btn:active { background: var(--creux); }
-.outils3 .btn .ic { width: 15px; height: 15px; }
-/* Titres de rayon : bandeau léger avec un trait d'accent à gauche */
-.rayon { margin-bottom: 10px; }
-.rayon h3 { background: var(--creux); border: 0; border-left: 3px solid var(--accent); border-radius: 4px 7px 7px 4px; padding: 5px 9px; margin: 0 0 2px; color: var(--encre); }
-/* Blocs repliés du bas (placard, panier) : même allure, nombre en pastille à droite */
-.repli summary { list-style: none; display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 7px; background: var(--creux); font: 800 11.5px var(--texte); text-transform: uppercase; letter-spacing: .07em; color: var(--discret); cursor: pointer; }
-.repli summary::-webkit-details-marker { display: none; }
-.repli summary .ic { width: 14px; height: 14px; transition: transform .15s; }
-.repli[open] summary .ic { transform: rotate(90deg); }
-.repli summary b { margin-left: auto; font-weight: 800; letter-spacing: 0; text-transform: none; font-size: 12px; }
-.repli[open] summary { margin-bottom: 2px; }
 .panier .it .cb { border-color: var(--accent); }
 /* Mode compact : lignes serrées (le plat est déjà retiré par le code) */
 .rayon.compact .it { min-height: 36px; padding: 1px 0; gap: 8px; }
@@ -640,4 +625,3 @@ body.pc .accepte { height: 30px; }
 .rayon.compact .it .ib { width: 34px; height: 34px; }
 .rayon.compact .pl { padding: 3px 0; gap: 3px; }
 .rayon.compact .pl-b .chip { height: 30px; }
-.rayon.compact h3 { padding: 3px 9px; }

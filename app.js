@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.17.0";
+const VERSION = "0.17.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -960,7 +960,7 @@ function renderCourses() {
     <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button>
     <button class="ib compact-b ${S.compact ? "on" : ""}" data-act="compact" aria-label="Liste compacte" aria-pressed="${!!S.compact}">${icone("rows")}</button></div><div class="deroul" id="sugg-art"></div></div>
     <div class="outils3"><button class="btn" data-act="parcourir">${icone("grid")}Parcourir</button>
-      <button class="btn" data-act="nouvelle-liste">${icone("file-plus")}Nouvelle</button>
+      <button class="btn" data-act="nouvelle-liste">${icone("file-plus")}Nouvelle liste</button>
       <button class="btn ${listeArchive() ? "" : "inactif"}" data-act="archive" aria-label="Liste précédente">${icone("history")}Précédente</button></div>`;  const finir = () => { // remet le champ comme il était
     const c = $("#ajout-art"); if (!c || !tape) return;
     c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
@@ -1008,9 +1008,9 @@ function renderCourses() {
   // Ce que j'ai peut-être déjà : replié en bas. Pour chacun : « je l'ai » ou « il me faut ».
   if (placard.length) {
     const aVerifier = placard.filter(e => !dispo[e.cle]).length;
-    html += `<details class="rayon repli placard${cp}" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard<b>${aVerifier ? aVerifier + " à vérifier" : placard.length}</b></summary>${tri(placard).map(lignePlacard).join("")}</details>`;
+    html += `<details class="rayon placard${cp}" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier ? aVerifier + " à vérifier" : placard.length})</summary>${tri(placard).map(lignePlacard).join("")}</details>`;
   }
-  if (panier.length) html += `<details class="rayon repli panier${cp}" ${S.panierOuvert ? "open" : ""}><summary>${icone("right")}Dans le panier<b>${panier.length}</b></summary>${tri(panier).map(ligne).join("")}</details>`;
+  if (panier.length) html += `<details class="rayon placard panier${cp}" ${S.panierOuvert ? "open" : ""}><summary>${icone("right")}Dans le panier (${panier.length})</summary>${tri(panier).map(ligne).join("")}</details>`;
   if (nbMasques) html += `<button class="lien-btn remettre" data-act="remettre-masques">${icone("refresh")}${nbMasques} ingrédient${nbMasques > 1 ? "s" : ""} retiré${nbMasques > 1 ? "s" : ""} · remettre</button>`;
   zl().innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
   if (html) zl().insertAdjacentHTML("beforeend", `<div class="astuce">Glisse un article vers la gauche pour le retirer</div>`);
@@ -3050,6 +3050,6 @@ if (MODE_DEMO) demarrerDemo(); else demarrerFirebase();
 // Le placard replié/ouvert reste comme on l'a laissé quand la liste se redessine
 document.addEventListener("toggle", e => {
   const c = e.target.classList; if (!c) return;
-  if (c.contains("placard")) S.placardOuvert = e.target.open;
-  if (c.contains("panier")) S.panierOuvert = e.target.open;
+  if (c.contains("panier")) S.panierOuvert = e.target.open;   // le panier porte aussi la classe placard (même style)
+  else if (c.contains("placard")) S.placardOuvert = e.target.open;
 }, true);

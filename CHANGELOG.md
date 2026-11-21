@@ -1,5 +1,8 @@
 # Foodix — journal des nouveautés
 
+## 0.17.1 — 2026-11-22
+- Retour à l'allure de la 0.16 (barre Parcourir / Nouvelle liste / Précédente, titres de rayon, blocs du bas). Le panier et la liste compacte restent.
+
 ## 0.17.0 — 2026-11-21
 - Liste de courses : un article coché quitte son rayon et part dans le bloc « Dans le panier », replié tout en bas (on l'ouvre pour décocher).
 - Bouton « liste compacte » (icône à droite du champ d'ajout) : sans le nom des plats, lignes plus serrées. Gardé sur chaque appareil.
