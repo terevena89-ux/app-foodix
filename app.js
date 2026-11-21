@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.8";
+const VERSION = "0.9.9";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -956,12 +956,14 @@ function ajouterALaListe(texte, menage = false) {
   m.ajouts = m.ajouts || [];
   if (!m.ajouts.some(a => cleBanque(a) === cleBanque(nom))) m.ajouts.push(nom);
   ecrireMenu(m);
+  return connu ? null : cleBanque(avecQte ? it.name : v);  // clé du nouvel article de la banque
 }
 function ajouterArticle(menage = false) {
   const champ = $("#ajout-art"), v = champ.value.trim();
   if (!v) return champ.focus();
-  ajouterALaListe(v, menage); vibrer("ajout");
+  const nouveau = ajouterALaListe(v, menage); vibrer("ajout");
   champ.value = ""; flip("#main .it", renderCourses);
+  if (nouveau) return ouvrirFicheBanque(nouveau, true);  // article inconnu : on règle tout de suite rayon, icône…
   $("#ajout-art").focus(); // on peut enchaîner les ajouts au clavier
 }
 // Retirer un ingrédient venu d'une recette (glissement) : il est caché de cette liste, « remettre » le fait revenir
@@ -1225,7 +1227,7 @@ const MENAGER_IDEES = [["Liquide vaisselle", "m-vaisselle"], ["Tablettes lave-va
 function ouvrirBanque(choisir = false) {
   fermer();
   fermerBanque();
-  S.bq.detail = null; S.bq.suppr = null; S.bq.ouvert = true; S.bq.scroll = 0; S.bq.choisir = choisir;
+  S.bq.detail = null; S.bq.suppr = null; S.bq.ouvert = true; S.bq.scroll = 0; S.bq.choisir = choisir; S.bq.seule = false;
   const ec = document.createElement("div");
   ec.id = "bq-ecran"; ec.className = "bq-ecran";
   ec.innerHTML = `<div class="bq-in">
@@ -1243,8 +1245,15 @@ function fermerBanque() {
   const ec = $("#bq-ecran"); if (ec) ec.remove();
   S.bq.ouvert = false; S.bq.detail = null;
 }
+// Fiche d'un article qu'on vient d'ajouter. seule = ouverte depuis les Courses : Retour referme tout.
+function ouvrirFicheBanque(cle, seule = false) {
+  if (!S.bq.ouvert) ouvrirBanque();
+  S.bq.seule = seule; S.bq.suppr = null; S.bq.detail = cle;
+  majBanque();
+}
 function retourBanque() {
-  if (S.bq.detail) { S.bq.detail = null; S.bq.suppr = null; return majBanque(); }
+  if (S.bq.detail && !S.bq.seule) { S.bq.detail = null; S.bq.suppr = null; return majBanque(); }
+  S.bq.seule = false;
   fermerBanque(); render();
 }
 
@@ -1315,7 +1324,7 @@ function ajouterDepuisBanque() {
   }
   const e = ajouterBanque(v, S.bq.onglet === "menage");
   if (S.bq.choisir) ajouterALaListe(e.nom, e.menage);
-  champ.value = ""; majBanque(); champ.focus();
+  champ.value = ""; ouvrirFicheBanque(e.cle);
   toast((S.bq.choisir ? "Ajouté à la liste et dans « " : "Ajouté dans « ") + libelleRayon(e.rayon) + " »");
 }
 // Mode « Parcourir » : toucher un article l'ajoute à la liste en cours, retoucher l'enlève
@@ -2357,7 +2366,7 @@ document.addEventListener("click", e => {
   const bqIcone = t.closest("[data-bq-icone]");
   if (bqIcone) { majEntree(S.bq.detail, { icone: bqIcone.dataset.bqIcone }); return majBanque(); }
   const bqIdee = t.closest("[data-bq-idee]");
-  if (bqIdee) { ajouterBanque(bqIdee.dataset.bqIdee, true, bqIdee.dataset.r); return majBanque(); }
+  if (bqIdee) { const e = ajouterBanque(bqIdee.dataset.bqIdee, true, bqIdee.dataset.r); return e ? ouvrirFicheBanque(e.cle) : majBanque(); }
   const retArt = t.closest("[data-retirer-art]");
   if (retArt) return retirerArticle(retArt.dataset.retirerArt);
   const msq = t.closest("[data-masquer]");  // croix au survol de la souris (PC) : comme glisser au doigt

@@ -1,5 +1,8 @@
 # Foodix — journal des nouveautés
 
+## 0.9.9 — 2026-11-20
+- Un ingrédient tout juste ajouté (par le + de la banque, une idée de produit ménager, ou un article nouveau tapé dans les Courses) ouvre directement sa fiche de réglage : rayon, icône, récurrent, placard. Depuis les Courses, Retour ramène à la liste.
+
 ## 0.9.8 — 2026-11-17
 - La saison (Été / Hiver) est recalculée à chaque fois, et plus seulement à l'ouverture de l'appli.
 - Nettoyage : code qui ne servait plus retiré.
