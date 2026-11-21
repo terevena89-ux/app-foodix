@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.16.0";
+const VERSION = "0.17.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -418,6 +418,7 @@ const estPC = () => largePC.matches;
 const zid = () => estPC() ? "#pzone" : "#main";   // où dessiner Courses / Menu
 const zl = () => $(zid());
 S.ponglet = lireLocal("fx-ponglet", "courses");
+S.compact = lireLocal("fx-compact", "") === "1";   // liste de courses compacte (cet appareil)
 let panneauOuvert = lireLocal("fx-panneau", "1") === "1";
 
 function appliquerPC() {
@@ -956,11 +957,11 @@ function renderCourses() {
   // ce qui était tapé dans le champ d'ajout reste (la liste peut se redessiner quand l'autre appareil modifie quelque chose)
   const champ = $("#ajout-art"), tape = champ ? champ.value : "", avaitFocus = !!champ && document.activeElement === champ;
   const ajout = `<div class="ajout-art"><div class="srow"><label class="cherche">${icone("plus")}<input id="ajout-art" placeholder="Ajouter un article" autocomplete="off" enterkeyhint="done"></label>
-    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button></div><div class="deroul" id="sugg-art"></div></div>
+    <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button>
+    <button class="ib compact-b ${S.compact ? "on" : ""}" data-act="compact" aria-label="Liste compacte" aria-pressed="${!!S.compact}">${icone("rows")}</button></div><div class="deroul" id="sugg-art"></div></div>
     <div class="outils3"><button class="btn" data-act="parcourir">${icone("grid")}Parcourir</button>
-      <button class="btn" data-act="nouvelle-liste">${icone("file-plus")}Nouvelle liste</button>
-      <button class="btn ${listeArchive() ? "" : "inactif"}" data-act="archive" aria-label="Liste précédente">${icone("history")}Précédente</button></div>`;
-  const finir = () => { // remet le champ comme il était
+      <button class="btn" data-act="nouvelle-liste">${icone("file-plus")}Nouvelle</button>
+      <button class="btn ${listeArchive() ? "" : "inactif"}" data-act="archive" aria-label="Liste précédente">${icone("history")}Précédente</button></div>`;  const finir = () => { // remet le champ comme il était
     const c = $("#ajout-art"); if (!c || !tape) return;
     c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
   };
@@ -975,12 +976,17 @@ function renderCourses() {
     if (e.placard && !e.ajout && dispo[e.cle] !== "non") placard.push(e);
     else (groupes[e.rayon] ??= []).push(e);
   });
-  const coches = {}; // pour le tri : seulement les lignes entièrement prises
-  Object.values(groupes).flat().concat(placard).forEach(e => { if (e.pris === true) coches[e.cle] = true; });
+  // Entièrement pris : quitte son rayon pour le bloc « Dans le panier », replié tout en bas
+  const coches = {}, panier = [];
+  for (const a in groupes) {
+    groupes[a] = groupes[a].filter(e => e.pris === true ? (coches[e.cle] = true, panier.push(e), false) : true);
+    if (!groupes[a].length) delete groupes[a];
+  }
   // Une partie déjà prise : on affiche ce qui manque, et « 2 déjà pris » sous le nom
   const partiel = e => typeof e.pris === "number" && e.pris > 0;
   const reste = e => partiel(e) ? e.qte - e.pris : e.qte;
-  const sousNom = e => [partiel(e) ? fmtQty(e.pris, e.unite) + " déjà pris" : "", ...e.recettes].filter(Boolean).join(" · ");
+  // Mode compact : sans les plats, mais « déjà pris » reste (sinon la quantité affichée trompe)
+  const sousNom = e => [partiel(e) ? fmtQty(e.pris, e.unite) + " déjà pris" : "", ...(S.compact ? [] : e.recettes)].filter(Boolean).join(" · ");
   const ligne = e => `<div class="it ${coches[e.cle] ? "fait" : ""}" data-k="${esc(e.cle)}" ${e.ajout ? `data-ajout="${esc(e.nom)}"` : ""}>
       <button class="cb" data-coche="${esc(e.cle)}" aria-label="${coches[e.cle] ? "Pas encore pris" : "Pris"}">${coches[e.cle] ? icone("check") : ""}</button>
       ${imgIng(e.nom, 18)}<span class="w" ${e.ajout ? `data-art-fiche="${esc(e.nom)}"` : ""}><span class="nm">${esc(e.nom)}</span>${sousNom(e) ? `<span class="for">${esc(sousNom(e))}</span>` : ""}</span>
@@ -990,20 +996,21 @@ function renderCourses() {
       ${!e.ajout ? `<button class="ib souris" data-masquer="${esc(e.cle)}" aria-label="Retirer de cette liste">${icone("x")}</button>` : ""}
       ${e.placard && !e.ajout ? `<button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui" aria-label="Finalement je l'ai (remettre au placard)">${icone("box")}</button>` : ""}</div>`;
   const lignePlacard = e => `<div class="pl ${dispo[e.cle] === "oui" ? "fait" : ""}">
-      <div class="pl-h">${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></div>
+      <div class="pl-h">${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length && !S.compact ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></div>
       <div class="pl-b"><button class="chip ${dispo[e.cle] === "oui" ? "on" : ""}" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui">${icone("check")}Je l'ai</button>
         <button class="chip" data-act="dispo" data-cle="${esc(e.cle)}" data-v="non">${icone("cart")}Il me faut</button></div></div>`;
-  // Dans chaque rayon : ce qui reste à prendre en haut, ce qui est déjà pris en bas
-  const tri = l => l.sort((a, b) => (coches[a.cle] ? 1 : 0) - (coches[b.cle] ? 1 : 0) || a.nom.localeCompare(b.nom, "fr"));
+  const tri = l => l.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const cp = S.compact ? " compact" : "";
   let html = "";
   AISLE_ORDER.filter(a => groupes[a]).forEach(a => {
-    html += `<div class="rayon"><h3>${aisleLabel(a)}</h3>${tri(groupes[a]).map(ligne).join("")}</div>`;
+    html += `<div class="rayon${cp}"><h3>${aisleLabel(a)}</h3>${tri(groupes[a]).map(ligne).join("")}</div>`;
   });
-  // Ce que j'ai peut-être déjà : replié tout en bas. Pour chacun : « je l'ai » ou « il me faut ».
+  // Ce que j'ai peut-être déjà : replié en bas. Pour chacun : « je l'ai » ou « il me faut ».
   if (placard.length) {
     const aVerifier = placard.filter(e => !dispo[e.cle]).length;
-    html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier ? aVerifier + " à vérifier" : placard.length})</summary>${tri(placard).map(lignePlacard).join("")}</details>`;
+    html += `<details class="rayon repli placard${cp}" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard<b>${aVerifier ? aVerifier + " à vérifier" : placard.length}</b></summary>${tri(placard).map(lignePlacard).join("")}</details>`;
   }
+  if (panier.length) html += `<details class="rayon repli panier${cp}" ${S.panierOuvert ? "open" : ""}><summary>${icone("right")}Dans le panier<b>${panier.length}</b></summary>${tri(panier).map(ligne).join("")}</details>`;
   if (nbMasques) html += `<button class="lien-btn remettre" data-act="remettre-masques">${icone("refresh")}${nbMasques} ingrédient${nbMasques > 1 ? "s" : ""} retiré${nbMasques > 1 ? "s" : ""} · remettre</button>`;
   zl().innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
   if (html) zl().insertAdjacentHTML("beforeend", `<div class="astuce">Glisse un article vers la gauche pour le retirer</div>`);
@@ -1036,7 +1043,7 @@ function majSuggArt() {
 }
 const fermerSuggArt = () => { const b = $("#sugg-art"); if (b) b.innerHTML = ""; };
 
-// Cocher : la case se remplit avec un rebond, le nom se barre, puis l'article descend en bas de son rayon
+// Cocher : la case se remplit avec un rebond, le nom se barre, puis l'article part dans « Dans le panier »
 let cocheT;
 function cocher(cle, btn) {
   const m = menuEnCours(); if (!m) return;
@@ -2855,6 +2862,7 @@ document.addEventListener("click", e => {
     case "bq-placard-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { placard: !e.placard }); majBanque(); } break; }
     case "dispo": vibrer(el.dataset.v === "oui" ? "coche" : "pas"); definirDispo(el.dataset.cle, el.dataset.v); break;
     case "remettre-masques": remettreMasques(); break;
+    case "compact": S.compact = !S.compact; ecrireLocal("fx-compact", S.compact ? "1" : ""); vibrer("pas"); renderCourses(); break;
     case "bq-retour": retourBanque(); break;
     case "bq-rec-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { rec: !e.rec }); majBanque(); } break; }
     case "bq-suppr":
@@ -3040,4 +3048,8 @@ if (MODE_DEMO) window.foodixTest = { S, lireBanque, fusionBanque, banque, classe
 if (MODE_DEMO) demarrerDemo(); else demarrerFirebase();
 
 // Le placard replié/ouvert reste comme on l'a laissé quand la liste se redessine
-document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("placard")) S.placardOuvert = e.target.open; }, true);
+document.addEventListener("toggle", e => {
+  const c = e.target.classList; if (!c) return;
+  if (c.contains("placard")) S.placardOuvert = e.target.open;
+  if (c.contains("panier")) S.panierOuvert = e.target.open;
+}, true);

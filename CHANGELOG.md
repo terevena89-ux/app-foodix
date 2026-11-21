@@ -1,5 +1,10 @@
 # Foodix — journal des nouveautés
 
+## 0.17.0 — 2026-11-21
+- Liste de courses : un article coché quitte son rayon et part dans le bloc « Dans le panier », replié tout en bas (on l'ouvre pour décocher).
+- Bouton « liste compacte » (icône à droite du champ d'ajout) : sans le nom des plats, lignes plus serrées. Gardé sur chaque appareil.
+- Barre Parcourir / Nouvelle / Précédente plus fine, titres de rayon en bandeau, blocs du bas (placard, panier) avec leur nombre à droite.
+
 ## 0.16.0 — 2026-11-21
 - Liste de courses : un article tapé à la main ne va plus tout seul dans la banque. Bouton « + Banque » dans la liste déroulante, ou icône carotte sur la ligne de l'article.
 - Les propositions pendant la saisie s'affichent en liste déroulante, avec l'icône de chaque ingrédient.
