@@ -1,5 +1,12 @@
 # Foodix — journal des nouveautés
 
+## 0.11.0 — 2026-11-21
+- Beaucoup plus de textures possibles (paquet de 1 376 : Minecraft, Farmer's Delight, Expanded et Ocean's Delight, Pam's HarvestCraft 2).
+- Correspondances revues pour presque tous les ingrédients et les 106 recettes (ail, poivron, courgette, fromage, curry, quiche, paella…).
+- Choix de texture : case « Chercher… » (en français ou en anglais) et grille qui défile.
+- Recette : menu ⋯ › Icône pour choisir sa texture à la main (style Minecraft).
+- Textures rangées en plusieurs morceaux dans Firebase (un document ne dépasse pas 1 Mo).
+
 ## 0.10.0 — 2026-11-21
 - Icônes au style Minecraft (facultatif) : Réglages › Icônes › Foodix / Minecraft (choix gardé par appareil).
 - Textures importées depuis un paquet `.json` ou des `.png`, gardées dans Firebase (synchronisées, jamais dans le dépôt public). Effacer avec Annuler.

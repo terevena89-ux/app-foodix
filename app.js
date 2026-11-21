@@ -19,11 +19,11 @@ let initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedir
   collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch;
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
-import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, MC } from "./pixel.js";
+import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, MC, mcCherche } from "./pixel.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -118,10 +118,20 @@ function sauverBanque() {
 
 // Textures Minecraft : document à part (users/{uid}/app-foodix/donnees/textures/mc), lourd et rarement modifié,
 // pour ne pas le renvoyer à chaque coche. Jamais dans le code : le dépôt est public.
-const refTextures = () => doc(db, "users", uid, NOM_APPLI, "donnees", "textures", "mc");
+// Découpé en morceaux mc, mc1, mc2… : un document Firestore ne dépasse pas 1 Mo.
+const collTextures = () => collection(db, "users", uid, NOM_APPLI, "donnees", "textures");
+let nbMorceaux = 0;
 function sauverTextures() {
   if (MODE_DEMO) { try { localStorage.setItem("fx-demo-tex", JSON.stringify(MC.tex)); } catch (e) { toast("Stockage plein"); } return; }
-  setDoc(refTextures(), { tex: MC.tex }).catch(erreurEcriture);
+  const morceaux = [{}]; let taille = 0;
+  Object.entries(MC.tex).forEach(([k, v]) => {
+    if (taille + v.length > 500000) { morceaux.push({}); taille = 0; }
+    morceaux[morceaux.length - 1][k] = v; taille += v.length + k.length;
+  });
+  const nom = i => i ? "mc" + i : "mc";
+  morceaux.forEach((tex, i) => setDoc(doc(collTextures(), nom(i)), { tex }).catch(erreurEcriture));
+  for (let i = morceaux.length; i < nbMorceaux; i++) deleteDoc(doc(collTextures(), nom(i))).catch(erreurEcriture);
+  nbMorceaux = morceaux.length;
 }
 const lirePropo = p => ({ repas: p && Array.isArray(p.repas) ? p.repas : [] });
 
@@ -210,8 +220,10 @@ function ecouter() {
       rerendre();
     }
   }, err => console.error(err)));
-  arrets.push(onSnapshot(refTextures(), snap => {
-    const tex = (snap.exists() && snap.data().tex) || {};
+  arrets.push(onSnapshot(collTextures(), snap => {
+    const tex = {};
+    snap.docs.forEach(d => Object.assign(tex, d.data().tex || {}));
+    nbMorceaux = Math.max(nbMorceaux, snap.docs.length);
     if (JSON.stringify(tex) !== JSON.stringify(MC.tex)) { MC.tex = tex; appliquerIcones(); rerendre(); }
   }, err => console.error(err)));
 }
@@ -1310,8 +1322,7 @@ function htmlListeBanque(tous) {
 function htmlFicheIngredient(e) {
   const rayons = rayonsDe(e.menage).map(r => `<button type="button" class="chip ${r === e.rayon ? "on" : ""}" data-bq-rayon="${r}">${esc(libelleRayon(r))}</button>`).join("");
   // Style Minecraft : on choisit parmi les textures importées (champ « mc », indépendant de l'icône Foodix)
-  const icones = mcActif() ? `<button type="button" class="bq-ic auto ${e.mc ? "" : "on"}" data-bq-mc="" aria-label="Automatique">${ingImg(e.court, 24, e.icone)}<small>Auto</small></button>`
-    + Object.keys(MC.tex).map(k => `<button type="button" class="bq-ic ${e.mc === k ? "on" : ""}" data-bq-mc="${esc(k)}" aria-label="${esc(k.replace(/_/g, " "))}"><img class="px" src="${MC.tex[k]}" width="24" height="24" alt=""></button>`).join("")
+  const icones = mcActif() ? htmlChoixTex("bq-mc", e.mc, ingImg(e.court, 24, e.icone))
     : `<button type="button" class="bq-ic auto ${e.icone ? "" : "on"}" data-bq-icone="" aria-label="Automatique">${ingImg(e.court, 24)}<small>Auto</small></button>`
     + Object.keys(ICONES).map(k => `<button type="button" class="bq-ic ${e.icone === k ? "on" : ""}" data-bq-icone="${k}" aria-label="${ICONES[k]}">${ingImg(e.court, 24, k)}</button>`).join("");
   const recettes = e.recettes.map(r => `<button class="ligne" data-fiche="${esc(r.id)}">${dishImg(r, 28)}<span class="nm">${esc(r.nom)}</span><span class="chev">${icone("right")}</span></button>`).join("");
@@ -1320,7 +1331,7 @@ function htmlFicheIngredient(e) {
   return `<div class="bq-fiche">
     <div class="champ"><label for="bq-nom">Nom</label><input class="saisie" id="bq-nom" value="${esc(e.nom)}" autocomplete="off" enterkeyhint="done"></div>
     <div class="champ"><span class="lbl">Rayon</span><div class="pastilles">${rayons}</div></div>
-    <div class="champ"><span class="lbl">Icône</span><div class="bq-icones">${icones}</div></div>
+    <div class="champ"><span class="lbl">Icône</span>${mcActif() ? icones : `<div class="bq-icones">${icones}</div>`}</div>
     <button type="button" class="btn ${e.rec ? "pri" : ""}" data-act="bq-rec-fiche" style="justify-content:flex-start">${icone("refresh")}${e.rec ? "Récurrent : proposé à chaque nouvelle liste" : "Proposer à chaque nouvelle liste"}</button>
     <button type="button" class="btn ${e.placard ? "pri" : ""}" data-act="bq-placard-fiche" style="justify-content:flex-start">${icone("box")}${e.placard ? "Souvent au placard : à vérifier à chaque liste" : "Souvent au placard ?"}</button>
     ${n ? `<div class="champ"><span class="lbl">Recettes</span><div>${recettes}</div></div>` : ""}
@@ -1457,6 +1468,7 @@ function ouvrirFiche(id) {
     <div class="menu3" id="menu3" hidden>
       <button data-act="modifier">${icone("pen")}Modifier</button>
       <button data-act="dupliquer">${icone("copy")}Dupliquer</button>
+      ${mcActif() ? `<button data-act="rec-icone">${icone("grid")}Icône</button>` : ""}
       ${estBase(r) ? "" : `<button data-act="variante">${icone("plus")}Nouvelle variante</button>`}
       <button class="danger" data-act="supprimer">${icone("trash")}Supprimer</button></div>
     ${fam.length > 1 ? `<div class="variantes">${fam.map(x => `<button class="chip ${x.id === r.id ? "on" : ""}" data-fiche="${esc(x.id)}" data-variante>${x.vege ? icone("leaf") : ""}${esc(x.variante || x.nom)}</button>`).join("")}</div>` : ""}
@@ -1852,6 +1864,32 @@ function ouvrirIcones() {
       ${n ? `<button class="btn" data-act="tex-effacer">Effacer</button>` : ""}</div>
   </div></div>`;
 }
+// Choix d'une texture (fiche ingrédient, ou recette) : case Chercher + grille qui défile.
+// Seule la grille est redessinée pendant la frappe (sinon le clavier se ferme).
+let texCtx = { attr: "", actuel: "", auto: "" }, texQ = "";
+function grilleTex() {
+  const { attr, actuel, auto } = texCtx;
+  return `<button type="button" class="bq-ic auto ${actuel ? "" : "on"}" data-${attr}="" aria-label="Automatique">${auto}<small>Auto</small></button>`
+    + mcCherche(texQ).map(k => `<button type="button" class="bq-ic ${actuel === k ? "on" : ""}" data-${attr}="${esc(k)}" aria-label="${esc(k.replace(/[_-]/g, " "))}"><img class="px" src="${MC.tex[k]}" width="24" height="24" alt=""></button>`).join("");
+}
+function htmlChoixTex(attr, actuel, auto) {
+  if (texCtx.attr !== attr) texQ = "";
+  texCtx = { attr, actuel: actuel || "", auto };
+  return `<input class="saisie tex-q" id="tex-q" placeholder="Chercher… (fromage, curry…)" value="${esc(texQ)}" autocomplete="off" enterkeyhint="search">
+    <div class="bq-icones tex-grille" id="tex-grille">${grilleTex()}</div>`;
+}
+// Recette : écran à part, ouvert depuis le menu ⋯ de la fiche
+function ouvrirTexRecette(id) {
+  const r = S.recettes.find(x => x.id === id); if (!r) return;
+  delete $("#modal").dataset.recette;  // sinon une synchro rouvrirait la fiche par-dessus
+  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Icône">
+    <button class="retour" data-fiche="${esc(id)}">‹ ${esc(r.nom)}</button>
+    <h2 class="titre-r">Icône</h2>
+    ${htmlChoixTex("rec-mc", r.mc, dishImg(Object.assign({}, r, { mc: "" }), 24))}
+  </div></div>`;
+  $("#modal").dataset.texrec = id;
+}
+
 // Import : un paquet .json ({ textures: { nom: "data:image/png;base64,…" } }) et/ou des .png (nom du fichier = nom de la texture)
 async function importerTextures(fichiers) {
   const lire = f => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; f.type === "application/json" || /\.json$/i.test(f.name) ? r.readAsText(f) : r.readAsDataURL(f); });
@@ -2425,6 +2463,12 @@ document.addEventListener("click", e => {
   if (bqRayon) { majEntree(S.bq.detail, { rayon: bqRayon.dataset.bqRayon }); return majBanque(); }
   const bqIcone = t.closest("[data-bq-icone]");
   if (bqIcone) { majEntree(S.bq.detail, { icone: bqIcone.dataset.bqIcone }); return majBanque(); }
+  const recMc = t.closest("[data-rec-mc]");
+  if (recMc) {
+    const id = $("#modal").dataset.texrec, r = S.recettes.find(x => x.id === id); if (!r) return;
+    if (recMc.dataset.recMc) r.mc = recMc.dataset.recMc; else delete r.mc;
+    ecrireRecette(r); delete $("#modal").dataset.texrec; render(); return ouvrirFiche(id);
+  }
   const bqMc = t.closest("[data-bq-mc]");
   if (bqMc) { majEntree(S.bq.detail, { mc: bqMc.dataset.bqMc }); return majBanque(); }
   const bqIdee = t.closest("[data-bq-idee]");
@@ -2492,6 +2536,7 @@ document.addEventListener("click", e => {
     case "nouvelle": nouvelle(); break;
     case "menu3": $("#menu3").hidden = !$("#menu3").hidden; break;
     case "modifier": modifier(); break;
+    case "rec-icone": ouvrirTexRecette($("#modal").dataset.recette); break;
     case "dupliquer": dupliquer(); break;
     case "variante": nouvelleVariante(); break;
     case "assembler": ouvrirAssembler($("#modal").dataset.recette); break;
@@ -2548,6 +2593,7 @@ document.addEventListener("input", e => {
   if (e.target.id === "q-choix") majChoix();
   if (e.target.id === "ajout-art") majSuggArt();
   if (e.target.id === "q-bq") majBanque();
+  if (e.target.id === "tex-q") { texQ = e.target.value; $("#tex-grille").innerHTML = grilleTex(); }
   if (e.target.id === "cp-ing") majSuggCp();
   // En tapant un ingrédient, son petit dessin se met à jour
   const li = e.target.closest && e.target.closest("#f-ings .li");

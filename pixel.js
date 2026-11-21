@@ -204,35 +204,89 @@ function mainColor(spr){
    elles sont importées par l'utilisateur et gardées dans Firebase. app.js remplit MC.tex et MC.actif.
    Ordre : texture choisie dans la banque > nom de l'ingrédient (MC_ING) > famille du dessin Foodix (MC_FAMILLE) > dessin Foodix. */
 const MC={actif:false, tex:{}};
+// Noms de textures : Minecraft / Farmer's Delight / Expanded & Ocean's Delight / Pam's HarvestCraft 2 (suffixe -pam en cas de doublon).
+// "" = rien d'adapté : on garde le dessin Foodix (et on bloque les règles plus générales en dessous).
 const MC_ING=[
- [/pommes? de terre|patate/,"potato"],[/tomates? concass|coulis|sauce tomate|passata|pulpe de tomate/,"tomato_sauce"],[/tomate/,"tomato"],
- [/oignon|echalote/,"onion"],[/carotte/,"carrot"],[/betterave/,"beetroot"],[/potimarron|courges?( |$)|citrouille|potiron/,"pumpkin_slice"],
- [/champignon|morille|cepe|girolle/,"brown_mushroom"],[/chou-fleur|chou fleur/,""],[/chou/,"cabbage"],[/salade|romaine|roquette|epinard|laitue|mache|feuille/,"cabbage_leaf"],
- [/pomme|grenade/,"apple"],[/melon|pasteque/,"melon_slice"],[/fruits rouges|framboise|fraise|myrtille|cassis|groseille|cerise/,"sweet_berries"],
- [/(^| )oeuf/,"egg"],[/lait de coco/,""],[/lait/,"milk_bottle"],[/poulet|dinde|nugget|cordon/,"chicken"],
- [/lardon|bacon/,"bacon"],[/jambon/,"ham"],[/steak hache|viande hachee|(^| )hache/,"minced_beef"],[/agneau|mouton|gigot/,"mutton"],[/lapin/,"rabbit"],
- [/porc|echine|filet mignon|petit sale|travers/,"porkchop"],[/boeuf|veau|steak|bavette|viande/,"beef"],
- [/saumon/,"salmon"],[/cabillaud|morue|colin|lieu|merlu|poisson/,"cod"],
- [/pates brisee|pate brisee|pate feuilletee|pate a tarte|pate sablee/,"pie_crust"],[/pates|spaghetti|tagliatelle|nouille|orzo|crozet|gnocchi|lasagne|penne|ravioles/,"raw_pasta"],
- [/riz|arborio/,"rice"],[/pain|baguette|crouton|brioche/,"bread"],[/farine/,"wheat"],[/(^| )sucre/,"sugar"],[/(^| )sel( |$)/,"sugar"],[/miel/,"honey_bottle"],
- [/chocolat|cacao/,"cocoa_beans"],[/algue|nori|wakame/,"dried_kelp"],[/bouillon/,"bone_broth"],[/huile|vinaigre/,"glass_bottle"],[/biscuit|cookie/,"cookie"],
+ [/patate douce/,"sweetpotato"],[/chataigne|(^| )olives?( |$)|peche|cognac/,""],[/cordon/,"chickencordonbleu"],[/vin blanc/,"greengrapejuice"],[/(^| )vin( |$)/,"grapejuice"],[/pommes? de terre|patate/,"potato"],
+ [/tomates? concass|coulis|sauce tomate|passata|pulpe de tomate/,"tomato_sauce"],[/tomate/,"tomato"],
+ [/ciboulette|cebette|oignon vert/,"scallion"],[/oignon|echalote/,"onion"],[/(^| )ail( |$)/,"garlic"],
+ [/carotte/,"carrot"],[/betterave/,"beetroot"],[/potimarron|courges?( |$)|citrouille|potiron/,"pumpkin_slice"],[/navet/,"turnip"],
+ [/poireau/,"leek"],[/courgette/,"zucchini"],[/aubergine/,"eggplant"],[/concombre/,"cucumber"],[/cornichon/,"gherkin"],
+ [/poivron/,"bellpepper"],[/piment|chili/,"chilipepper"],[/chou-fleur|chou fleur/,"cauliflower"],[/brocoli/,"broccoli"],[/chou/,"cabbage"],
+ [/epinard/,"spinach"],[/roquette|salade|romaine|laitue|mache/,"lettuce"],[/celeri/,"celery"],[/radis/,"radish"],[/asperge/,"asparagus"],
+ [/artichaut/,"artichoke"],[/(^| )mais( |$)/,"corn"],[/sauce soja|nuoc/,"soysauce"],[/pousses? de soja|soja/,"soybean"],
+ [/petits? pois/,"peas"],[/pois chiche/,"chickpea"],[/lentille/,"lentil"],[/haricot/,"bean"],
+ [/morille|champignons? noir|cepe|girolle/,"brown_mushroom"],[/champignon/,"whitemushroom"],[/truffe/,"truffle"],
+ [/gingembre/,"ginger"],[/menthe|basilic|persil|coriandre|aneth|estragon|sauge|thym|herbe|bouquet garni|laurier|romarin/,"spiceleaf"],
+ [/grenade|pomme/,"apple"],[/melon/,"cantaloupe"],[/citron vert/,""],[/citron/,"lemon"],[/fraise/,"strawberry"],[/framboise/,"raspberry"],
+ [/myrtille/,"blueberry"],[/canneberge|cranberr/,"cranberries"],[/raisin/,"grape"],[/ananas/,"pineapple"],[/kiwi/,"kiwi"],
+ [/fruits rouges|cassis|groseille|cerise/,"sweet_berries"],[/rhubarbe/,"rhubarb"],
+ [/beurre de cacah/,"peanut_butter"],[/cacah|arachide/,"peanut"],[/sesame/,"sesameseeds"],
+ [/(^| )oeuf/,"egg"],[/lait de coco/,""],[/lait/,"milk_bottle"],[/yaourt/,"yogurt"],[/creme|fromage blanc|fromage frais/,"cream"],[/beurre/,"butter"],
+ [/feta|chevre/,"goat_cheese_slice"],[/mozzarella/,"cheese_slice"],[/parmesan|gruyere|cheddar|reblochon|roquefort|bleu|comte|emmental|fromage/,"cheese"],
+ [/tofu/,"firmtofu"],[/saumon fume/,"salmon_slice"],[/saumon/,"salmon"],[/surimi/,"imitationcrabsticks"],[/thon|crevette/,""],
+ [/morue|cabillaud|colin|lieu|merlu|poisson/,"cod"],[/nugget/,"chickennugget"],[/poulet|dinde/,"chicken"],
+ [/lardon|bacon/,"bacon"],[/jambon cru/,"smoked_ham"],[/jambon/,"ham"],[/chorizo/,"chorizo"],
+ [/merguez|chipolata|saucisse|boudin/,"sausage"],[/porc hache/,"groundpork"],[/steak hache|boeuf hache|viande hachee|(^| )hache/,"minced_beef"],
+ [/agneau|mouton|gigot/,"mutton"],[/lapin/,"rabbit"],[/rillette/,""],
+ [/porc|echine|filet mignon|petit sale/,"porkchop"],[/boeuf|veau|steak|bavette|viande|plat de cotes/,"beef"],
+ [/pate brisee|pate feuilletee|pate a tarte|pate sablee/,"pie_crust"],[/nouille|vermicelle/,"noodles"],[/ravioles?|raviolis?/,"dumplings"],
+ [/pates|spaghetti|tagliatelle|orzo|crozet|penne|lasagne|gnocchi|macaroni/,"raw_pasta"],[/galettes? de riz/,"ricecake"],[/riz|arborio/,"rice"],
+ [/semoule/,"couscous"],[/chapelure|farine/,"flour"],[/pain de mie|crouton/,"toast"],[/tortilla/,"tortilla"],[/pains? burger|bun/,"briochebun"],
+ [/pain|baguette|brioche/,"bread"],[/(^| )sucre/,"sugar"],[/(^| )sel( |$)/,"salt"],[/poivre/,"blackpepper"],[/cannelle/,"cinnamon"],
+ [/muscade/,"groundnutmeg"],[/cinq epices|5 epices/,"fivespice"],[/curry/,"currypowder"],
+ [/epice|cumin|paprika|safran|anis|zaatar|ras el hanout/,"garammasala"],[/miel/,"honey_bottle"],[/mayo/,"mayonaise"],[/moutarde/,"mustard"],
+ [/ketchup|sauce burger/,"ketchup"],[/sauce cesar|vinaigrette/,"saladdressing"],[/chocolat|cacao/,"cocoa_beans"],
+ [/bouillon|(^| )cube/,"stock"],[/huile/,"cookingoil"],[/vinaigre/,"vinegar"],[/cidre/,"applecider"],
+ [/algue|nori|wakame/,"dried_kelp"],[/biscuit|cookie/,"cookie"],
 ];
-const MC_FAMILLE={patate:"potato",tomate:"tomato",oignon:"onion",carotte:"carrot",champignon:"brown_mushroom",salade:"cabbage_leaf",pomme:"apple",
-  oeuf:"egg",lait:"milk_bottle",poulet:"chicken",viande:"beef",saucisse:"bacon",poisson:"cod",pates:"raw_pasta",riz:"rice",pain:"bread",bouteille:"glass_bottle"};
+// Famille du dessin Foodix -> texture (quand le nom n'a rien donné, ou quand une icône Foodix a été choisie à la main)
+const MC_FAMILLE={patate:"potato",tomate:"tomato",oignon:"onion",ail:"garlic",carotte:"carrot",courgette:"zucchini",poivron:"bellpepper",
+  champignon:"whitemushroom",salade:"lettuce",herbe:"spiceleaf",pomme:"apple",citron:"lemon",oeuf:"egg",fromage:"cheese",lait:"milk_bottle",
+  beurre:"butter",poulet:"chicken",viande:"beef",saucisse:"sausage",poisson:"cod",pates:"raw_pasta",riz:"rice",pain:"bread",bouteille:"cookingoil",noix:"peanut"};
+// Plats : d'après le nom de la recette (du plus précis au plus général), sinon d'après son type (MC_TYPE)
 const MC_PLAT=[
- [/burger/,"hamburger"],[/croque|sandwich/,"chicken_sandwich"],[/wrap|fajita|tacos|burrito/,"mutton_wrap"],[/ratatouille/,"ratatouille"],
- [/parmentier|hachi/,"shepherds_pie"],[/soupe a l.oignon|soupe d.oignon/,"onion_soup"],[/(soupe|veloute|potage).*(potiron|potimarron|courge|citrouille)/,"pumpkin_soup"],
- [/ramen|pho|soupe.*nouille/,"noodle_soup"],[/(soupe|bouillon).*poulet/,"chicken_soup"],[/soupe|veloute|potage|gaspacho/,"vegetable_soup"],
- [/bouillabaisse|marmite.*poisson|soupe de poisson/,"fish_stew"],[/bourguignon|pot-au-feu|ragout|mijote|daube|carbonade|blanquette|chili|navarin/,"beef_stew"],
- [/riz (saute|cantonais)|fried rice|nasi/,"fried_rice"],[/risotto/,"mushroom_rice"],[/salade de fruits/,"fruit_salad"],
- [/oeufs? (au plat|brouill)|omelette|chakchouka/,"fried_egg"],[/poulet roti|roti/,"roast_chicken"],[/saumon/,"grilled_salmon"],[/cabillaud|morue|poisson/,"baked_cod_stew"],
- [/bolo|boulette/,"pasta_with_meatballs"],[/wok|pad thai|nouille/,"vegetable_noodles"],[/pates|spaghetti|tagliatelle|lasagne|penne|carbonara/,"pasta_with_meatballs"],
- [/tarte aux pommes|tarte tatin/,"apple_pie"],[/quiche|tarte/,"pumpkin_pie"],[/pommes? de terre farcie/,"stuffed_potato"],[/(courge|potimarron) farci/,"stuffed_pumpkin"],
- [/chou farci/,"cabbage_rolls"],[/sushi|maki/,"kelp_roll_slice"],[/nems|rouleau/,"salmon_roll"],[/gyoza|ravioli|dumpling/,"dumplings"],
- [/brochette|kebab/,"barbecue_stick"],[/jambon/,"honey_glazed_ham"],[/steak|frites/,"steak_and_potatoes"],[/gateau|cake/,"cake_slice"],
+ [/quiche/,"asparagusquiche"],[/ravioli|raviole|gyoza/,"dumplings"],[/bowls?( |$)/,"pokebowl"],[/tomate.mozza|caprese/,"capresesalad"],[/burger/,"hamburger"],[/croque/,"grilledcheeseandham"],[/sandwich.*(cornichon|rillette)/,"hamsweetpicklesandwich"],
+ [/sandwich.*saucisse/,"hotdog"],[/sandwich/,"blt"],[/rouleau/,"springroll"],[/nems/,"eggroll"],[/wrap|fajita|tacos|burrito/,"fajitaburrito"],
+ [/ratatouille/,"ratatouille"],[/parmentier|hachi/,"shepherds_pie"],[/soupe a l.oignon|soupe d.oignon/,"onion_soup"],
+ [/(soupe|veloute|potage).*(potiron|potimarron|courge|citrouille)/,"pumpkin_soup"],[/pho/,"pho"],[/ramen/,"ramen"],
+ [/(soupe|bouillon).*poulet/,"chicken_soup"],[/soupe|veloute|potage|gaspacho/,"vegetablesoup"],
+ [/bourguignon|ragout|daube|carbonade/,"beef_stew"],[/pot-au-feu|pot au feu/,"potroast"],[/blanquette|navarin|mijote/,"stew"],
+ [/chili/,"chili"],[/curry/,"chickencurry"],[/couscous|semoule|taboule/,"couscous"],[/paella/,"chickenpaella"],
+ [/riz (saute|cantonn)|cantonais|nasi/,"fried_rice"],[/risotto/,"mushroomrisotto"],
+ [/salade (de )?fruits/,"fruit_salad"],[/salade cesar/,"ceasarsalad"],[/salade.*chevre/,"goat_cheese_beetroot_salad"],[/salade.*grenade/,"citrussalad"],
+ [/coleslaw/,"coleslaw"],[/salade|bowls?( |$)/,"mixedsalad"],
+ [/oeuf dur/,"boiledegg"],[/mimosa/,"deviledegg"],[/oeufs? brouille/,"scrambledegg"],[/oeufs? (sur|au) (le )?plat/,"fried_egg"],[/omelette/,"omelet"],
+ [/chakchouka/,"friedgreentomatoes"],[/cordon bleu/,"chickencordonbleu"],[/nugget/,"chickennugget"],[/poulet roti/,"roast_chicken"],
+ [/poulet marine/,"teriyakichicken"],[/porc.*moutarde/,"spicymustardpork"],[/porc.*cidre/,"apricotglazedpork"],[/porc.*epices/,"charsiu"],
+ [/filet mignon/,"cooked_porkchop"],[/magret|canard/,"garlicsteak"],[/petit sale/,"peaandhamsoup"],[/saucisse.*lentille/,"sausagebeanmelt"],
+ [/merguez|chipo|boudin/,"bangersandmash"],[/steak.*frite/,"steakandchips"],[/saumon/,"grilled_salmon"],[/brandade|morue/,"fishcakes"],
+ [/poisson|cabillaud/,"fishdinner"],[/tofu/,"veggiestirfry"],[/mozza.*frit/,"mozzerellasticks"],
+ [/nouille.*cacah|pad thai/,"padthai"],[/nouille|wok/,"chickenchowmein"],[/bolo|boulette/,"spagettiandmeatballs"],
+ [/carbonara/,"spaghettidinner"],[/crevette/,"squid_ink_pasta"],[/morille|champignon.*poulet|poulet.*champignon/,"chickenalfredo"],
+ [/chou.fleur/,"ovenroastedcauliflower"],
+ [/grat+in.*courgette/,"zucchinibake"],[/dauphinois|croziflette/,"potatoesobrien"],[/grat+in/,"hotdishcasserole"],
+ [/gnocchi/,"potatoandcheesepirogi"],[/orzo|(^| )pates?( |$)|spaghetti|tagliatelle/,"spagetti"],
+ [/cake sale/,"cornbread"],[/tarte aux pommes|tatin/,"apple_pie"],[/tarte/,"pumpkin_pie"],
+ [/legumes farcis|farci/,"stuffedpepper"],[/champignon/,"stuffedmushroom"],[/epinard/,"spicygreens"],[/poireau/,"leekbaconsoup"],
+ [/aubergine|courgette/,"zestyzucchini"],[/petits pois/,"peasandcelery"],[/avocat/,"guacamole"],[/betterave/,"pickledbeets"],
+ [/puree de carotte|carotte/,"glazedcarrots"],[/puree/,"mashedpotatoes"],[/patates au four|four/,"roastpotatoes"],[/rissole/,"hash"],
+ [/houmous/,"hummus"],[/mayo/,"mayonaise"],[/fromage blanc|tzatziki/,"yogurt"],[/thon/,"fishcakes"],[/chataigne/,"candiedpecans"],
+ [/sauce|beurre blanc|bearnaise|marinade/,"gravy"],
 ];
-const MC_TYPE={plate:"steak_and_potatoes",bowl:"beef_stew",salad:"mixed_salad",pan:"fried_rice",gratin:"shepherds_pie",tart:"pumpkin_pie",
-  burger:"hamburger",sandwich:"chicken_sandwich",wrap:"mutton_wrap",sauce:"tomato_sauce",roast:"roast_chicken",fish:"grilled_salmon"};
+const MC_TYPE={plate:"steak_and_potatoes",bowl:"beef_stew",salad:"mixed_salad",pan:"fried_rice",gratin:"hotdishcasserole",tart:"pumpkin_pie",
+  burger:"hamburger",sandwich:"blt",wrap:"mutton_wrap",sauce:"gravy",roast:"roast_chicken",fish:"grilled_salmon"};
+// Recherche dans le choix de texture : nom anglais de la texture, ou mot français d'une règle ci-dessus (« fromage » -> cheese…)
+function mcCherche(q){
+  q=norm(q); const cles=Object.keys(MC.tex); if(!q) return cles;
+  const out=new Set(), qe=q.replace(/ /g,"");
+  cles.forEach(k=>{ if(k.replace(/[_-]/g,"").includes(qe)) out.add(k); });
+  const mots=new Set();
+  [...MC_ING, ...MC_PLAT].forEach(([re,t])=>{ if(t && MC.tex[t] && (re.test(q) || re.source.includes(q))) { out.add(t); if(MC_ING.some(r=>r[1]===t) && t.length>3) mots.add(t.replace(/_.*$/,"")); } });
+  // « fromage » -> cheese -> aussi goat_cheese_slice, grilled_cheese…
+  if(mots.size) cles.forEach(k=>{ for(const m of mots) if(k.includes(m)) { out.add(k); break; } });
+  return [...out];
+}
 // Texture Minecraft d'un ingrédient (nom de la texture), ou "" s'il n'y en a pas : on garde alors le dessin Foodix
 function mcIng(name, icone, mc){
   if(!MC.actif) return "";
@@ -270,7 +324,8 @@ function dishType(r){
 // des 3 premiers ingrédients qui ne viennent pas du placard.
 function dishImg(r, px = 40) {
   if (MC.actif) {
-    const m = MC_PLAT.find(([re]) => re.test(r.id)), t = m && MC.tex[m[1]] ? m[1] : MC_TYPE[dishType(r)];
+    const n = norm(r.nom || r.id.replace(/-/g, " ")), m = MC_PLAT.find(([re]) => re.test(n));
+    const t = r.mc && MC.tex[r.mc] ? r.mc : m && MC.tex[m[1]] ? m[1] : MC_TYPE[dishType(r)];
     if (MC.tex[t]) return mcBalise(t, px, "px dish");
   }
   const key = "d|" + r.id + "|" + (r.ingredients || []).join(";");
@@ -291,4 +346,4 @@ function dishImg(r, px = 40) {
   return `<img class="px dish" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
 
-export { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType, MC, mcIng };
+export { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType, MC, mcIng, mcCherche };
