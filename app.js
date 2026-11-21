@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.11.0";
+const VERSION = "0.11.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -1239,12 +1239,6 @@ function supprimerIngredient(cle) {
   });
 }
 
-// Produits ménagers courants, proposés d'un geste (nom, rayon)
-const MENAGER_IDEES = [["Liquide vaisselle", "m-vaisselle"], ["Tablettes lave-vaisselle", "m-vaisselle"], ["Éponges", "m-vaisselle"],
-  ["Lessive", "m-linge"], ["Adoucissant", "m-linge"], ["Nettoyant multi-usage", "m-nettoyage"], ["Produit WC", "m-nettoyage"], ["Javel", "m-nettoyage"],
-  ["Essuie-tout", "m-papier"], ["Papier toilette", "m-papier"], ["Sacs poubelle", "m-papier"], ["Papier aluminium", "m-papier"], ["Film alimentaire", "m-papier"],
-  ["Savon mains", "m-hygiene"], ["Dentifrice", "m-hygiene"], ["Gel douche", "m-hygiene"]];
-
 // La banque est une vraie fenêtre (plein écran), pas un pop-up : liste par rayon sur 2 colonnes.
 // Deux façons de l'ouvrir :
 //   - Recettes › « Ingrédients » : toucher un ingrédient ouvre sa fiche (nom, rayon, icône, recettes, supprimer) ;
@@ -1314,8 +1308,6 @@ function htmlListeBanque(tous) {
       : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
   });
   if (!html) html = `<div class="vide" style="padding:28px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : S.bq.placard ? "Rien au placard." : "Rien ici pour l'instant."}</div>`;
-  const idees = men && !q && !S.bq.rec && !S.bq.placard ? MENAGER_IDEES.filter(([n]) => !tous.some(e => e.cle === cleBanque(n))) : [];
-  if (idees.length) html += `<div class="rayon"><h3>Idées</h3><div class="sugg">${idees.map(([n, r]) => `<button class="chip nouv" data-bq-idee="${esc(n)}" data-r="${r}">${icone("plus")}${esc(n)}</button>`).join("")}</div></div>`;
   return html;
 }
 
@@ -2471,8 +2463,6 @@ document.addEventListener("click", e => {
   }
   const bqMc = t.closest("[data-bq-mc]");
   if (bqMc) { majEntree(S.bq.detail, { mc: bqMc.dataset.bqMc }); return majBanque(); }
-  const bqIdee = t.closest("[data-bq-idee]");
-  if (bqIdee) { const e = ajouterBanque(bqIdee.dataset.bqIdee, true, bqIdee.dataset.r); return e ? ouvrirFicheBanque(e.cle) : majBanque(); }
   const retArt = t.closest("[data-retirer-art]");
   if (retArt) return retirerArticle(retArt.dataset.retirerArt);
   const msq = t.closest("[data-masquer]");  // croix au survol de la souris (PC) : comme glisser au doigt

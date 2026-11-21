@@ -1,5 +1,8 @@
 # Foodix — journal des nouveautés
 
+## 0.11.1 — 2026-11-21
+- Banque › Produits ménagers : la rangée « Idées » (produits proposés en pointillés) est retirée.
+
 ## 0.11.0 — 2026-11-21
 - Beaucoup plus de textures possibles (paquet de 1 376 : Minecraft, Farmer's Delight, Expanded et Ocean's Delight, Pam's HarvestCraft 2).
 - Correspondances revues pour presque tous les ingrédients et les 106 recettes (ail, poivron, courgette, fromage, curry, quiche, paella…).
