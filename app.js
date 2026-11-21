@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.13.0";
+const VERSION = "0.14.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -2133,7 +2133,8 @@ function depuisCase(type, k, v) {
 }
 
 function lireRecettes(wb) {
-  const ws = wb.worksheets.find(w => norm(w.name).startsWith("recette")) || wb.worksheets[0];
+  // Pas d'onglet « Recettes » : la 1re feuille, sauf si c'est une feuille de banque (fichier d'ingrédients seuls)
+  const ws = wb.worksheets.find(w => norm(w.name).startsWith("recette")) || wb.worksheets.find((w, i) => i === 0 && !/^(banque|ingredient|produits menager)/.test(norm(w.name)));
   if (!ws) return [];
   const parEntete = {};
   COLONNES.forEach(c => { parEntete[norm(c[1])] = c; });
@@ -2143,8 +2144,9 @@ function lireRecettes(wb) {
   ws.eachRow((rang, n) => {
     if (n === 1) return;
     const o = {};
-    cols.forEach((c, i) => { if (!c) return; const v = depuisCase(c[3], c[0], valeurCase(rang.getCell(i).value)); if (v !== undefined) o[c[0]] = v; });
-    if (o.nom) out.push(o);
+    const vides = [];  // colonnes présentes mais vides : effacées en mode « Tout remplacer »
+    cols.forEach((c, i) => { if (!c) return; const v = depuisCase(c[3], c[0], valeurCase(rang.getCell(i).value)); if (v !== undefined) o[c[0]] = v; else vides.push(c[0]); });
+    if (o.nom) out.push(Object.assign(o, { __vides: vides }));
   });
   return out;
 }
@@ -2182,9 +2184,21 @@ function lireUneBanque(ws, menageF, out) {
     out.push(e);
   });
 }
-// Applique la banque relue : articles inconnus ajoutés, réglages des autres mis à jour (simuler = juste compter)
-function fusionBanque(lignes, simuler) {
-  let ajout = 0, maj = 0;
+// Applique la banque relue (simuler = juste compter). Modes :
+//   ajout     : seulement les articles inconnus
+//   fusion    : + réglages des articles connus mis à jour (une case vide ne change rien)
+//   remplacer : la banque devient celle du fichier ; ce qui n'y est pas perd ses réglages (ou disparaît s'il n'est dans aucune recette).
+//               La texture Minecraft choisie à la main (pas dans l'Excel) est gardée.
+function fusionBanque(lignes, simuler, mode = "fusion") {
+  let ajout = 0, maj = 0, retire = 0, efface = 0;
+  let ancien = null;
+  if (mode === "remplacer") {
+    // retire = ajoutés à la main (disparaissent) ; efface = ingrédients de recettes qui reprennent leurs réglages automatiques
+    const dansFichier = new Set(lignes.map(l => cleBanque(l.nom)));
+    const deRecettes = new Set(banque().filter(e => e.recettes.length).map(e => e.cle));
+    S.banque.filter(b => !dansFichier.has(cleStockee(b))).forEach(b => { if (deRecettes.has(cleStockee(b))) efface++; else retire++; });
+    if (!simuler) { ancien = S.banque; S.banque = []; }
+  }
   const tous = new Map(banque().map(e => [e.cle, e]));
   lignes.forEach(l => {
     const cle = cleBanque(l.nom), e = tous.get(cle);
@@ -2195,8 +2209,9 @@ function fusionBanque(lignes, simuler) {
       if (l.rayon && rayonsDe(b.menage).includes(l.rayon)) b.rayon = l.rayon;
       if (typeof l.placard === "boolean" && !b.menage) b.placard = l.placard;
       if (l.icone) b.icone = l.icone;
-      S.banque.push(b); return;
+      S.banque.push(b); tous.set(cle, b); return;
     }
+    if (mode === "ajout") return;
     const chg = {};
     // Même ingrédient écrit autrement (« carotte » pour « carottes », « Pain » -> « pain ») : on garde la nouvelle écriture
     if (l.nom !== e.nom) Object.assign(chg, { nom: l.nom, nomFixe: true });
@@ -2213,21 +2228,46 @@ function fusionBanque(lignes, simuler) {
     Object.assign(b, chg);
     if (b.icone === null) delete b.icone;
   });
-  if (!simuler && (ajout || maj)) sauverBanque();
-  return { ajout, maj };
+  if (ancien) {
+    const connus = new Set(banque().map(e => e.cle));
+    ancien.filter(b => b.mc && connus.has(cleStockee(b))).forEach(b => {
+      const cle = cleStockee(b);
+      let n = entreeDe(cle);
+      if (!n) { const e = banque().find(x => x.cle === cle); n = { nom: e.nom, cle, menage: e.menage, rec: false }; S.banque.push(n); }
+      n.mc = b.mc;
+    });
+  }
+  if (!simuler && (ajout || maj || ancien)) sauverBanque();
+  return { ajout, maj, retire, efface };
 }
 
-function fusion(lignes, simuler) {
+// Recettes relues. Modes : ajout (nouvelles seulement), fusion (+ mises à jour, une case vide ne change rien),
+// remplacer (les recettes deviennent celles du fichier : cases vides effacées, recettes absentes supprimées).
+function fusion(lignes, simuler, mode = "fusion") {
   const data = S.recettes.map(r => Object.assign({}, r));
   const parId = {}, parNomN = {};
   data.forEach((r, i) => { parId[r.id] = i; parNomN[norm(r.nom)] = i; });
-  const touchees = new Set();
+  const touchees = new Set(), vues = new Set();
+  const TYPES = Object.fromEntries(COLONNES.map(c => [c[0], c[3]]));
   let ajout = 0, maj = 0;
-  lignes.forEach(o => {
+  lignes.forEach(ligne => {
+    const o = Object.assign({}, ligne), vides = o.__vides || [];
+    delete o.__vides;
     let i = o.id && parId[o.id] !== undefined ? parId[o.id] : parNomN[norm(o.nom)];
     if ("suggeres" in o) { o.ingredientsSource = o.suggeres ? "suggestion" : "app"; delete o.suggeres; }
     if (i !== undefined) {
+      vues.add(i);
+      if (mode === "ajout") return;
+      const avant = JSON.stringify(data[i]);
       Object.keys(o).forEach(k => { if (k !== "id") data[i][k] = o[k]; });
+      if (mode === "remplacer") vides.forEach(k => {
+        if (k === "id" || k === "nom" || TYPES[k] === "nombre") return;  // une recette garde toujours ses portions
+        if (k === "suggeres") data[i].ingredientsSource = "app";
+        else if (TYPES[k] === "oui") data[i][k] = false;
+        else if (TYPES[k] === "liste") data[i][k] = [];
+        else delete data[i][k];
+      });
+      if (JSON.stringify(data[i]) === avant) return;  // rien n'a changé
       maj++;
     } else {
       let id = o.id ? idDe(o.id) : idDe(o.nom);
@@ -2235,19 +2275,23 @@ function fusion(lignes, simuler) {
       const r = Object.assign({ vege: false, favori: false, prep: false, date: false, portions: 2, ingredients: [], ingredientsSource: "app" }, o, { id });
       data.push(r); i = data.length - 1;
       parId[id] = parNomN[norm(r.nom)] = i;
+      vues.add(i);
       ajout++;
     }
     touchees.add(i);
   });
+  const aSuppr = mode === "remplacer" ? data.filter((r, i) => !vues.has(i)) : [];
   if (!simuler) {
     const t = Date.now();
     const aEcrire = [...touchees].map(i => Object.assign(data[i], { maj: t }));
-    S.recettes = data;
+    S.recettes = data.filter(r => !aSuppr.includes(r));
     ecrireRecettes(aEcrire);
+    aSuppr.forEach(r => effacerRecette(r.id));
   }
-  return { ajout, maj };
+  return { ajout, maj, suppr: aSuppr.length };
 }
 
+// Après lecture : un résumé par mode et trois boutons. « Tout remplacer » demande un 2e appui (bouton rouge avec le décompte).
 async function importerFichier(fichier) {
   const box = $("#imp");
   box.innerHTML = `<div class="infos">Lecture du fichier…</div>`;
@@ -2255,23 +2299,46 @@ async function importerFichier(fichier) {
     const wb = await lireClasseur(fichier);
     const lignes = lireRecettes(wb), bq = lireBanque(wb);
     if (!lignes.length && !bq.length) { box.innerHTML = `<div class="infos">Aucune recette trouvée (il faut une colonne « Nom »).</div>`; return; }
-    const r = fusion(lignes, true), b = fusionBanque(bq, true);
-    importEnAttente = { lignes, bq };
-    const pl = (n, mot) => n + " " + mot + (n > 1 ? "s" : "");
-    box.innerHTML = `<div class="infos">Recettes : ${pl(r.ajout, "nouvelle")}, ${pl(r.maj, "mise")} à jour${bq.length ? `<br>Banque d'ingrédients : ${b.ajout} ${b.ajout > 1 ? "nouveaux articles" : "nouvel article"}, ${pl(b.maj, "réglage")} ${b.maj > 1 ? "changés" : "changé"}` : ""}</div>
-      <div class="pied" style="margin-top:8px"><button class="btn pri" data-act="confirmer-import">Importer</button></div>`;
+    const res = {};
+    ["ajout", "fusion", "remplacer"].forEach(m => { res[m] = { r: fusion(lignes, true, m), b: fusionBanque(bq, true, m) }; });
+    importEnAttente = { lignes, bq, res };
+    const n = (x, un, plusieurs) => x + " " + (x > 1 ? plusieurs : un);
+    const detail = m => {
+      const { r, b } = res[m], t = [];
+      if (r.ajout) t.push("+" + n(r.ajout, "recette", "recettes"));
+      if (b.ajout) t.push("+" + n(b.ajout, "article", "articles"));
+      if (m !== "ajout") { if (r.maj) t.push(n(r.maj, "recette modifiée", "recettes modifiées")); if (b.maj) t.push(n(b.maj, "article modifié", "articles modifiés")); }
+      if (m === "remplacer") { if (r.suppr) t.push(n(r.suppr, "recette supprimée", "recettes supprimées")); if (b.retire) t.push(n(b.retire, "article retiré", "articles retirés")); if (b.efface) t.push(n(b.efface, "réglage effacé", "réglages effacés")); }
+      return t.join(" · ") || "Rien ne change";
+    };
+    const bouton = (m, titre, cls = "") => `<button class="btn imp-mode ${cls}" data-act="confirmer-import" data-mode="${m}"><b>${titre}</b><small>${detail(m)}</small></button>`;
+    box.innerHTML = `<div class="imp-modes">${bouton("ajout", "Ajouter le nouveau", "pri")}${bouton("fusion", "Fusionner")}${bouton("remplacer", "Tout remplacer", "danger-btn")}</div>`;
   } catch (e) {
     box.innerHTML = `<div class="infos">Impossible de lire ce fichier (${esc(e && e.message || e)}).</div>`;
   }
 }
-function confirmerImport() {
+function confirmerImport(el) {
   if (!importEnAttente) return;
-  const { lignes, bq } = importEnAttente;
-  const r = lignes.length ? fusion(lignes, false) : { ajout: 0, maj: 0 };
-  const b = fusionBanque(bq, false);  // après les recettes : les ingrédients des nouvelles recettes sont déjà connus
+  const mode = el && el.dataset.mode || "fusion";
+  const { lignes, bq, res } = importEnAttente;
+  if (mode === "remplacer" && !el.dataset.sur) {
+    const { r, b } = res.remplacer, t = [];
+    if (r.suppr) t.push(`supprimer ${r.suppr} recette${r.suppr > 1 ? "s" : ""}`);
+    if (b.retire) t.push(`retirer ${b.retire} article${b.retire > 1 ? "s" : ""}`);
+    if (b.efface) t.push(`effacer ${b.efface} réglage${b.efface > 1 ? "s" : ""}`);
+    el.dataset.sur = "1";
+    el.classList.add("sur");
+    el.innerHTML = `<b>Confirmer</b><small>${t.length ? t.join(", ") : "Tout remplacer"}</small>`;
+    return;
+  }
+  const r = lignes.length || mode === "remplacer" ? fusion(lignes, false, mode) : { ajout: 0, maj: 0, suppr: 0 };
+  const b = fusionBanque(bq, false, mode);  // après les recettes : les ingrédients des nouvelles recettes sont déjà connus
   importEnAttente = null;
   fermer(); render();
-  toast(`Import terminé : ${r.ajout + r.maj} recettes${b.ajout + b.maj ? `, ${b.ajout + b.maj} articles de la banque` : ""}`);
+  const t = [`${r.ajout + r.maj} recettes`];
+  if (r.suppr) t.push(`${r.suppr} supprimées`);
+  if (b.ajout + b.maj) t.push(`${b.ajout + b.maj} articles`);
+  toast("Import terminé : " + t.join(", "));
 }
 
 /* ---------- 7 bis. Gestes au doigt : changer d'onglet, retirer un article ---------- */
@@ -2748,7 +2815,7 @@ document.addEventListener("click", e => {
     case "vibr": ecrireLocal("fx-vibr", el.dataset.v); vibrer("coche"); ouvrirReglages(); break;
     case "anim": ecrireLocal("fx-anim", el.dataset.v); document.documentElement.dataset.anim = el.dataset.v; ouvrirReglages(); break;
     case "exporter": exporter(el); break;
-    case "confirmer-import": confirmerImport(); break;
+    case "confirmer-import": confirmerImport(el); break;
     case "favori": basculerFavori(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
     case "fermer": if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste [data-k]", renderRecettes); } fermerDoux(); break;

@@ -1,5 +1,10 @@
 # Foodix — journal des nouveautés
 
+## 0.14.0 — 2026-11-21
+- Import Excel en trois façons : « Ajouter le nouveau » (rien d’existant n’est touché), « Fusionner » (ajoute et met à jour, comme avant) ou « Tout remplacer » (recettes et banque deviennent celles du fichier ; ce qui manque est supprimé). Chaque bouton montre ce qui va changer ; « Tout remplacer » demande un 2e appui.
+- Produits ménagers : nouveau rayon « Divers maison » (piles, ampoules, allumettes, bougies…).
+- Import d’un fichier qui ne contient que des ingrédients : il n’est plus lu par erreur comme des recettes.
+
 ## 0.13.0 — 2026-11-21
 - Export Excel plus lisible : un dessin devant chaque recette, ingrédient et produit (celui affiché sur l'appareil : Foodix ou Minecraft), toutes les lignes de la même hauteur, image et nom figés à gauche, colonnes resserrées.
 - Recettes groupées par catégorie, ingrédients et produits groupés par rayon (une ligne de titre par groupe).

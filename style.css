@@ -591,3 +591,9 @@ body.pc .pas { height: 32px; border-radius: 6px; }
 body.pc .pas button { width: 28px; height: 30px; font-size: 15px; }
 body.pc .ctl .btn.pri { flex: 0 1 auto; height: 32px; font-size: 13px; order: 0; margin-left: auto; }
 body.pc .accepte { height: 30px; }
+
+/* Import Excel : trois façons d'importer (« Tout remplacer » = 2e appui sur le bouton rouge) */
+.imp-modes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.btn.imp-mode { flex-direction: column; align-items: flex-start; justify-content: center; height: auto; min-height: 44px; padding: 6px 12px; gap: 1px; text-align: left; }
+.btn.imp-mode small { font-size: 12px; font-weight: 400; opacity: .8; }
+.btn.imp-mode.sur { background: var(--danger); color: var(--fond, #fff); border-color: var(--danger); }

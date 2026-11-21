@@ -71,7 +71,7 @@ const AISLES = [
   ["fruits","Fruits",/(^| )(pomme|citron|avocat|melon|grenade|peche|poire|banane|fraise|orange|raisin|cerise|kiwi|mangue|ananas|framboise|abricot|clementine|prune|myrtille|datte|figue)/],
 ];
 // Produits ménagers : catégories
-const RAYONS_MENAGE = [["m-vaisselle","Vaisselle"],["m-linge","Linge"],["m-nettoyage","Nettoyage"],["m-papier","Papier et sacs"],["m-hygiene","Hygiène"]];
+const RAYONS_MENAGE = [["m-vaisselle","Vaisselle"],["m-linge","Linge"],["m-nettoyage","Nettoyage"],["m-papier","Papier et sacs"],["m-hygiene","Hygiène"],["m-maison","Divers maison"]];
 // Ordre des rayons dans la liste (à peu près celui d'un magasin, surgelés à la fin)
 const AISLES_FOOD = ["fruits","legumes","boucherie","cremerie","boulangerie","conserves","epicerie","sucre","epices","boissons","surgeles"];
 // « Souvent déjà au placard » : une option d'un ingrédient (pas un rayon). Départ deviné d'après le nom.
@@ -85,6 +85,7 @@ function rayonMenage(name){
   if(/lessive|adoucissant|linge|detachant/.test(n)) return "m-linge";
   if(/papier|sac|essuie|alu|film|mouchoir/.test(n)) return "m-papier";
   if(/savon|shampoing|dentifrice|gel douche|deodorant|coton/.test(n)) return "m-hygiene";
+  if(/(^| )piles?( |$)|ampoule|allumette|bougie|briquet|ruban adhesif|scotch|(^| )colle/.test(n)) return "m-maison";
   return "m-nettoyage";
 }
 function aisleLabel(id){
@@ -207,7 +208,21 @@ const MC={actif:false, tex:{}};
 // Noms de textures : Minecraft / Farmer's Delight / Expanded & Ocean's Delight / Pam's HarvestCraft 2 (suffixe -pam en cas de doublon).
 // "" = rien d'adapté : on garde le dessin Foodix (et on bloque les règles plus générales en dessous).
 const MC_ING=[
- [/patate douce/,"sweetpotato"],[/chataigne|(^| )olives?( |$)|peche|cognac/,""],[/cordon/,"chickencordonbleu"],[/vin blanc/,"greengrapejuice"],[/(^| )vin( |$)/,"grapejuice"],[/pommes? de terre|patate/,"potato"],
+ // Épices sèches : même pot à épices (Zomboid) recoloré pour toutes -> famille cohérente. Herbes fraîches : plus bas (spiceleaf).
+ [/poivre en grains|baies? de poivre/,"pz_epice_poivre_grains"],[/poivre/,"pz_epice_poivre"],[/(^| )sel( |$)|fleur de sel/,"pz_epice_sel"],
+ [/paprika/,"pz_epice_paprika"],[/epices? chili|chili en poudre/,"pz_epice_chili"],[/piment/,"pz_epice_piment"],[/cumin/,"pz_epice_cumin"],
+ [/cannelle/,"pz_epice_cannelle"],[/muscade/,"pz_epice_muscade"],[/cinq epices|5 epices/,"pz_epice_cinq_epices"],
+ [/epices? couscous|ras el hanout/,"pz_epice_couscous"],[/safran/,"pz_epice_safran"],[/anis|badiane/,"pz_epice_anis"],[/zaatar/,"pz_epice_zaatar"],
+ [/basilic seche/,"pz_epice_basilic"],[/thym/,"pz_epice_thym"],[/herbes de provence|origan/,"pz_epice_herbes_provence"],
+ [/menthe seche/,"pz_epice_menthe"],[/bouquet garni/,"pz_epice_bouquet_garni"],
+ // Conserves, bocaux, sauces : vraies icônes Zomboid
+ [/tomates? concass|coulis|sauce tomate|passata|pulpe de tomate/,"pz_cannedtomato"],[/cornichon/,"pz_pickles"],[/pate de curry/,"pz_jar_full"],
+ [/beurre de cacah/,"pz_peanutbutter"],[/sauce soja/,"pz_soysauce"],[/nuoc/,"pz_ricevinegar"],[/vinaigre/,"pz_vinegar"],
+ [/sauce burger|ketchup/,"pz_bbqsauce"],[/sauce cesar/,"pz_dip_ranch"],[/moutarde/,"pz_mustard"],[/mayo/,"pz_mayonnaise"],
+ [/bouillon|(^| )cube/,"pz_bouillioncube"],
+ // pz_ = Project Zomboid (paquet v3) : là où Minecraft n'a rien
+ [/avocat/,"pz_avocado"],[/levure/,"pz_yeast"],[/tahin/,"pz_jarwhite"],[/legumes de saison/,"pz_frozen_mixedvegetables"],
+ [/patate douce/,"sweetpotato"],[/chataigne/,"pz_acorn"],[/(^| )olives?( |$)/,"pz_olives"],[/peche/,"pz_cannedpeaches"],[/cognac|brandy/,"pz_brandy"],[/cordon/,"chickencordonbleu"],[/vin blanc/,"greengrapejuice"],[/(^| )vin( |$)/,"grapejuice"],[/pommes? de terre|patate/,"potato"],
  [/tomates? concass|coulis|sauce tomate|passata|pulpe de tomate/,"tomato_sauce"],[/tomate/,"tomato"],
  [/ciboulette|cebette|oignon vert/,"scallion"],[/oignon|echalote/,"onion"],[/(^| )ail( |$)/,"garlic"],
  [/carotte/,"carrot"],[/betterave/,"beetroot"],[/potimarron|courges?( |$)|citrouille|potiron/,"pumpkin_slice"],[/navet/,"turnip"],
@@ -218,17 +233,17 @@ const MC_ING=[
  [/petits? pois/,"peas"],[/pois chiche/,"chickpea"],[/lentille/,"lentil"],[/haricot/,"bean"],
  [/morille|champignons? noir|cepe|girolle/,"brown_mushroom"],[/champignon/,"whitemushroom"],[/truffe/,"truffle"],
  [/gingembre/,"ginger"],[/menthe|basilic|persil|coriandre|aneth|estragon|sauge|thym|herbe|bouquet garni|laurier|romarin/,"spiceleaf"],
- [/grenade|pomme/,"apple"],[/melon/,"cantaloupe"],[/citron vert/,""],[/citron/,"lemon"],[/fraise/,"strawberry"],[/framboise/,"raspberry"],
+ [/grenade|pomme/,"apple"],[/melon/,"cantaloupe"],[/citron vert/,"pz_lime"],[/citron/,"lemon"],[/fraise/,"strawberry"],[/framboise/,"raspberry"],
  [/myrtille/,"blueberry"],[/canneberge|cranberr/,"cranberries"],[/raisin/,"grape"],[/ananas/,"pineapple"],[/kiwi/,"kiwi"],
  [/fruits rouges|cassis|groseille|cerise/,"sweet_berries"],[/rhubarbe/,"rhubarb"],
  [/beurre de cacah/,"peanut_butter"],[/cacah|arachide/,"peanut"],[/sesame/,"sesameseeds"],
- [/(^| )oeuf/,"egg"],[/lait de coco/,""],[/lait/,"milk_bottle"],[/yaourt/,"yogurt"],[/creme|fromage blanc|fromage frais/,"cream"],[/beurre/,"butter"],
+ [/(^| )oeuf/,"egg"],[/lait de coco/,"pz_cannedcondensedmilk"],[/lait/,"milk_bottle"],[/yaourt/,"yogurt"],[/creme|fromage blanc|fromage frais/,"cream"],[/beurre/,"butter"],
  [/feta|chevre/,"goat_cheese_slice"],[/mozzarella/,"cheese_slice"],[/parmesan|gruyere|cheddar|reblochon|roquefort|bleu|comte|emmental|fromage/,"cheese"],
- [/tofu/,"firmtofu"],[/saumon fume/,"salmon_slice"],[/saumon/,"salmon"],[/surimi/,"imitationcrabsticks"],[/thon|crevette/,""],
+ [/tofu/,"firmtofu"],[/saumon fume/,"salmon_slice"],[/saumon/,"salmon"],[/surimi/,"imitationcrabsticks"],[/thon/,"pz_tuna"],[/crevette/,"pz_shrimp"],
  [/morue|cabillaud|colin|lieu|merlu|poisson/,"cod"],[/nugget/,"chickennugget"],[/poulet|dinde/,"chicken"],
  [/lardon|bacon/,"bacon"],[/jambon cru/,"smoked_ham"],[/jambon/,"ham"],[/chorizo/,"chorizo"],
  [/merguez|chipolata|saucisse|boudin/,"sausage"],[/porc hache/,"groundpork"],[/steak hache|boeuf hache|viande hachee|(^| )hache/,"minced_beef"],
- [/agneau|mouton|gigot/,"mutton"],[/lapin/,"rabbit"],[/rillette/,""],
+ [/agneau|mouton|gigot/,"mutton"],[/lapin/,"rabbit"],[/rillette/,"pz_jarbrown"],
  [/porc|echine|filet mignon|petit sale/,"porkchop"],[/boeuf|veau|steak|bavette|viande|plat de cotes/,"beef"],
  [/pate brisee|pate feuilletee|pate a tarte|pate sablee/,"pie_crust"],[/nouille|vermicelle/,"noodles"],[/ravioles?|raviolis?/,"dumplings"],
  [/pates|spaghetti|tagliatelle|orzo|crozet|penne|lasagne|gnocchi|macaroni/,"raw_pasta"],[/galettes? de riz/,"ricecake"],[/riz|arborio/,"rice"],
@@ -287,8 +302,11 @@ function mcCherche(q){
   if(mots.size) cles.forEach(k=>{ for(const m of mots) if(k.includes(m)) { out.add(k); break; } });
   return [...out];
 }
-// Articles ménagers : quelques textures dédiées (paquet v3), sinon le carton « package » par défaut
-const MC_MENAGE=[[/savon|gel douche|shampoing/,"soapy"],[/mouchoir|pansement|coton/,"bandage"]];
+// Articles ménagers : quelques textures dédiées (paquet v3, pz_ = Project Zomboid), sinon le carton « package » par défaut
+const MC_MENAGE=[[/brosse a dent/,"pz_toothbrush"],[/dentifrice/,"pz_toothpaste"],[/papier toilette|pq|papier wc/,"pz_toiletpaper"],
+  [/sacs? poubelle/,"pz_garbagebag"],[/javel|eau de javel|bleach/,"pz_bleach"],[/vitamine|complement/,"pz_vitamins"],
+  [/liquide vaisselle|produit vaisselle|nettoyant|detergent|degraissant|spray|multi.?usage|vitre|(^| )sols?( |$)/,"pz_cleaningliquid"],
+  [/savon|gel douche|shampoing/,"soapy"],[/mouchoir|pansement|coton/,"bandage"]];
 // Texture Minecraft d'un ingrédient (nom de la texture), ou "" s'il n'y en a pas : on garde alors le dessin Foodix
 function mcIng(name, icone, mc, menage){
   if(!MC.actif) return "";
