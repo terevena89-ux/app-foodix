@@ -1,5 +1,11 @@
 # Foodix — journal des nouveautés
 
+## 0.10.0 — 2026-11-21
+- Icônes au style Minecraft (facultatif) : Réglages › Icônes › Foodix / Minecraft (choix gardé par appareil).
+- Textures importées depuis un paquet `.json` ou des `.png`, gardées dans Firebase (synchronisées, jamais dans le dépôt public). Effacer avec Annuler.
+- Ingrédients et plats reconnus d'après leur nom ; sans texture adaptée, Foodix garde son dessin.
+- Fiche d'un ingrédient de la banque : choix d'une autre texture parmi celles importées.
+
 ## 0.9.9 — 2026-11-20
 - Un ingrédient tout juste ajouté (par le + de la banque, une idée de produit ménager, ou un article nouveau tapé dans les Courses) ouvre directement sa fiche de réglage : rayon, icône, récurrent, placard. Depuis les Courses, Retour ramène à la liste.
 

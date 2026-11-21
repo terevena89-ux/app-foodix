@@ -199,7 +199,53 @@ function mainColor(spr){
   const cnt={}; SPR[spr.name].join("").split("").forEach(ch=>{ if(ch!==" "&&ch!=="k") cnt[ch]=(cnt[ch]||0)+1; });
   const ch=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0]; return spr.map[ch]||ch;
 }
-function ingImg(name, px=22, icone){
+/* ---------- Textures Minecraft (facultatif) ----------
+   Les images ne sont PAS dans le code (dépôt public, textures de Mojang / Farmer's Delight) :
+   elles sont importées par l'utilisateur et gardées dans Firebase. app.js remplit MC.tex et MC.actif.
+   Ordre : texture choisie dans la banque > nom de l'ingrédient (MC_ING) > famille du dessin Foodix (MC_FAMILLE) > dessin Foodix. */
+const MC={actif:false, tex:{}};
+const MC_ING=[
+ [/pommes? de terre|patate/,"potato"],[/tomates? concass|coulis|sauce tomate|passata|pulpe de tomate/,"tomato_sauce"],[/tomate/,"tomato"],
+ [/oignon|echalote/,"onion"],[/carotte/,"carrot"],[/betterave/,"beetroot"],[/potimarron|courges?( |$)|citrouille|potiron/,"pumpkin_slice"],
+ [/champignon|morille|cepe|girolle/,"brown_mushroom"],[/chou-fleur|chou fleur/,""],[/chou/,"cabbage"],[/salade|romaine|roquette|epinard|laitue|mache|feuille/,"cabbage_leaf"],
+ [/pomme|grenade/,"apple"],[/melon|pasteque/,"melon_slice"],[/fruits rouges|framboise|fraise|myrtille|cassis|groseille|cerise/,"sweet_berries"],
+ [/(^| )oeuf/,"egg"],[/lait de coco/,""],[/lait/,"milk_bottle"],[/poulet|dinde|nugget|cordon/,"chicken"],
+ [/lardon|bacon/,"bacon"],[/jambon/,"ham"],[/steak hache|viande hachee|(^| )hache/,"minced_beef"],[/agneau|mouton|gigot/,"mutton"],[/lapin/,"rabbit"],
+ [/porc|echine|filet mignon|petit sale|travers/,"porkchop"],[/boeuf|veau|steak|bavette|viande/,"beef"],
+ [/saumon/,"salmon"],[/cabillaud|morue|colin|lieu|merlu|poisson/,"cod"],
+ [/pates brisee|pate brisee|pate feuilletee|pate a tarte|pate sablee/,"pie_crust"],[/pates|spaghetti|tagliatelle|nouille|orzo|crozet|gnocchi|lasagne|penne|ravioles/,"raw_pasta"],
+ [/riz|arborio/,"rice"],[/pain|baguette|crouton|brioche/,"bread"],[/farine/,"wheat"],[/(^| )sucre/,"sugar"],[/(^| )sel( |$)/,"sugar"],[/miel/,"honey_bottle"],
+ [/chocolat|cacao/,"cocoa_beans"],[/algue|nori|wakame/,"dried_kelp"],[/bouillon/,"bone_broth"],[/huile|vinaigre/,"glass_bottle"],[/biscuit|cookie/,"cookie"],
+];
+const MC_FAMILLE={patate:"potato",tomate:"tomato",oignon:"onion",carotte:"carrot",champignon:"brown_mushroom",salade:"cabbage_leaf",pomme:"apple",
+  oeuf:"egg",lait:"milk_bottle",poulet:"chicken",viande:"beef",saucisse:"bacon",poisson:"cod",pates:"raw_pasta",riz:"rice",pain:"bread",bouteille:"glass_bottle"};
+const MC_PLAT=[
+ [/burger/,"hamburger"],[/croque|sandwich/,"chicken_sandwich"],[/wrap|fajita|tacos|burrito/,"mutton_wrap"],[/ratatouille/,"ratatouille"],
+ [/parmentier|hachi/,"shepherds_pie"],[/soupe a l.oignon|soupe d.oignon/,"onion_soup"],[/(soupe|veloute|potage).*(potiron|potimarron|courge|citrouille)/,"pumpkin_soup"],
+ [/ramen|pho|soupe.*nouille/,"noodle_soup"],[/(soupe|bouillon).*poulet/,"chicken_soup"],[/soupe|veloute|potage|gaspacho/,"vegetable_soup"],
+ [/bouillabaisse|marmite.*poisson|soupe de poisson/,"fish_stew"],[/bourguignon|pot-au-feu|ragout|mijote|daube|carbonade|blanquette|chili|navarin/,"beef_stew"],
+ [/riz (saute|cantonais)|fried rice|nasi/,"fried_rice"],[/risotto/,"mushroom_rice"],[/salade de fruits/,"fruit_salad"],
+ [/oeufs? (au plat|brouill)|omelette|chakchouka/,"fried_egg"],[/poulet roti|roti/,"roast_chicken"],[/saumon/,"grilled_salmon"],[/cabillaud|morue|poisson/,"baked_cod_stew"],
+ [/bolo|boulette/,"pasta_with_meatballs"],[/wok|pad thai|nouille/,"vegetable_noodles"],[/pates|spaghetti|tagliatelle|lasagne|penne|carbonara/,"pasta_with_meatballs"],
+ [/tarte aux pommes|tarte tatin/,"apple_pie"],[/quiche|tarte/,"pumpkin_pie"],[/pommes? de terre farcie/,"stuffed_potato"],[/(courge|potimarron) farci/,"stuffed_pumpkin"],
+ [/chou farci/,"cabbage_rolls"],[/sushi|maki/,"kelp_roll_slice"],[/nems|rouleau/,"salmon_roll"],[/gyoza|ravioli|dumpling/,"dumplings"],
+ [/brochette|kebab/,"barbecue_stick"],[/jambon/,"honey_glazed_ham"],[/steak|frites/,"steak_and_potatoes"],[/gateau|cake/,"cake_slice"],
+];
+const MC_TYPE={plate:"steak_and_potatoes",bowl:"beef_stew",salad:"mixed_salad",pan:"fried_rice",gratin:"shepherds_pie",tart:"pumpkin_pie",
+  burger:"hamburger",sandwich:"chicken_sandwich",wrap:"mutton_wrap",sauce:"tomato_sauce",roast:"roast_chicken",fish:"grilled_salmon"};
+// Texture Minecraft d'un ingrédient (nom de la texture), ou "" s'il n'y en a pas : on garde alors le dessin Foodix
+function mcIng(name, icone, mc){
+  if(!MC.actif) return "";
+  if(mc && MC.tex[mc]) return mc;
+  const n=norm(name), m=MC_ING.find(([re])=>re.test(n));
+  if(m) return MC.tex[m[1]] ? m[1] : "";
+  const f=MC_FAMILLE[(icone && SPR[icone]) ? icone : ingSprite(name).name];
+  return f && MC.tex[f] ? f : "";
+}
+const mcBalise = (t, px, cls) => `<img class="${cls} mc" src="${MC.tex[t]}" width="${px}" height="${px}" alt="">`;
+
+function ingImg(name, px=22, icone, mc){
+  const t=mcIng(name, icone, mc); if(t) return mcBalise(t, px, "px");
   const s=(icone && SPR[icone]) ? {name:icone,map:{}} : ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
   if(!spriteCache.has(key)) spriteCache.set(key, drawGrid(SPR[s.name],12,s.map));
   return `<img class="px" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
@@ -223,6 +269,10 @@ function dishType(r){
 // Dessin d'une recette : un gabarit (bol, poêle…) rempli avec la couleur
 // des 3 premiers ingrédients qui ne viennent pas du placard.
 function dishImg(r, px = 40) {
+  if (MC.actif) {
+    const m = MC_PLAT.find(([re]) => re.test(r.id)), t = m && MC.tex[m[1]] ? m[1] : MC_TYPE[dishType(r)];
+    if (MC.tex[t]) return mcBalise(t, px, "px dish");
+  }
   const key = "d|" + r.id + "|" + (r.ingredients || []).join(";");
   if (!spriteCache.has(key)) {
     const type = dishType(r);
@@ -241,4 +291,4 @@ function dishImg(r, px = 40) {
   return `<img class="px dish" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
 
-export { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType };
+export { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType, MC, mcIng };

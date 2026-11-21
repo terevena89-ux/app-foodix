@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.9.9";
+const VERSION = "0.10.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -165,6 +165,7 @@ function demarrerDemo() {
   migrerToujours();
   S.idees = d.idees || "";
   try { MC.tex = JSON.parse(localStorage.getItem("fx-demo-tex")) || {}; } catch (e) { MC.tex = {}; }
+  appliquerIcones();
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
   S.pret = true;
@@ -211,7 +212,7 @@ function ecouter() {
   }, err => console.error(err)));
   arrets.push(onSnapshot(refTextures(), snap => {
     const tex = (snap.exists() && snap.data().tex) || {};
-    if (JSON.stringify(tex) !== JSON.stringify(MC.tex)) { MC.tex = tex; rerendre(); }
+    if (JSON.stringify(tex) !== JSON.stringify(MC.tex)) { MC.tex = tex; appliquerIcones(); rerendre(); }
   }, err => console.error(err)));
 }
 

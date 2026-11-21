@@ -320,6 +320,7 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .bq-ic.on { border-color: var(--accent); background: var(--accent-doux); }
 .bq-ic.auto { grid-template-rows: 1fr auto; padding-top: 5px; }
 .bq-ic small { font-size: 10px; font-weight: 700; color: var(--discret); padding-bottom: 3px; }
+.mc-apercu { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 2px; }
 .btn.danger-btn { color: var(--danger); justify-content: center; height: 38px; }
 .bq-fiche .ligne .chev { color: var(--discret); display: flex; }
 .rc-l { display: flex; flex-direction: column; max-height: 55vh; max-height: 55dvh; overflow: auto; }
