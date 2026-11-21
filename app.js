@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.12.0";
+const VERSION = "0.13.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -1266,7 +1266,7 @@ function majEntree(cle, chg) {
   Object.assign(b, chg);
   ["rayon", "icone", "mc"].forEach(k => { if (!b[k]) delete b[k]; });
   // rien de particulier et déjà dans une recette : l'entrée à la main ne sert plus à rien
-  if (!b.rec && !b.menage && !b.rayon && !b.icone && !b.mc && typeof b.placard !== "boolean" && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
+  if (!b.rec && !b.menage && !b.rayon && !b.icone && !b.mc && !b.nomFixe && typeof b.placard !== "boolean" && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
   sauverBanque();
 }
 // Un ancien « Toujours dans la liste » devient des articles récurrents de la banque (une seule fois)
@@ -2017,34 +2017,83 @@ function versCase(type, k, v) {
   if (type === "liste") return (v || []).join("; ");
   return v ?? "";
 }
-// Colonnes de l'onglet « Banque d'ingrédients »
-const COLONNES_BANQUE = [["nom", "Nom", 28], ["type", "Type", 12], ["rayon", "Rayon", 26], ["rec", "Récurrent", 11], ["placard", "Souvent au placard", 18], ["icone", "Icône", 16], ["nb", "Nb de recettes", 14], ["recettes", "Recettes", 60]];
+// Colonnes des onglets « Ingrédients » et « Produits ménagers » (Type : seulement relu dans les anciens fichiers « Banque d'ingrédients »)
+const COLONNES_BANQUE = [["nom", "Nom", 24], ["type", "Type", 11], ["rayon", "Rayon", 24], ["rec", "Récurrent", 10, "c"], ["placard", "Placard", 10, "c"], ["icone", "Icône", 12], ["nb", "Nb", 6, "c"], ["recettes", "Recettes", 80]];
+// Largeurs resserrées des colonnes Recettes dans l'Excel (les autres : celles de COLONNES)
+const LARG_XL = { nom: 30, famille: 12, variante: 12, categorie: 14, proteine: 12, saison: 8, origine: 11, preparation: 11, vege: 6, favori: 7, prep: 9, date: 8, prix: 5, difficulte: 9, temps: 8, maitrise: 11, portions: 8, ingredients: 90, suggeres: 10, lien: 24, notes: 40, id: 28 };
+const CENTRE_XL = new Set(["vege", "favori", "prep", "date", "prix", "portions", "suggeres"]);
+const HAUTEUR_XL = 21;  // points : toutes les lignes pareilles, image comprise
+
+// Dessin (balise <img> de ingImg / dishImg) -> PNG 32 px aux pixels nets, pour l'Excel (qui lisse les petites images)
+const pngCache = new Map();
+function pngDe(balise) {
+  const src = (balise.match(/src="([^"]+)"/) || [])[1];
+  if (!src) return Promise.resolve("");
+  if (!pngCache.has(src)) pngCache.set(src, new Promise(ok => {
+    const im = new Image();
+    im.onload = () => {
+      const cv = document.createElement("canvas"); cv.width = cv.height = 32;
+      const cx = cv.getContext("2d"); cx.imageSmoothingEnabled = false;
+      cx.drawImage(im, 0, 0, 32, 32);
+      ok(cv.toDataURL("image/png"));
+    };
+    im.onerror = () => ok("");
+    im.src = src;
+  }));
+  return pngCache.get(src);
+}
+// Lignes groupées : [{ _titre }, lignes du groupe…, { _titre }, …]
+const enGroupes = (groupes) => groupes.flatMap(([titre, l]) => l.length ? [{ _titre: titre }, ...l] : []);
 
 async function classeurRecettes() {
   const ExcelJS = await chargerExcelJS();
   const wb = new ExcelJS.Workbook();
-  const lignes = [...S.recettes].sort(parNom).map(r => {
-    const l = {};
-    COLONNES.forEach(([k, , , type]) => { l[k] = versCase(type, k, k === "suggeres" ? r.ingredientsSource === "suggestion" : r[k]); });
+  const opt = { hauteur: HAUTEUR_XL, figer: 2 };
+  const colImg = { header: "", key: "_img", width: 4.6 };
+
+  // Recettes, groupées par catégorie (la plus fournie d'abord). Image, Nom… et l'ID tout au bout (il ne sert qu'à l'import).
+  const cols = [...COLONNES.filter(c => c[0] !== "id"), COLONNES.find(c => c[0] === "id")];
+  const ligneRec = async r => {
+    const l = { _image: await pngDe(dishImg(r, 32)) };
+    cols.forEach(([k, , , type]) => { l[k] = versCase(type, k, k === "suggeres" ? r.ingredientsSource === "suggestion" : r[k]); });
     return l;
-  });
-  const ws = ajouterFeuille(wb, "Recettes", COLONNES.map(([k, h, w]) => ({ header: h, key: k, width: w })), lignes);
-  ws.getColumn("ingredients").alignment = { wrapText: true, vertical: "middle" };
+  };
+  const parCat = {};
+  S.recettes.forEach(r => { (parCat[r.categorie || "Sans catégorie"] ||= []).push(r); });
+  const cats = Object.keys(parCat).sort((a, b) => (a === "Sans catégorie") - (b === "Sans catégorie") || parCat[b].length - parCat[a].length || a.localeCompare(b, "fr"));
+  const groupesRec = await Promise.all(cats.map(async c => [c, await Promise.all(parCat[c].sort(parNom).map(ligneRec))]));
+  ajouterFeuille(wb, "Recettes", [colImg, ...cols.map(([k, h, w]) => ({ header: h, key: k, width: LARG_XL[k] || w, centre: CENTRE_XL.has(k) }))], enGroupes(groupesRec), opt);
+
+  // Ingrédients et Produits ménagers, groupés par rayon (ordre du magasin). Relus à l'import :
+  // on peut y changer le nom (même ingrédient), le rayon, « récurrent », « souvent au placard », l'icône, ou ajouter des articles.
+  const ordre = r => AISLE_ORDER.indexOf(r) < 0 ? 99 : AISLE_ORDER.indexOf(r);
+  const tous = banque();
+  const feuilleBanque = async (nom, menage) => {
+    const liste = tous.filter(e => e.menage === menage).sort((a, b) => ordre(a.rayon) - ordre(b.rayon) || parNom(a, b));
+    const parRayon = new Map();
+    for (const e of liste) {
+      const l = {
+        _image: await pngDe(ingImg(e.nom, 32, e.icone, e.mc, e.menage)),
+        nom: e.nom, rayon: libelleRayon(e.rayon), rec: e.rec ? "Oui" : "Non", placard: e.placard ? "Oui" : "Non",
+        icone: e.icone && ICONES[e.icone] ? ICONES[e.icone] : "", nb: e.recettes.length || "", recettes: e.recettes.map(r => r.nom).join("; ")
+      };
+      const t = libelleRayon(e.rayon);
+      if (!parRayon.has(t)) parRayon.set(t, []);
+      parRayon.get(t).push(l);
+    }
+    const garder = menage ? ["nom", "rayon", "rec", "icone"] : ["nom", "rayon", "rec", "placard", "icone", "nb", "recettes"];
+    const c = COLONNES_BANQUE.filter(x => garder.includes(x[0])).map(([k, h, w, centre]) => ({ header: h, key: k, width: w, centre: !!centre }));
+    ajouterFeuille(wb, nom, [colImg, ...c], enGroupes([...parRayon]), opt);
+  };
+  await feuilleBanque("Ingrédients", false);
+  await feuilleBanque("Produits ménagers", true);
+
   // Onglet « Familles », juste pour lire (ignoré à l'import) : les variantes et ce qu'elles ont en commun
   const fams = [...new Set(S.recettes.map(r => r.famille).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr")).map(f => {
     const l = S.recettes.filter(r => r.famille === f);
     return { famille: f, variantes: l.map(r => r.variante || r.nom).join("; "), communs: (l[0].ingredients || []).filter(t => l.every(x => (x.ingredients || []).includes(t))).join("; ") };
   });
-  // Onglet « Banque d'ingrédients » : tout ce que la banque connaît (ingrédients des recettes + ajouts à la main + produits ménagers).
-  // Relu à l'import : on peut y changer le type, le rayon, « récurrent » et « souvent au placard », ou ajouter des articles.
-  const ordre = r => AISLE_ORDER.indexOf(r) < 0 ? 99 : AISLE_ORDER.indexOf(r);
-  const bq = banque().sort((a, b) => a.menage - b.menage || ordre(a.rayon) - ordre(b.rayon) || parNom(a, b)).map(e => ({
-    nom: e.nom, type: e.menage ? "Ménager" : "Ingrédient", rayon: libelleRayon(e.rayon), rec: e.rec ? "Oui" : "Non",
-    placard: e.menage ? "" : e.placard ? "Oui" : "Non", icone: e.icone && ICONES[e.icone] ? ICONES[e.icone] : "", nb: e.recettes.length || "", recettes: e.recettes.map(r => r.nom).join("; ")
-  }));
-  const wsB = ajouterFeuille(wb, "Banque d'ingrédients", COLONNES_BANQUE.map(([k, h, w]) => ({ header: h, key: k, width: w })), bq);
-  wsB.getColumn("recettes").alignment = { wrapText: true, vertical: "middle" };
-  if (fams.length) ajouterFeuille(wb, "Familles", [{ header: "Famille", key: "famille", width: 20 }, { header: "Variantes", key: "variantes", width: 36 }, { header: "Ingrédients communs", key: "communs", width: 70 }], fams);
+  if (fams.length) ajouterFeuille(wb, "Familles", [{ header: "Famille", key: "famille", width: 20 }, { header: "Variantes", key: "variantes", width: 36 }, { header: "Ingrédients communs", key: "communs", width: 90 }], fams, { hauteur: HAUTEUR_XL, figer: 1 });
   return wb;
 }
 async function exporter(btn) {
@@ -2101,20 +2150,28 @@ function lireRecettes(wb) {
 }
 
 // Relit l'onglet « Banque d'ingrédients » (s'il est là) : [{ nom, menage, rayon, rec, placard }]. Une case vide ne change rien.
+// Onglets lus : « Ingrédients » et « Produits ménagers » (depuis 0.13.0), ou l'ancien « Banque d'ingrédients » (colonne Type).
 function lireBanque(wb) {
-  const ws = wb.worksheets.find(w => norm(w.name).startsWith("banque"));
-  if (!ws) return [];
+  const out = [];
+  wb.worksheets.forEach(ws => {
+    const nomF = norm(ws.name);
+    const menageF = nomF.startsWith("produits menager") ? true : nomF.startsWith("ingredient") ? false : nomF.startsWith("banque") ? undefined : null;
+    if (menageF !== null) lireUneBanque(ws, menageF, out);
+  });
+  return out;
+}
+function lireUneBanque(ws, menageF, out) {
   const parEntete = {}, cols = [];
   COLONNES_BANQUE.forEach(c => { parEntete[norm(c[1])] = c[0]; });
+  parEntete[norm("Souvent au placard")] = "placard";  // en-tête des fichiers d'avant 0.13.0
   ws.getRow(1).eachCell((c, i) => { cols[i] = parEntete[norm(valeurCase(c.value))]; });
-  const out = [];
   ws.eachRow((rang, n) => {
     if (n === 1) return;
     const o = {};
     cols.forEach((k, i) => { if (k) o[k] = String(valeurCase(rang.getCell(i).value)).trim(); });
-    if (!o.nom) return;
+    if (!o.nom) return;  // ligne vide ou titre de rayon
     const oui = v => v === "" || v == null ? undefined : /^(oui|1|x|vrai|true)$/i.test(v);
-    const menage = o.type ? /menag/.test(norm(o.type)) : undefined;
+    const menage = o.type ? /menag/.test(norm(o.type)) : menageF;
     const e = { nom: o.nom, menage, rec: oui(o.rec), placard: oui(o.placard) };
     if (o.rayon) { const id = [...rayonsDe(true), ...rayonsDe(false)].find(r => norm(libelleRayon(r)) === norm(o.rayon) || r === o.rayon); if (id) e.rayon = id; }
     // Icône : son nom (« Oignon »), ou « Auto » pour revenir au dessin deviné d'après le nom. Vide = pas de changement.
@@ -2124,7 +2181,6 @@ function lireBanque(wb) {
     }
     out.push(e);
   });
-  return out;
 }
 // Applique la banque relue : articles inconnus ajoutés, réglages des autres mis à jour (simuler = juste compter)
 function fusionBanque(lignes, simuler) {
@@ -2142,6 +2198,8 @@ function fusionBanque(lignes, simuler) {
       S.banque.push(b); return;
     }
     const chg = {};
+    // Même ingrédient écrit autrement (« carotte » pour « carottes », « Pain » -> « pain ») : on garde la nouvelle écriture
+    if (l.nom !== e.nom) Object.assign(chg, { nom: l.nom, nomFixe: true });
     if (l.menage !== undefined && l.menage !== e.menage) chg.menage = l.menage;
     if (l.rec !== undefined && l.rec !== e.rec) chg.rec = l.rec;
     if (l.rayon && l.rayon !== e.rayon && rayonsDe(l.menage ?? e.menage).includes(l.rayon)) chg.rayon = l.rayon;
@@ -2200,7 +2258,7 @@ async function importerFichier(fichier) {
     const r = fusion(lignes, true), b = fusionBanque(bq, true);
     importEnAttente = { lignes, bq };
     const pl = (n, mot) => n + " " + mot + (n > 1 ? "s" : "");
-    box.innerHTML = `<div class="infos">Recettes : ${pl(r.ajout, "nouvelle")}, ${pl(r.maj, "mise")} à jour${bq.length ? `<br>Banque d'ingrédients : ${pl(b.ajout, "nouvel article")}, ${pl(b.maj, "réglage")} ${b.maj > 1 ? "changés" : "changé"}` : ""}</div>
+    box.innerHTML = `<div class="infos">Recettes : ${pl(r.ajout, "nouvelle")}, ${pl(r.maj, "mise")} à jour${bq.length ? `<br>Banque d'ingrédients : ${b.ajout} ${b.ajout > 1 ? "nouveaux articles" : "nouvel article"}, ${pl(b.maj, "réglage")} ${b.maj > 1 ? "changés" : "changé"}` : ""}</div>
       <div class="pied" style="margin-top:8px"><button class="btn pri" data-act="confirmer-import">Importer</button></div>`;
   } catch (e) {
     box.innerHTML = `<div class="infos">Impossible de lire ce fichier (${esc(e && e.message || e)}).</div>`;

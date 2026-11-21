@@ -12,7 +12,8 @@ const COULEURS = {
   entete: "FF1F6F5C",       // fond des en-têtes (vert sapin)
   enteteTexte: "FFFFFFFF",  // texte des en-têtes (blanc)
   ligneAlternee: "FFF2F7F5",// une ligne sur deux, très légèrement teintée
-  bordure: "FFD0D5DA"       // traits fins gris
+  bordure: "FFD0D5DA",      // traits fins gris
+  titre: "FFDCEBE5"         // fond des lignes de titre de groupe (vert sapin très clair)
 };
 
 // Charge ExcelJS seulement quand on en a besoin (export / import),
@@ -31,30 +32,61 @@ export function chargerExcelJS() {
 // Crée une feuille déjà mise en forme.
 // colonnes = [{ header: "Titre", key: "cle", width: 20 }, ...]
 // lignes   = [{ cle: valeur, ... }, ...]
-export function ajouterFeuille(classeur, nom, colonnes, lignes) {
+//   + { _titre: "Fruits" } = ligne de titre de groupe (texte en colonne A, non relue à l'import car sans « Nom »)
+//   + _image: "data:image/png;base64,..." = petite image posée dans la 1re colonne
+// options  = { hauteur: 21 (points, même hauteur pour toutes les lignes), figer: 2 (colonnes figées à gauche) }
+// Version Foodix (2026-11-21) : options, groupes et images ajoutés ; sans options = comme avant.
+export function ajouterFeuille(classeur, nom, colonnes, lignes, options = {}) {
+  const { hauteur = 0, figer = 0 } = options;
   const ws = classeur.addWorksheet(nom, {
-    views: [{ state: "frozen", ySplit: 1 }] // en-tête figé quand on fait défiler
+    views: [{ state: "frozen", ySplit: 1, xSplit: figer }] // en-tête (et colonnes de gauche) figés
   });
-  ws.columns = colonnes;
-  lignes.forEach(l => ws.addRow(l));
-
+  // Colonne jamais plus étroite que son en-tête (gras + flèche de filtre)
+  ws.columns = colonnes.map(c => c.header ? Object.assign({}, c, { width: Math.max(c.width || 10, Math.ceil(c.header.length * 1.15) + 4) }) : c);
+  const plein = argb => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
   const bord = { style: "thin", color: { argb: COULEURS.bordure } };
   const bordures = { top: bord, left: bord, bottom: bord, right: bord };
+  const titreBord = { style: "thin", color: { argb: COULEURS.entete } };
 
-  ws.eachRow((rang, n) => {
-    rang.eachCell({ includeEmpty: true }, cell => {
-      cell.border = bordures;
-      cell.alignment = { vertical: "middle" };
-      if (n === 1) {
-        // Ligne d'en-tête : fond coloré, texte blanc en gras
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COULEURS.entete } };
-        cell.font = { bold: true, color: { argb: COULEURS.enteteTexte } };
-      } else if (n % 2 === 1) {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COULEURS.ligneAlternee } };
-      }
-    });
+  const entete = ws.getRow(1);
+  entete.eachCell({ includeEmpty: true }, cell => {
+    cell.border = bordures;
+    cell.alignment = { vertical: "middle" };
+    cell.fill = plein(COULEURS.entete);
+    cell.font = { bold: true, color: { argb: COULEURS.enteteTexte } };
   });
-  ws.getRow(1).height = 20;
+  entete.height = hauteur || 20;
+
+  let pair = false;  // l'alternance repart à chaque groupe
+  lignes.forEach(l => {
+    const rang = ws.addRow(l._titre ? {} : l);
+    if (hauteur) rang.height = hauteur;
+    if (l._titre) {
+      // Pas de fusion de cases : le texte déborde tout seul sur les cases vides, et le tri d'Excel reste possible
+      rang.getCell(1).value = l._titre;
+      for (let i = 1; i <= colonnes.length; i++) {
+        const c = rang.getCell(i);
+        c.fill = plein(COULEURS.titre);
+        c.font = { bold: true, color: { argb: COULEURS.entete } };
+        c.alignment = { vertical: "middle" };
+        c.border = { top: titreBord, bottom: titreBord };
+      }
+      pair = false;
+      return;
+    }
+    for (let i = 1; i <= colonnes.length; i++) {
+      const c = rang.getCell(i);
+      c.border = bordures;
+      c.alignment = { vertical: "middle", horizontal: colonnes[i - 1].centre ? "center" : undefined };
+      if (pair) c.fill = plein(COULEURS.ligneAlternee);
+    }
+    pair = !pair;
+    if (l._image) {
+      const id = classeur.addImage({ base64: l._image.split(",")[1], extension: "png" });
+      const px = Math.round((hauteur || 20) * 4 / 3) - 6;  // 1 point = 4/3 pixel ; 3 px de marge en haut et en bas
+      ws.addImage(id, { tl: { col: 0.18, row: rang.number - 1 + 0.12 }, ext: { width: px, height: px }, editAs: "oneCell" });
+    }
+  });
   // Petits filtres dans l'en-tête (flèches de tri dans Excel)
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: colonnes.length } };
   return ws;

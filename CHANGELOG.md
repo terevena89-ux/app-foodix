@@ -1,5 +1,11 @@
 # Foodix — journal des nouveautés
 
+## 0.13.0 — 2026-11-21
+- Export Excel plus lisible : un dessin devant chaque recette, ingrédient et produit (celui affiché sur l'appareil : Foodix ou Minecraft), toutes les lignes de la même hauteur, image et nom figés à gauche, colonnes resserrées.
+- Recettes groupées par catégorie, ingrédients et produits groupés par rayon (une ligne de titre par groupe).
+- La banque est coupée en deux onglets : « Ingrédients » et « Produits ménagers ». Les anciens fichiers (« Banque d'ingrédients ») se réimportent toujours.
+- À l'import, on peut changer l'écriture d'un ingrédient (« carotte » au lieu de « carottes ») : la banque garde le nouveau nom.
+
 ## 0.12.0 — 2026-11-21
 - Version bureau (grand écran + souris) : barre verte à gauche (Recettes, Menu, Liste de courses, Banque, catégories, Réglages), recettes en grille de cartes au centre, Liste / Menu dans une colonne à droite qu’on ouvre ou ferme avec le bouton « Liste ».
 - Sur PC, la fiche et le formulaire d’une recette s’ouvrent dans la colonne de droite (la grille reste visible).
