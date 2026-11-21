@@ -1,5 +1,11 @@
 # Foodix — journal des nouveautés
 
+## 0.12.0 — 2026-11-21
+- Version bureau (grand écran + souris) : barre verte à gauche (Recettes, Menu, Liste de courses, Banque, catégories, Réglages), recettes en grille de cartes au centre, Liste / Menu dans une colonne à droite qu’on ouvre ou ferme avec le bouton « Liste ».
+- Sur PC, la fiche et le formulaire d’une recette s’ouvrent dans la colonne de droite (la grille reste visible).
+- Largeur de la barre de gauche et de la colonne de droite réglable en glissant leur bord (gardée sur cet appareil).
+- Style bureau : police IBM Plex, gris sauge, commandes plus serrées. Le téléphone ne change pas.
+
 ## 0.11.1 — 2026-11-21
 - Banque › Produits ménagers : la rangée « Idées » (produits proposés en pointillés) est retirée.
 

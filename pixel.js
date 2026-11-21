@@ -287,10 +287,13 @@ function mcCherche(q){
   if(mots.size) cles.forEach(k=>{ for(const m of mots) if(k.includes(m)) { out.add(k); break; } });
   return [...out];
 }
+// Articles ménagers : quelques textures dédiées (paquet v3), sinon le carton « package » par défaut
+const MC_MENAGE=[[/savon|gel douche|shampoing/,"soapy"],[/mouchoir|pansement|coton/,"bandage"]];
 // Texture Minecraft d'un ingrédient (nom de la texture), ou "" s'il n'y en a pas : on garde alors le dessin Foodix
-function mcIng(name, icone, mc){
+function mcIng(name, icone, mc, menage){
   if(!MC.actif) return "";
   if(mc && MC.tex[mc]) return mc;
+  if(menage){ const m=MC_MENAGE.find(([re])=>re.test(norm(name))); const t=m && MC.tex[m[1]] ? m[1] : "package"; return MC.tex[t] ? t : ""; }
   const n=norm(name), m=MC_ING.find(([re])=>re.test(n));
   if(m) return MC.tex[m[1]] ? m[1] : "";
   const f=MC_FAMILLE[(icone && SPR[icone]) ? icone : ingSprite(name).name];
@@ -298,8 +301,8 @@ function mcIng(name, icone, mc){
 }
 const mcBalise = (t, px, cls) => `<img class="${cls} mc" src="${MC.tex[t]}" width="${px}" height="${px}" alt="">`;
 
-function ingImg(name, px=22, icone, mc){
-  const t=mcIng(name, icone, mc); if(t) return mcBalise(t, px, "px");
+function ingImg(name, px=22, icone, mc, menage){
+  const t=mcIng(name, icone, mc, menage); if(t) return mcBalise(t, px, "px");
   const s=(icone && SPR[icone]) ? {name:icone,map:{}} : ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
   if(!spriteCache.has(key)) spriteCache.set(key, drawGrid(SPR[s.name],12,s.map));
   return `<img class="px" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;

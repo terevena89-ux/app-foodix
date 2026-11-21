@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.11.1";
+const VERSION = "0.12.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -365,7 +365,7 @@ function voler(img, delai = 0) {
 function rerendre() {
   if (!S.pret) return;
   const a = document.activeElement;
-  if (a && a.id === "q") { majListe(); return; }
+  if (a && a.id === "q") { majListe(); renderPanneau(); return; }
   render();
   // la fiche ouverte suit les changements (mais on ne touche jamais au formulaire en cours de saisie)
   if ($("#modal").dataset.recette && !$("#modal").dataset.form) ouvrirFiche($("#modal").dataset.recette);
@@ -374,6 +374,7 @@ function rerendre() {
 }
 
 function render() {
+  if (estPC()) { renderCote(); renderRecettes(); renderPanneau(); majCadre(); return; }
   const m = menuEnCours();
   const titres = {
     menu: ["Menu", S.propo.repas.length ? S.propo.repas.length + " proposition" + (S.propo.repas.length > 1 ? "s" : "") : ""],
@@ -408,6 +409,90 @@ function renderConnexion() {
   $("#main").innerHTML = `<div class="vide">Connecte-toi pour retrouver tes recettes<br>sur le téléphone et le PC.
     <div><button class="btn pri" data-act="connexion">Se connecter avec Google</button></div></div>`;
 }
+
+/* ---------- 4 ter. Version bureau (PC) ---------- */
+// Grand écran + souris : barre à gauche, recettes en grille au centre, Liste / Menu dans une colonne à droite.
+// Fiche et formulaire de recette s'ouvrent dans cette colonne (#modal.lateral) ; les autres fenêtres restent au centre.
+const largePC = matchMedia("(min-width: 900px) and (hover: hover) and (pointer: fine)");
+const estPC = () => largePC.matches;
+const zid = () => estPC() ? "#pzone" : "#main";   // où dessiner Courses / Menu
+const zl = () => $(zid());
+S.ponglet = lireLocal("fx-ponglet", "courses");
+let panneauOuvert = lireLocal("fx-panneau", "1") === "1";
+
+function appliquerPC() {
+  document.body.classList.toggle("pc", estPC());
+  document.body.style.setProperty("--lc", lireLocal("fx-lc", "210") + "px");
+  document.body.style.setProperty("--lp", lireLocal("fx-lp", "380") + "px");
+  majCadre();
+}
+largePC.addEventListener("change", () => { appliquerPC(); if (S.pret) render(); });
+
+function majCadre() {
+  const md = $("#modal"), d = md.dataset;
+  const lat = estPC() && !!md.innerHTML && !!(d.recette || d.form) && !["rep", "choix", "asm", "filtres", "archive"].some(k => d[k]);
+  md.classList.toggle("lateral", lat);
+  document.body.classList.toggle("p-vis", estPC() && (panneauOuvert || lat));
+  document.querySelectorAll("#liste .sel").forEach(b => b.classList.remove("sel"));
+  if (lat && d.recette) { const c = $(`#liste [data-fiche="${CSS.escape(d.recette)}"]`); if (c) c.classList.add("sel"); }
+}
+// attributeFilter obligatoire : sinon la classe « lateral » posée ici relancerait l'observateur en boucle
+new MutationObserver(majCadre).observe($("#modal"), { childList: true, attributes: true,
+  attributeFilter: ["data-recette", "data-form", "data-rep", "data-choix", "data-asm", "data-filtres", "data-archive"] });
+
+function renderCote() {
+  if (!estPC()) return;
+  const cats = {};
+  S.recettes.forEach(r => { if (r.categorie) cats[r.categorie] = (cats[r.categorie] || 0) + 1; });
+  const nav = (act, ic, txt, on, n = "") => `<button class="nav ${on ? "on" : ""}" data-act="${act}">${icone(ic)}<span>${txt}</span>${n !== "" ? `<b>${n}</b>` : ""}</button>`;
+  $("#cote").innerHTML = `<div class="logo"><img src="icones/icone.svg" width="22" height="22" alt="">Foodix</div>
+    ${nav("pc-recettes", "book", "Recettes", !S.bq.ouvert && !S.f.cats.length, S.recettes.length)}
+    ${nav("pc-menu", "cal", "Menu", panneauOuvert && S.ponglet === "menu")}
+    ${nav("pc-courses", "cart", "Liste de courses", panneauOuvert && S.ponglet === "courses")}
+    ${nav("banque", "carrot", "Banque", S.bq.ouvert)}
+    <div class="groupe">Catégories</div>
+    ${Object.keys(cats).sort((a, b) => a.localeCompare(b, "fr")).map(c =>
+      `<button class="nav ${!S.bq.ouvert && S.f.cats.length === 1 && S.f.cats[0] === c ? "on" : ""}" data-cat="${esc(c)}"><span>${esc(c)}</span><b>${cats[c]}</b></button>`).join("")}
+    <button class="nav bas" data-act="reglages">${icone("gear")}<span>Réglages</span></button>`;
+}
+
+function renderPanneau() {
+  if (!estPC()) return;
+  const m = menuEnCours(), n = S.propo.repas.length;
+  const sous = S.ponglet === "menu" ? (n ? n + " proposition" + (n > 1 ? "s" : "") : "")
+    : (m ? "du " + new Date(m.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "");
+  $("#p-tete").innerHTML = `<span class="seg">${[["courses", "Liste"], ["menu", "Menu"]].map(([k, t]) =>
+    `<button class="${S.ponglet === k ? "on" : ""}" data-ponglet="${k}">${t}</button>`).join("")}</span>
+    <span class="sub">${sous}</span><button class="ib" data-act="p-fermer" aria-label="Fermer la colonne">${icone("x")}</button>`;
+  if (S.ponglet === "menu") renderMenu(); else renderCourses();
+}
+
+function montrerPanneau(onglet, ouvert = true) {
+  if ($("#modal").classList.contains("lateral")) fermer();  // la fiche cède la place à la liste
+  if (onglet) { S.ponglet = onglet; ecrireLocal("fx-ponglet", onglet); }
+  panneauOuvert = ouvert; ecrireLocal("fx-panneau", ouvert ? "1" : "0");
+  render();
+}
+
+// Bords à glisser pour élargir la barre de gauche (--lc) ou la colonne de droite (--lp), gardés sur cet appareil
+function redimensionner(el, cle, min, max, sens) {
+  el.addEventListener("pointerdown", e => {
+    e.preventDefault(); el.setPointerCapture(e.pointerId);
+    el.classList.add("actif"); document.body.classList.add("redim-en-cours");
+    const x0 = e.clientX, v0 = parseInt(getComputedStyle(document.body).getPropertyValue("--" + cle)) || min;
+    let v = v0;
+    const bouge = ev => { v = Math.max(min, Math.min(max, v0 + sens * (ev.clientX - x0))); document.body.style.setProperty("--" + cle, v + "px"); };
+    el.addEventListener("pointermove", bouge);
+    el.addEventListener("pointerup", () => {
+      el.removeEventListener("pointermove", bouge);
+      el.classList.remove("actif"); document.body.classList.remove("redim-en-cours");
+      ecrireLocal("fx-" + cle, String(v));
+    }, { once: true });
+  });
+}
+redimensionner($("#redim-c"), "lc", 160, 340, 1);
+redimensionner($("#redim-p"), "lp", 280, 700, -1);
+appliquerPC();
 
 /* ---------- 4 bis. Menu : des propositions de plats ---------- */
 // Pas de jours ni de semaines : « Nouveau menu » propose N plats tirés au sort (S.propo).
@@ -594,7 +679,7 @@ function renderMenu() {
       <span class="pas"><span class="l">${icone("users")}</span><button data-act="pers" data-v="-1" aria-label="Moins de personnes">−</button><b class="num">${p.pers}</b><button data-act="pers" data-v="1" aria-label="Plus de personnes">+</button></span>
       <span class="spacer"></span><button class="btn pri" data-act="nouveau-menu">${icone("shuffle")}Nouveau menu</button></div>
     <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "À l'avance")}${pastille("invites", "glass", "Invités")}</div>`;
-  if (!S.recettes.length) { $("#main").innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
+  if (!S.recettes.length) { zl().innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
   const infos = (r, s) => `${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s)}</span>` : ""}</span>
         <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span>`;
   const propos = pr.map((x, i) => {
@@ -613,7 +698,7 @@ function renderMenu() {
       <button class="rp-btn" data-repas="${i}" data-src="l">${infos(r, s)}<span class="chev">${icone("right")}</span></button></div>`;
   }).join("");
   const cascade = S.cascade; S.cascade = false;  // la cascade ne se joue qu'une fois, juste après « Nouveau menu »
-  $("#main").innerHTML = haut
+  zl().innerHTML = haut
     + `<div class="sec-t"><h3>Propositions</h3>${pr.length > 1 ? `<button class="lien-btn" data-act="accepter-tout">${icone("check")}Tout ajouter</button>` : ""}</div>`
     + (propos ? `<div class="repas ${cascade ? "cascade" : ""}">${propos}</div>` : `<div class="vide petit">Touche « Nouveau menu » pour des idées de plats.</div>`)
     + `<button class="btn ajout" data-act="choisir-plat">${icone("search")}Choisir un plat moi-même</button>`
@@ -878,7 +963,7 @@ function renderCourses() {
     const c = $("#ajout-art"); if (!c || !tape) return;
     c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
   };
-  if (!m) { $("#main").innerHTML = ajout + `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`; return finir(); }
+  if (!m) { zl().innerHTML = ajout + `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`; return finir(); }
   const dispo = m.dispo || {};
   const groupes = {}, placard = [];
   // Un article « souvent au placard » reste à part tant que je n'ai pas dit « il me faut » ; alors il rejoint son rayon.
@@ -918,8 +1003,8 @@ function renderCourses() {
     html += `<details class="rayon placard" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier ? aVerifier + " à vérifier" : placard.length})</summary>${tri(placard).map(lignePlacard).join("")}</details>`;
   }
   if (nbMasques) html += `<button class="lien-btn remettre" data-act="remettre-masques">${icone("refresh")}${nbMasques} ingrédient${nbMasques > 1 ? "s" : ""} retiré${nbMasques > 1 ? "s" : ""} · remettre</button>`;
-  $("#main").innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
-  if (html) $("#main").insertAdjacentHTML("beforeend", `<div class="astuce">Glisse un article vers la gauche pour le retirer</div>`);
+  zl().innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
+  if (html) zl().insertAdjacentHTML("beforeend", `<div class="astuce">Glisse un article vers la gauche pour le retirer</div>`);
   finir();
 }
 
@@ -966,7 +1051,7 @@ function cocher(cle, btn) {
   btn.innerHTML = fait ? icone("check") : "";
   btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop");
   clearTimeout(cocheT);
-  cocheT = setTimeout(() => flip("#main .it", renderCourses), 480);  // on laisse voir la coche avant de ranger
+  cocheT = setTimeout(() => flip(zid() + " .it", renderCourses), 480);  // on laisse voir la coche avant de ranger
 }
 // Ajoute un article à la liste en cours. Un article connu de la banque garde son nom d'origine ;
 // un article nouveau y entre (en produit ménager si on l'a demandé), pour être proposé la prochaine fois.
@@ -987,7 +1072,7 @@ function ajouterArticle(menage = false) {
   const champ = $("#ajout-art"), v = champ.value.trim();
   if (!v) return champ.focus();
   const nouveau = ajouterALaListe(v, menage); vibrer("ajout");
-  champ.value = ""; flip("#main .it", renderCourses);
+  champ.value = ""; flip(zid() + " .it", renderCourses);
   if (nouveau) return ouvrirFicheBanque(nouveau, true);  // article inconnu : on règle tout de suite rayon, icône…
   $("#ajout-art").focus(); // on peut enchaîner les ajouts au clavier
 }
@@ -998,11 +1083,11 @@ function masquer(cle) {
   const e = articles(m).find(x => x.cle === cle);
   m.masques = Object.assign({}, m.masques, { [cle]: e ? marque(e) : true });
   vibrer("retire"); ecrireMenu(m); renderCourses();
-  toast("Ingrédient retiré", () => { delete m.masques[cle]; ecrireMenu(m); flip("#main .it", renderCourses); });
+  toast("Ingrédient retiré", () => { delete m.masques[cle]; ecrireMenu(m); flip(zid() + " .it", renderCourses); });
 }
 function remettreMasques() {
   const m = menuEnCours(); if (!m) return;
-  m.masques = {}; vibrer("ajout"); ecrireMenu(m); flip("#main .it", renderCourses);
+  m.masques = {}; vibrer("ajout"); ecrireMenu(m); flip(zid() + " .it", renderCourses);
 }
 function retirerArticle(nom) {
   const m = menuEnCours(); if (!m) return;
@@ -1032,7 +1117,7 @@ function nouvelleListe() {
     <div class="rc-l">
       ${bloc("Plats pas encore cuisinés", plats.map(o => ligne("plat", o.i, dishImg(o.r, 22), o.r.nom)))}
       ${bloc("Articles pas encore pris", restants.map(a => ligne("art", a, imgIng(a, 18), a)))}
-      ${bloc("Articles récurrents", rec.map(e => ligne("art", e.nom, ingImg(e.nom, 18, e.icone, e.mc), e.nom, e.menage ? `<span class="t">Ménager</span>` : "")))}
+      ${bloc("Articles récurrents", rec.map(e => ligne("art", e.nom, ingImg(e.nom, 18, e.icone, e.mc, e.menage), e.nom, e.menage ? `<span class="t">Ménager</span>` : "")))}
     </div>
     <div class="infos">L'ancienne liste reste dans « Précédente ».</div>
     <div class="pied2"><button class="btn" data-act="liste-zero">Partir de zéro</button><button class="btn pri" data-act="liste-garder">${icone("check")}Nouvelle liste</button></div>
@@ -1062,7 +1147,7 @@ function creerNouvelleListe(plats, arts) {
   if (aEffacer.length) sauverHisto();
   ecrireMenu(nv); vibrer("gros");
   render(); window.scrollTo(0, 0);
-  if (animOK()) document.querySelectorAll("#main .it").forEach((el, k) => el.animate([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], { duration: 280, delay: k * 25, easing: DOUX, fill: "backwards" }));
+  if (animOK()) document.querySelectorAll(zid() + " .it").forEach((el, k) => el.animate([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], { duration: 280, delay: k * 25, easing: DOUX, fill: "backwards" }));
   toast("Nouvelle liste", () => {
     S.menus = [...aEffacer, ...S.menus.filter(x => x !== nv)].sort((a, b) => a.cree - b.cree);
     effacerMenu(nv.id); aEffacer.forEach(ecrireMenu);
@@ -1131,7 +1216,7 @@ const rayonsDe = menage => menage ? RAYONS_MENAGE.map(r => r[0]) : AISLES_FOOD;
 const libelleRayon = id => { const m = RAYONS_MENAGE.find(r => r[0] === id); return m ? m[1] : aisleLabel(id); };
 const entreeDe = cle => S.banque.find(x => cleStockee(x) === cle);
 // Dessin d'un ingrédient (celui choisi dans la banque, sinon deviné d'après le nom)
-const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return ingImg(nom, px, b && b.icone, b && b.mc); };
+const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return ingImg(nom, px, b && b.icone, b && b.mc, b && b.menage); };
 
 function banque() {
   const auto = new Map();
@@ -1259,10 +1344,12 @@ function ouvrirBanque(choisir = false) {
     <div class="bq-corps" id="bq-corps"></div></div>`;
   document.body.appendChild(ec);
   majBanque();
+  renderCote();
 }
 function fermerBanque() {
   const ec = $("#bq-ecran"); if (ec) ec.remove();
   S.bq.ouvert = false; S.bq.detail = null;
+  renderCote();
 }
 // Fiche d'un article qu'on vient d'ajouter. seule = ouverte depuis les Courses : Retour referme tout.
 function ouvrirFicheBanque(cle, seule = false) {
@@ -1304,8 +1391,8 @@ function htmlListeBanque(tous) {
   rayonsDe(men).forEach(r => {
     const l = liste.filter(e => e.rayon === r); if (!l.length) return;
     html += `<div class="rayon"><h3>${esc(libelleRayon(r))}</h3><div class="bq-grid">${l.map(e => S.bq.choisir
-      ? `<button class="bq-t pick ${dansListe.has(e.cle) ? "on" : ""}" data-bq-pick="${esc(e.cle)}" aria-pressed="${dansListe.has(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc)}<span class="nm">${esc(e.nom)}</span><span class="cb">${icone("check")}</span></button>`
-      : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
+      ? `<button class="bq-t pick ${dansListe.has(e.cle) ? "on" : ""}" data-bq-pick="${esc(e.cle)}" aria-pressed="${dansListe.has(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc, e.menage)}<span class="nm">${esc(e.nom)}</span><span class="cb">${icone("check")}</span></button>`
+      : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc, e.menage)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
   });
   if (!html) html = `<div class="vide" style="padding:28px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : S.bq.placard ? "Rien au placard." : "Rien ici pour l'instant."}</div>`;
   return html;
@@ -1314,7 +1401,7 @@ function htmlListeBanque(tous) {
 function htmlFicheIngredient(e) {
   const rayons = rayonsDe(e.menage).map(r => `<button type="button" class="chip ${r === e.rayon ? "on" : ""}" data-bq-rayon="${r}">${esc(libelleRayon(r))}</button>`).join("");
   // Style Minecraft : on choisit parmi les textures importées (champ « mc », indépendant de l'icône Foodix)
-  const icones = mcActif() ? htmlChoixTex("bq-mc", e.mc, ingImg(e.court, 24, e.icone))
+  const icones = mcActif() ? htmlChoixTex("bq-mc", e.mc, ingImg(e.court, 24, e.icone, "", e.menage))
     : `<button type="button" class="bq-ic auto ${e.icone ? "" : "on"}" data-bq-icone="" aria-label="Automatique">${ingImg(e.court, 24)}<small>Auto</small></button>`
     + Object.keys(ICONES).map(k => `<button type="button" class="bq-ic ${e.icone === k ? "on" : ""}" data-bq-icone="${k}" aria-label="${ICONES[k]}">${ingImg(e.court, 24, k)}</button>`).join("");
   const recettes = e.recettes.map(r => `<button class="ligne" data-fiche="${esc(r.id)}">${dishImg(r, 28)}<span class="nm">${esc(r.nom)}</span><span class="chev">${icone("right")}</span></button>`).join("");
@@ -1382,11 +1469,15 @@ function renderRecettes() {
     + f.cats.map(c => `<button class="chip on" data-retire-f="cats" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("")
     + f.prots.map(c => `<button class="chip on" data-retire-f="prots" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("");
   const bascule = (k, ic, txt) => `<button class="chip ${f[k] ? "on" : ""}" data-bascule="${k}">${ic ? icone(ic) : ""}${txt}</button>`;
-  $("#main").innerHTML = `
-    <div class="srow"><label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
-      ${f.q ? `<button data-act="effacer-q" aria-label="Effacer">${icone("x")}</button>` : ""}</label>
+  const cherche = `<label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
+      ${f.q ? `<button data-act="effacer-q" aria-label="Effacer">${icone("x")}</button>` : ""}</label>`;
+  $("#main").innerHTML = (estPC()
+    ? `<div class="pc-tete"><h1>${f.cats.length === 1 ? esc(f.cats[0]) : "Recettes"}</h1>${cherche}<span class="spacer"></span>
+      <button class="btn ${panneauOuvert ? "on" : ""}" data-act="panneau">${icone("cart")}Liste</button>
+      <button class="btn pri" data-act="nouvelle">${icone("plus")}Recette</button></div>`
+    : `<div class="srow">${cherche}
       <button class="btn" data-act="banque" aria-label="Banque d'ingrédients">${icone("carrot")}Ingrédients</button>
-      <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>
+      <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>`) + `
     <div class="defile">${liste()}
       ${bascule("fav", "star", "Favoris")}${bascule("vege", "leaf", "Végé")}${bascule("saison", "sun", "De saison")}
       ${bascule("avance", "box", "À l'avance")}${bascule("invites", "glass", "Invités")}</div>
@@ -1405,9 +1496,19 @@ function majListe() {
       <span class="nm">${esc(nom)}${fam.length > 1 ? `<small>${fam.map(x => esc(x.variante || x.nom)).join(" · ")}</small>` : ""}</span>
       <span class="ri">${fam.length > 1 ? `<span class="t acc">${fam.length} variantes</span>` : ""}${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
   };
+  // PC : cartes en grille (même contenu, rangé en hauteur)
+  const carte = r => {
+    const fam = familleDe(r), nom = fam.length > 1 ? r.famille : r.nom;
+    const mt = fam.length > 1 ? fam.map(x => x.variante || x.nom).join(" · ") : [r.categorie, r.proteine].filter(Boolean).join(" · ");
+    return `<button class="carte-r" data-fiche="${esc(r.id)}" data-k="${esc(cleFamille(r))}"><span class="ph">${dishImg(r, 48)}</span>
+      <span class="nm">${esc(nom)}</span><span class="mt">${esc(mt)}</span>
+      <span class="ri">${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
+  };
+  const bloc = estPC() ? a => `<div class="grille-r">${a.map(carte).join("")}</div>` : a => a.map(ligne).join("");
   const plats = l.filter(r => !estBase(r)), bases = l.filter(estBase);
-  $("#liste").innerHTML = l.length ? plats.map(ligne).join("") + (bases.length ? `<div class="sec-t"><h3>Bases (sous-recettes)</h3></div>` + bases.map(ligne).join("") : "")
+  $("#liste").innerHTML = l.length ? bloc(plats) + (bases.length ? `<div class="sec-t"><h3>Bases (sous-recettes)</h3></div>` + bloc(bases) : "")
     : `<div class="vide">Aucune recette ne correspond.</div>`;
+  majCadre();
 }
 
 // Feuille « Filtres » : catégories et protéines, plusieurs à la fois
@@ -2119,6 +2220,7 @@ function confirmerImport() {
 const ORDRE_ONGLETS = ["courses", "recettes", "menu"];
 // Change d'onglet : la page part d'un côté et la nouvelle arrive de l'autre (depuisX = où le doigt l'avait laissée)
 function changerOnglet(tab, depuisX = 0) {
+  if (estPC()) return tab === "recettes" ? render() : montrerPanneau(tab);
   const avant = S.onglet;
   if (!S.pret) { S.onglet = tab; ecrireLocal("fx-onglet", tab); return; }
   if (tab === avant) { window.scrollTo({ top: 0, behavior: animOK() ? "smooth" : "auto" }); return; }
@@ -2207,7 +2309,7 @@ document.addEventListener("touchcancel", finGeste);
 // Fermer une fenêtre en douceur : elle redescend, le fond s'éclaircit (si rien d'autre ne s'est ouvert entre-temps)
 function fermerDoux() {
   const fiche = $("#modal .fiche"), voile = $("#modal .voile");
-  if (!fiche || !animOK() || $("#modal").dataset.form) return fermer();
+  if (!fiche || !animOK() || $("#modal").dataset.form || $("#modal").classList.contains("lateral")) return fermer();
   const contenu = $("#modal").firstElementChild;
   ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete $("#modal").dataset[k]);
   voile.style.pointerEvents = "none";
@@ -2415,6 +2517,29 @@ function clicCompleter(t) {
 document.addEventListener("click", e => {
   const t = e.target;
   if (clicCompleter(t)) return;
+  // PC : le formulaire reste ouvert à côté de la grille ; on ne le remplace pas par mégarde
+  if (estPC() && $("#modal").dataset.form && !t.closest("#modal")
+    && t.closest("[data-fiche], [data-act='pc-menu'], [data-act='pc-courses'], [data-act='panneau'], [data-act='banque'], [data-act='reglages'], [data-act='nouvelle'], [data-ponglet]")) {
+    return toast("Enregistre ou annule d’abord la recette");
+  }
+  const cat = t.closest("[data-cat]");
+  if (cat) {
+    if (S.bq.ouvert) fermerBanque();
+    const c = cat.dataset.cat;
+    S.f.cats = S.f.cats.length === 1 && S.f.cats[0] === c ? [] : [c];
+    $("#main").scrollTop = 0; renderRecettes(); renderCote(); return;
+  }
+  const po = t.closest("[data-ponglet]");
+  if (po) return montrerPanneau(po.dataset.ponglet);
+  const pcAct = t.closest("[data-act^='pc-'], [data-act='panneau'], [data-act='p-fermer']");
+  if (pcAct) {
+    const a = pcAct.dataset.act;
+    if (a === "pc-recettes") { if (S.bq.ouvert) fermerBanque(); S.f.cats = []; return render(); }
+    if (a === "pc-menu") return montrerPanneau("menu");
+    if (a === "pc-courses") return montrerPanneau("courses");
+    if (a === "p-fermer") return montrerPanneau(null, false);
+    if (a === "panneau") return montrerPanneau(null, !panneauOuvert || $("#modal").classList.contains("lateral"));
+  }
   const onglet = t.closest("#tabs button");
   if (onglet) return changerOnglet(onglet.dataset.tab);
   const dep = t.closest("[data-deplier]");
@@ -2430,13 +2555,13 @@ document.addEventListener("click", e => {
   const fc = t.closest("[data-filtre-case]");
   if (fc) { const l = S.f[fc.dataset.filtreCase], v = fc.dataset.v, i = l.indexOf(v); i >= 0 ? l.splice(i, 1) : l.push(v); vibrer("pas"); renderRecettes(); return ouvrirFiltres(); }
   const rf = t.closest("[data-retire-f]");
-  if (rf) { const l = S.f[rf.dataset.retireF], i = l.indexOf(rf.dataset.v); if (i >= 0) l.splice(i, 1); vibrer("decoche"); return flip("#liste .ligne", renderRecettes); }
+  if (rf) { const l = S.f[rf.dataset.retireF], i = l.indexOf(rf.dataset.v); if (i >= 0) l.splice(i, 1); vibrer("decoche"); return flip("#liste [data-k]", renderRecettes); }
   const bq = t.closest("[data-base-q] button");
   if (bq) { bq.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === bq)); vibrer("pas"); return; }
   const coche = t.closest("[data-coche]");
   if (coche) return cocher(coche.dataset.coche, coche);
   const sugg = t.closest("[data-sugg]");
-  if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); vibrer("ajout"); flip("#main .it", renderCourses); $("#ajout-art").focus(); } return; }
+  if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); vibrer("ajout"); flip(zid() + " .it", renderCourses); $("#ajout-art").focus(); } return; }
   const sb = t.closest("[data-sugg-base]");
   if (sb) { const li = sb.closest(".li"), c = li.querySelector("input"); c.value = "[" + sb.dataset.suggBase + "]"; li.querySelector("img").outerHTML = dessinIng(c.value); majSuggIng(null); c.focus(); return; }
   const suggIng = t.closest("[data-sugg-ing]");
@@ -2478,7 +2603,7 @@ document.addEventListener("click", e => {
   const pref = t.closest("[data-pref]");
   if (pref) { const k = pref.dataset.pref; S.prefs[k] = !S.prefs[k]; sauverPrefs(); vibrer("pas"); return renderMenu(); }
   const bascule = t.closest("[data-bascule]");
-  if (bascule) { const k = bascule.dataset.bascule; S.f[k] = !S.f[k]; vibrer("pas"); return flip("#liste .ligne", renderRecettes); }
+  if (bascule) { const k = bascule.dataset.bascule; S.f[k] = !S.f[k]; vibrer("pas"); return flip("#liste [data-k]", renderRecettes); }
   if ($("#modal").dataset.form && clicFormulaire(t)) return;
   const el = t.closest("[data-act]");
   // Menu ⋯ ouvert : un clic n'importe où ailleurs le referme
@@ -2568,7 +2693,7 @@ document.addEventListener("click", e => {
     case "confirmer-import": confirmerImport(); break;
     case "favori": basculerFavori(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
-    case "fermer": if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste .ligne", renderRecettes); } fermerDoux(); break;
+    case "fermer": if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste [data-k]", renderRecettes); } fermerDoux(); break;
     case "fermer-fond": if (t === el) { delete $("#modal").dataset.filtres; fermerDoux(); } break; // toucher le fond grisé ferme, pas la fiche elle-même
   }
 });
