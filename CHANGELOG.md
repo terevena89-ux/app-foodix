@@ -1,5 +1,9 @@
 # Foodix — journal des nouveautés
 
+## 0.18.3 — 2026-11-23
+- Formulaire recette un peu moins serré : ingrédients en 15 px, lignes plus hautes, étiquettes et détails un peu plus grands, plus d'espace entre les blocs.
+- Le bloc des ingrédients est blanc (on ne voit plus le petit cadre derrière les icônes), la case « Ajouter un ingrédient » reste grise en bas.
+
 ## 0.18.2 — 2026-11-23
 - Formulaire recette plus compact : espaces resserrés, étoile Favori sans cadre, Végé / Lunchbox / Invités en petite rangée, portions en texte « pour − 2 + ».
 - Ingrédients plus petits, dans un bloc gris.
