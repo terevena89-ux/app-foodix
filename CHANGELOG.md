@@ -1,5 +1,14 @@
 # Foodix — journal des nouveautés
 
+## 0.18.0 — 2026-11-23
+- Assembler un plat complet : le plat principal et chaque accompagnement se choisissent dans une liste déroulante (rangée en « Déjà mangé ensemble », « Favoris », le reste). Une ligne par accompagnement, une croix pour l'enlever, une dernière liste pour en ajouter un.
+- Formulaire recette : Catégorie, Saison, Origine et Préparation passent en listes déroulantes (« Autre… » pour taper une nouvelle valeur). Végé, Favori, Prepmeal et Invités restent des boutons ; Prix, Difficulté, Temps et Maîtrise ne changent pas.
+- Compléter mes recettes : Catégorie et Saison en listes déroulantes aussi.
+- Le tag « Protéine » disparaît (formulaire, fiche, filtres, Compléter, export Excel, tirage du menu). Les valeurs déjà enregistrées ne sont pas effacées de la base, juste plus utilisées.
+- « À l'avance » s'appelle maintenant « Prepmeal » (l'import Excel lit encore l'ancien en-tête).
+- « Poêlée » devient « Poêle & casserole » : les recettes existantes sont réécrites toutes seules à l'ouverture.
+- Le bouton « Plus de détails » du formulaire devient un vrai bandeau, la flèche tourne à l'ouverture.
+
 ## 0.17.1 — 2026-11-22
 - Retour à l'allure de la 0.16 (barre Parcourir / Nouvelle liste / Précédente, titres de rayon, blocs du bas). Le panier et la liste compacte restent.
 

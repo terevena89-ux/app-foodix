@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.17.1";
+const VERSION = "0.18.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -37,9 +37,9 @@ const NIVEAUX = {
 // Colonnes du fichier Excel : [clé dans l'appli, en-tête Excel, largeur, type]
 // Types : oui = Oui / Non ; niv = libellé d'une échelle 1-3 ; liste = éléments séparés par « ; »
 const COLONNES = [
-  ["id", "ID", 30], ["nom", "Nom", 34], ["famille", "Famille", 16], ["variante", "Variante", 14], ["categorie", "Catégorie", 16], ["proteine", "Protéine", 16],
+  ["id", "ID", 30], ["nom", "Nom", 34], ["famille", "Famille", 16], ["variante", "Variante", 14], ["categorie", "Catégorie", 16],
   ["saison", "Saison", 10], ["origine", "Origine", 15], ["preparation", "Préparation", 13],
-  ["vege", "Végé", 8, "oui"], ["favori", "Favori", 8, "oui"], ["prep", "À l'avance", 11, "oui"], ["date", "Invités", 9, "oui"],
+  ["vege", "Végé", 8, "oui"], ["favori", "Favori", 8, "oui"], ["prep", "Prepmeal", 11, "oui"], ["date", "Invités", 9, "oui"],
   ["prix", "Prix", 7, "niv"], ["difficulte", "Difficulté", 11, "niv"], ["temps", "Temps", 9, "niv"], ["maitrise", "Maîtrise", 13, "niv"],
   ["portions", "Portions", 9, "nombre"], ["ingredients", "Ingrédients", 70, "liste"],
   ["suggeres", "Ingrédients suggérés", 12, "oui"], ["lien", "Lien", 30], ["notes", "Notes", 40]
@@ -66,7 +66,7 @@ const S = {
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
   onglet: lireLocal("fx-onglet", "courses"),
   // filtres de l'écran Recettes
-  f: { q: "", cats: [], prots: [], fav: false, vege: false, saison: false, avance: false, invites: false }
+  f: { q: "", cats: [], fav: false, vege: false, saison: false, avance: false, invites: false }
 };
 
 /* ---------- 2. Stockage : Firebase ---------- */
@@ -173,6 +173,7 @@ function demarrerDemo() {
   S.propo = lirePropo(d.propo);
   S.histo = Array.isArray(d.histo) ? d.histo : [];
   migrerToujours();
+  migrerTags();
   S.idees = d.idees || "";
   try { MC.tex = JSON.parse(localStorage.getItem("fx-demo-tex")) || {}; } catch (e) { MC.tex = {}; }
   appliquerIcones();
@@ -201,7 +202,7 @@ function ecouter() {
   arrets.push(onSnapshot(collRecettes(), { includeMetadataChanges: true }, snap => {
     majSynchro(snap.metadata);
     const recu = snap.docs.map(d => d.data());
-    if (JSON.stringify(recu) !== JSON.stringify(S.recettes)) { S.recettes = recu; rerendre(); }
+    if (JSON.stringify(recu) !== JSON.stringify(S.recettes)) { S.recettes = recu; migrerTags(); rerendre(); }
     if (!S.pret) { S.pret = true; render(); }
   }, err => { console.error(err); toast("Accès refusé aux données"); }));
   arrets.push(onSnapshot(collMenus(), snap => {
@@ -553,8 +554,7 @@ function poids(r, deja, recent) {
   let w = 1;
   if (r.favori) w *= 2.5;                                    // favoris : plus souvent
   if (recent.has(r.id)) w *= 0.12;                           // servi récemment : beaucoup moins
-  if (r.proteine && deja.some(id => norm(recette(id)?.proteine) === norm(r.proteine))) w *= 0.45; // varier les protéines
-  if (p.avance && r.prep) w *= 2.5;                          // pastille « À l'avance »
+  if (p.avance && r.prep) w *= 2.5;                          // pastille « Prepmeal »
   if (p.invites && r.date) w *= 2.5;                         // pastille « Invités »
   return w;
 }
@@ -679,7 +679,7 @@ function renderMenu() {
       <span class="pas"><span class="l">${icone("utensils")}</span><button data-act="nb" data-v="-1" aria-label="Moins de plats">−</button><b class="num">${p.nb}</b><button data-act="nb" data-v="1" aria-label="Plus de plats">+</button></span>
       <span class="pas"><span class="l">${icone("users")}</span><button data-act="pers" data-v="-1" aria-label="Moins de personnes">−</button><b class="num">${p.pers}</b><button data-act="pers" data-v="1" aria-label="Plus de personnes">+</button></span>
       <span class="spacer"></span><button class="btn pri" data-act="nouveau-menu">${icone("shuffle")}Nouveau menu</button></div>
-    <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "À l'avance")}${pastille("invites", "glass", "Invités")}</div>`;
+    <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "Prepmeal")}${pastille("invites", "glass", "Invités")}</div>`;
   if (!S.recettes.length) { zl().innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
   const infos = (r, s) => `${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s)}</span>` : ""}</span>
         <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span>`;
@@ -822,20 +822,21 @@ const nomAssemble = (p, as) => p.nom + " & " + as.map(a => a.nom.charAt(0).toLow
 
 function ouvrirAssembler(depart, accs = [], repasI = null) {
   const r = recette(depart); if (!r) return;
-  S.asm = { princ: veutAccomp(r) ? r.id : null, accs: estAccomp(r) ? [r.id] : accs.slice(), nom: "", tout: false, repasI };
+  S.asm = { princ: veutAccomp(r) ? r.id : null, accs: estAccomp(r) ? [r.id] : accs.slice(), nom: "", repasI };
   vibrer("pas");
   majAssembler(true);
 }
 function majAssembler(premier) {
   const a = S.asm, md = $("#modal"), haut = !premier && $("#modal .fiche") ? $("#modal .fiche").scrollTop : 0;
   const p = a.princ && recette(a.princ), as = a.accs.map(recette).filter(Boolean);
-  const chips = (cherche, avec, choisis, attr) => {
-    const l = vaAvec(cherche, avec), n = a.tout ? l.length : 8;
-    // ce qui est déjà choisi reste visible même s'il est loin dans la liste
-    const vus = l.slice(0, n), reste = l.slice(n).filter(o => choisis.includes(o.r.id));
-    return [...vus, ...reste].map(o => `<button class="chip ${choisis.includes(o.r.id) ? "on" : ""}" data-${attr}="${esc(o.r.id)}">${choisis.includes(o.r.id) ? icone("check") : ""}${esc(o.r.nom)}${o.deja ? ` <small>déjà ensemble</small>` : o.r.favori ? icone("star") : ""}</button>`).join("")
-      + (l.length > n ? `<button class="chip nouv" data-act="asm-tout">Tout voir (${l.length})</button>` : "");
+  // Une liste déroulante rangée en trois groupes : déjà mangé ensemble, favoris, le reste (ordre de vaAvec)
+  const liste = (cherche, avec, choisi, exclus, vide, attrs) => {
+    const l = vaAvec(cherche, avec).filter(o => o.r.id === choisi || !exclus.includes(o.r.id));
+    const groupe = (titre, g) => g.length ? `<optgroup label="${titre}">${g.map(o => `<option value="${esc(o.r.id)}" ${o.r.id === choisi ? "selected" : ""}>${esc(o.r.nom)}</option>`).join("")}</optgroup>` : "";
+    return `<select class="saisie choix" ${attrs}><option value="">${vide}</option>
+      ${groupe("Déjà mangé ensemble", l.filter(o => o.deja))}${groupe("★ Favoris", l.filter(o => !o.deja && o.r.favori))}${groupe(cherche === "accomp" ? "Autres accompagnements" : "Autres plats", l.filter(o => !o.deja && !o.r.favori))}</select>`;
   };
+  const avecP = a.princ ? [a.princ] : [];
   const nom = a.nom || (p && as.length ? nomAssemble(p, as) : "");
   const pret = p && as.length;
   md.dataset.asm = "1";
@@ -843,8 +844,10 @@ function majAssembler(premier) {
   md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche asm" role="dialog" aria-label="Assembler un plat complet">
     <div class="fi-hd"><div class="txt"><h2>Assembler un plat complet</h2><div class="sub">Provisoire tant que je ne le garde pas</div></div>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
-    <div class="sect">Plat principal</div><div class="pastilles">${chips("princ", a.accs, a.princ ? [a.princ] : [], "asm-p")}</div>
-    <div class="sect">Accompagnements <i>· un ou plusieurs</i></div><div class="pastilles">${chips("accomp", a.princ ? [a.princ] : [], a.accs, "asm-a")}</div>
+    <div class="sect">Plat principal</div>${liste("princ", a.accs, a.princ, [], "Choisir un plat principal…", `data-asm-sel="p"`)}
+    <div class="sect">Accompagnements <i>· un ou plusieurs</i></div>
+    <div class="asm-accs">${a.accs.map((id, i) => `<div class="asm-ligne">${liste("accomp", avecP, id, a.accs, "—", `data-asm-sel="a" data-i="${i}"`)}<button class="ib" data-asm-x="${i}" aria-label="Retirer">${icone("x")}</button></div>`).join("")}
+      ${liste("accomp", avecP, null, a.accs, a.accs.length ? "+ Ajouter un autre accompagnement…" : "Choisir un accompagnement…", `data-asm-sel="add"`)}</div>
     ${pret ? `<div class="asm-apercu">${[p, ...as].map((x, k) => `${k ? `<span class="asm-plus">+</span>` : ""}<div class="asm-bloc">${dishImg(x, 26)}<div><b>${esc(x.nom)}</b><small>${(x.ingredients || []).length} ingrédient${(x.ingredients || []).length > 1 ? "s" : ""} · pour ${x.portions || 2}</small></div></div>`).join("")}</div>
     <div class="champ"><label for="asm-nom">Nom</label><input class="saisie" id="asm-nom" value="${esc(nom)}" autocomplete="off"></div>` : `<p class="infos">Choisis un plat principal et au moins un accompagnement.</p>`}
     <div class="pied2"><button class="btn" data-act="asm-garder" ${pret ? "" : "disabled"}>${icone("book")}Garder dans mes recettes</button>
@@ -871,7 +874,7 @@ function assemblerGarder() {
   while (S.recettes.some(x => x.id === id)) id = idDe(nom) + "-" + n++;
   const r = { id, nom, categorie: "Plat complet", assemble: true, portions: p.portions || 2, ingredients: [p, ...as].map(x => "[" + x.nom + "]"), ingredientsSource: "app",
     favori: false, vege: !!(p.vege && as.every(x => x.vege)), prep: false, date: false };
-  ["proteine", "saison", "origine"].forEach(k => { if (p[k]) r[k] = p[k]; });
+  ["saison", "origine"].forEach(k => { if (p[k]) r[k] = p[k]; });
   S.recettes.push(r); ecrireRecette(r);
   poserAuMenu({ id: r.id, side: null }, "Gardé dans mes recettes et mis au menu");
 }
@@ -1307,6 +1310,16 @@ function majEntree(cle, chg) {
   if (!b.rec && !b.menage && !b.rayon && !b.icone && !b.mc && !b.nomFixe && typeof b.placard !== "boolean" && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
   sauverBanque();
 }
+// v0.18.0 : des valeurs renommées (« Poêlée » → « Poêle & casserole »), réécrites une fois dans toutes les recettes
+const TAGS_RENOMMES = { poelee: "Poêle & casserole" };
+function migrerTags() {
+  const chg = S.recettes.filter(r => {
+    let c = false;
+    ["categorie", "preparation", "origine", "saison"].forEach(k => { const n = r[k] && TAGS_RENOMMES[norm(r[k])]; if (n && r[k] !== n) { r[k] = n; c = true; } });
+    return c;
+  });
+  if (chg.length) ecrireRecettes(chg);
+}
 // Un ancien « Toujours dans la liste » devient des articles récurrents de la banque (une seule fois)
 function migrerToujours() {
   if (!S.toujours.length) return;
@@ -1487,9 +1500,9 @@ function basculerPick(cle) {
 function filtrees() {
   const f = S.f, q = norm(f.q);
   return S.recettes.filter(r =>
-    (!q || norm([r.nom, r.proteine, r.origine, (r.ingredients || []).join(" ")].join(" ")).includes(q)) &&
-    // plusieurs catégories (ou protéines) cochées : l'une OU l'autre
-    (!f.cats.length || f.cats.includes(r.categorie)) && (!f.prots.length || f.prots.includes(r.proteine)) &&
+    (!q || norm([r.nom, r.origine, (r.ingredients || []).join(" ")].join(" ")).includes(q)) &&
+    // plusieurs catégories cochées : l'une OU l'autre
+    (!f.cats.length || f.cats.includes(r.categorie)) &&
     (!f.fav || r.favori) && (!f.vege || r.vege) && (!f.saison || deSaison(r)) &&
     (!f.avance || r.prep) && (!f.invites || r.date)
   ).sort(parNom);
@@ -1502,11 +1515,10 @@ function renderRecettes() {
       <div style="margin-top:10px"><button class="btn" data-act="banque">${icone("carrot")}Banque d'ingrédients</button></div></div>`;
     return;
   }
-  const f = S.f, n = f.cats.length + f.prots.length;
+  const f = S.f, n = f.cats.length;
   // Bouton « Filtres » (ouvre une feuille avec des cases) ; les filtres choisis restent en pastilles, une croix pour les enlever
   const liste = () => `<button class="chip filtres ${n ? "on" : ""}" data-act="filtres">${icone("sliders")}Filtres${n ? `<b>${n}</b>` : ""}</button>`
-    + f.cats.map(c => `<button class="chip on" data-retire-f="cats" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("")
-    + f.prots.map(c => `<button class="chip on" data-retire-f="prots" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("");
+    + f.cats.map(c => `<button class="chip on" data-retire-f="cats" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("");
   const bascule = (k, ic, txt) => `<button class="chip ${f[k] ? "on" : ""}" data-bascule="${k}">${ic ? icone(ic) : ""}${txt}</button>`;
   const cherche = `<label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
       ${f.q ? `<button data-act="effacer-q" aria-label="Effacer">${icone("x")}</button>` : ""}</label>`;
@@ -1519,7 +1531,7 @@ function renderRecettes() {
       <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>`) + `
     <div class="defile">${liste()}
       ${bascule("fav", "star", "Favoris")}${bascule("vege", "leaf", "Végé")}${bascule("saison", "sun", "De saison")}
-      ${bascule("avance", "box", "À l'avance")}${bascule("invites", "glass", "Invités")}</div>
+      ${bascule("avance", "box", "Prepmeal")}${bascule("invites", "glass", "Invités")}</div>
     <div id="liste"></div>`;
   majListe();
 }
@@ -1538,7 +1550,7 @@ function majListe() {
   // PC : cartes en grille (même contenu, rangé en hauteur)
   const carte = r => {
     const fam = familleDe(r), nom = fam.length > 1 ? r.famille : r.nom;
-    const mt = fam.length > 1 ? fam.map(x => x.variante || x.nom).join(" · ") : [r.categorie, r.proteine].filter(Boolean).join(" · ");
+    const mt = fam.length > 1 ? fam.map(x => x.variante || x.nom).join(" · ") : [r.categorie, r.preparation].filter(Boolean).join(" · ");
     return `<button class="carte-r" data-fiche="${esc(r.id)}" data-k="${esc(cleFamille(r))}"><span class="ph">${dishImg(r, 48)}</span>
       <span class="nm">${esc(nom)}</span><span class="mt">${esc(mt)}</span>
       <span class="ri">${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
@@ -1550,7 +1562,7 @@ function majListe() {
   majCadre();
 }
 
-// Feuille « Filtres » : catégories et protéines, plusieurs à la fois
+// Feuille « Filtres » : catégories, plusieurs à la fois
 function ouvrirFiltres() {
   const f = S.f, valeurs = k => [...new Set(S.recettes.map(r => r[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
   const nb = (k, v) => S.recettes.filter(r => r[k] === v).length;
@@ -1562,7 +1574,6 @@ function ouvrirFiltres() {
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche filtres-f" role="dialog" aria-label="Filtres">
     <div class="fi-hd"><h2 class="titre-r" style="flex:1">Filtres</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="sect">Catégories</div><div class="grille2">${cases("cats", "categorie")}</div>
-    <div class="sect">Protéines</div><div class="grille2">${cases("prots", "proteine")}</div>
     <div class="pied2"><button class="btn" data-act="filtres-effacer">Tout effacer</button><button class="btn pri" data-act="fermer">Voir ${n} recette${n > 1 ? "s" : ""}</button></div></div></div>`;
   if (deja) { const fi = $("#modal .fiche"); fi.style.animation = "none"; fi.parentElement.style.animation = "none"; fi.scrollTop = haut; }
 }
@@ -1572,9 +1583,9 @@ function ouvrirFiltres() {
 function ouvrirFiche(id) {
   const r = S.recettes.find(x => x.id === id);
   if (!r) return fermer();
-  const tags = [r.categorie, r.proteine, r.origine, r.saison, r.preparation].filter(Boolean).map(t => `<span class="t">${esc(t)}</span>`);
+  const tags = [r.categorie, r.origine, r.saison, r.preparation].filter(Boolean).map(t => `<span class="t">${esc(t)}</span>`);
   if (r.vege) tags.push(`<span class="t acc">${icone("leaf")}Végé</span>`);
-  if (r.prep) tags.push(`<span class="t acc">${icone("box")}À l'avance</span>`);
+  if (r.prep) tags.push(`<span class="t acc">${icone("box")}Prepmeal</span>`);
   if (r.date) tags.push(`<span class="t fav">${icone("glass")}Invités</span>`);
   const faits = Object.keys(NIVEAUX).filter(k => r[k]).map(k =>
     `<div><dt>${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</dt><dd>${NIVEAUX[k][r[k] - 1]}</dd></div>`).join("");
@@ -1661,12 +1672,25 @@ function valeursDe(k, actuelle) {
 }
 const SAISONS = ["Annuel", "Été", "Hiver"];
 
+// Un tag = une liste déroulante : « — » (rien), les valeurs déjà utilisées, puis « Autre… » pour en taper une nouvelle
+function listeTag(k, actuelle, valeurs) {
+  const l = valeurs || valeursDe(k), v = actuelle || "";
+  if (v && !l.includes(v)) l.push(v);
+  return `<select class="saisie choix" id="f-${k}" data-champ="${k}"><option value="">—</option>
+    ${l.map(x => `<option value="${esc(x)}" ${x === v ? "selected" : ""}>${esc(x)}</option>`).join("")}<option value="__autre">Autre…</option></select>`;
+}
+// « Autre… » choisi : la liste devient une case où taper la nouvelle valeur
+function tagAutre(sel) {
+  const champ = document.createElement("input");
+  champ.className = "saisie"; champ.id = sel.id; champ.dataset.champ = sel.dataset.champ;
+  champ.placeholder = "Nouvelle valeur…"; champ.autocomplete = "off";
+  sel.replaceWith(champ);
+  champ.focus();
+}
+
 function ouvrirFormulaire(brouillon, titre) {
   const r = brouillon;
-  const pastilles = (k, defile, liste) => `<div class="pastilles ${defile ? "defile" : ""}" data-champ="${k}">
-    ${(liste || valeursDe(k, r[k])).map(v => `<button type="button" class="chip ${v === r[k] ? "on" : ""}" data-pastille>${esc(v)}</button>`).join("")}
-    <button type="button" class="chip autre" data-act="autre">${icone("plus")}Autre…</button></div>`;
-  const cases = [["vege", "leaf", "Végé"], ["favori", "star", "Favori"], ["prep", "box", "À l'avance"], ["date", "glass", "Invités"]]
+  const cases = [["vege", "leaf", "Végé"], ["favori", "star", "Favori"], ["prep", "box", "Prepmeal"], ["date", "glass", "Invités"]]
     .map(([k, i, t]) => `<button type="button" class="chip ${r[k] ? "on" : ""}" data-case="${k}">${icone(i)}${t}</button>`).join("");
   const niveaux = Object.keys(NIVEAUX).map(k => `<div class="niv"><span class="lbl">${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</span>
     <span class="seg" data-niv="${k}">${NIVEAUX[k].map((l, i) => `<button type="button" class="${r[k] === i + 1 ? "on" : ""}" data-v="${i + 1}">${l}</button>`).join("")}</span></div>`).join("");
@@ -1676,20 +1700,19 @@ function ouvrirFormulaire(brouillon, titre) {
   m.innerHTML = `<div class="voile"><div class="fiche form" role="dialog" aria-label="${titre}">
     <div class="fi-hd"><h2 class="titre-r" style="flex:1">${titre}</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="champ"><label for="f-nom">Nom</label><input class="saisie" id="f-nom" value="${esc(r.nom)}" autocomplete="off"></div>
-    <div class="champ"><span class="lbl">Catégorie</span>${pastilles("categorie")}</div>
-    <div class="champ"><span class="lbl">Protéine</span>${pastilles("proteine", true)}</div>
+    <div class="champ"><label for="f-categorie">Catégorie</label>${listeTag("categorie", r.categorie)}</div>
     <div class="cases">${cases}</div>
     <div class="champ"><span class="lbl">Ingrédients <i>· pour <span id="f-pour">${r.portions || 2}</span></i></span>
       <div class="ingl" id="f-ings">${(r.ingredients || []).map(ligneIngredient).join("")}</div>
       <button type="button" class="btn ajout" data-act="ajout-ing">${icone("plus")}Ajouter un ingrédient</button></div>
-    <button type="button" class="plus" data-act="plus" aria-expanded="false">${icone("down")}<span>Plus : saison, origine, prix, notes…</span></button>
+    <button type="button" class="plus" data-act="plus" aria-expanded="false"><span class="plus-t"><b>Plus de détails</b><small>Famille, saison, origine, préparation, prix, notes…</small></span>${icone("down")}</button>
     <div id="f-plus" hidden>
       <div class="duo2"><div class="champ"><label for="f-famille">Famille</label><input class="saisie" id="f-famille" list="familles" placeholder="ex. Burger" value="${esc(r.famille || "")}" autocomplete="off"></div>
         <div class="champ"><label for="f-variante">Variante</label><input class="saisie" id="f-variante" placeholder="ex. Végé" value="${esc(r.variante || "")}" autocomplete="off"></div></div>
       <datalist id="familles">${[...new Set(S.recettes.map(x => x.famille).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join("")}</datalist>
-      <div class="champ"><span class="lbl">Saison</span>${pastilles("saison", false, SAISONS.includes(r.saison) || !r.saison ? SAISONS : [...SAISONS, r.saison])}</div>
-      <div class="champ"><span class="lbl">Origine</span>${pastilles("origine", true)}</div>
-      <div class="champ"><span class="lbl">Préparation</span>${pastilles("preparation", true)}</div>
+      <div class="trio"><div class="champ"><label for="f-saison">Saison</label>${listeTag("saison", r.saison, SAISONS.slice())}</div>
+        <div class="champ"><label for="f-origine">Origine</label>${listeTag("origine", r.origine)}</div>
+        <div class="champ"><label for="f-preparation">Préparation</label>${listeTag("preparation", r.preparation)}</div></div>
       ${niveaux}
       <div class="duo"><div class="champ"><span class="lbl">Portions</span><span class="pas">
           <button type="button" data-act="portions" data-v="-1" aria-label="Moins">−</button><b id="f-portions">${r.portions || 2}</b><button type="button" data-act="portions" data-v="1" aria-label="Plus">+</button></span></div>
@@ -1749,10 +1772,8 @@ function ajouterIngredient(apres) {
 function lireFormulaire() {
   const r = Object.assign({}, $("#modal").brouillon);
   r.nom = $("#f-nom").value.trim();
-  document.querySelectorAll("[data-champ]").forEach(g => {
-    const autre = g.querySelector("input.autre");
-    const on = g.querySelector(".chip.on[data-pastille]");
-    const v = autre && autre.value.trim() ? autre.value.trim() : on ? on.textContent.trim() : "";
+  document.querySelectorAll("#modal [data-champ]").forEach(g => {
+    const v = g.value === "__autre" ? "" : g.value.trim();
     if (v) r[g.dataset.champ] = v; else delete r[g.dataset.champ];
   });
   document.querySelectorAll("[data-case]").forEach(b => { r[b.dataset.case] = b.classList.contains("on"); });
@@ -1816,6 +1837,7 @@ function nouvelleVariante() {
   copie.varianteDe = r.id;
   ouvrirFormulaire(copie, "Nouvelle variante");
   $("#f-plus").hidden = false;
+  $("[data-act=plus]").setAttribute("aria-expanded", true); $("[data-act=plus] b").textContent = "Moins de détails";
   $("#f-variante").focus();
 }
 function dupliquer() {
@@ -1829,14 +1851,6 @@ function dupliquer() {
 
 // Clics à l'intérieur du formulaire qui ne font que changer l'allure des boutons
 function clicFormulaire(t) {
-  const pastille = t.closest("[data-pastille]");
-  if (pastille) {
-    const g = pastille.parentElement, etait = pastille.classList.contains("on");
-    g.querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
-    const autre = g.querySelector("input.autre"); if (autre) autre.value = "";
-    if (!etait) pastille.classList.add("on"); // retoucher la pastille choisie la décoche
-    return true;
-  }
   const cas = t.closest("[data-case]");
   if (cas) { cas.classList.toggle("on"); return true; }
   const niv = t.closest("[data-niv] button");
@@ -1847,17 +1861,6 @@ function clicFormulaire(t) {
     return true;
   }
   return false;
-}
-// « Autre… » : la pastille devient une petite case où taper une nouvelle valeur
-function pastilleAutre(btn) {
-  const g = btn.parentElement;
-  g.querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
-  const champ = document.createElement("input");
-  champ.className = "chip autre on";
-  champ.placeholder = "Autre…";
-  champ.size = 10;
-  btn.replaceWith(champ);
-  champ.focus();
 }
 
 /* ---------- Glisser-déposer qui suit le doigt (modèle : Stuff to go) ----------
@@ -2059,7 +2062,7 @@ function versCase(type, k, v) {
 // Colonnes des onglets « Ingrédients » et « Produits ménagers » (Type : seulement relu dans les anciens fichiers « Banque d'ingrédients »)
 const COLONNES_BANQUE = [["nom", "Nom", 24], ["type", "Type", 11], ["rayon", "Rayon", 24], ["rec", "Récurrent", 10, "c"], ["placard", "Placard", 10, "c"], ["icone", "Icône", 12], ["nb", "Nb", 6, "c"], ["recettes", "Recettes", 80]];
 // Largeurs resserrées des colonnes Recettes dans l'Excel (les autres : celles de COLONNES)
-const LARG_XL = { nom: 30, famille: 12, variante: 12, categorie: 14, proteine: 12, saison: 8, origine: 11, preparation: 11, vege: 6, favori: 7, prep: 9, date: 8, prix: 5, difficulte: 9, temps: 8, maitrise: 11, portions: 8, ingredients: 90, suggeres: 10, lien: 24, notes: 40, id: 28 };
+const LARG_XL = { nom: 30, famille: 12, variante: 12, categorie: 14, saison: 8, origine: 11, preparation: 11, vege: 6, favori: 7, prep: 9, date: 8, prix: 5, difficulte: 9, temps: 8, maitrise: 11, portions: 8, ingredients: 90, suggeres: 10, lien: 24, notes: 40, id: 28 };
 const CENTRE_XL = new Set(["vege", "favori", "prep", "date", "prix", "portions", "suggeres"]);
 const HAUTEUR_XL = 21;  // points : toutes les lignes pareilles, image comprise
 
@@ -2177,6 +2180,7 @@ function lireRecettes(wb) {
   if (!ws) return [];
   const parEntete = {};
   COLONNES.forEach(c => { parEntete[norm(c[1])] = c; });
+  parEntete[norm("À l'avance")] = COLONNES.find(c => c[0] === "prep");  // en-tête des fichiers d'avant 0.18.0
   const cols = [];
   ws.getRow(1).eachCell((c, i) => { cols[i] = parEntete[norm(valeurCase(c.value))]; });
   const out = [];
@@ -2544,10 +2548,10 @@ function fermerDoux() {
 // Je remplis ce qui manque (tout est enregistré au fur et à mesure), puis je jette la carte :
 // à gauche = recette suivante, à droite = retour à la précédente (ou les boutons en bas).
 const GROUPES_CP = {
-  cat: { nom: "Catégorie et protéine", manque: r => !r.categorie || (estPlat(r) && !r.proteine) },
+  cat: { nom: "Catégorie", manque: r => !r.categorie },
   ing: { nom: "Ingrédients", manque: r => !(r.ingredients || []).length || r.ingredientsSource === "suggestion" },
   niv: { nom: "Prix, difficulté, temps, maîtrise", manque: r => Object.keys(NIVEAUX).some(k => !r[k]) },
-  opt: { nom: "Saison, végé, à l'avance, invités", manque: r => !r.saison }
+  opt: { nom: "Saison, végé, prepmeal, invités", manque: r => !r.saison }
 };
 const manquesCp = r => [...S.cp.champs].filter(g => GROUPES_CP[g].manque(r));
 const recetteCp = () => S.cp && S.cp.etape === "cartes" ? recette(S.cp.ids[S.cp.i]) : null;
@@ -2604,11 +2608,10 @@ function majCp(force = true) {
 
 function htmlCarteCp(r) {
   const m = manquesCp(r), titre = g => `<div class="cp-t ${m.includes(g) ? "manque" : "ok"}">${m.includes(g) ? "" : icone("check")}${GROUPES_CP[g].nom}</div>`;
-  const pastilles = (k, liste) => `<div class="pastilles">${liste.map(v => `<button class="chip ${v === r[k] ? "on" : ""}" data-cp-val="${k}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>`;
+  const liste = (k, l) => { if (r[k] && !l.includes(r[k])) l.push(r[k]); return `<select class="saisie choix" data-cp-sel="${k}"><option value="">—</option>${l.map(v => `<option value="${esc(v)}" ${v === r[k] ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>`; };
   const parts = [`<div class="cp-hd">${dishImg(r, 52)}<div><h3>${esc(r.nom)}</h3><div class="sub">${m.length ? m.length + " chose" + (m.length > 1 ? "s" : "") + " à compléter" : "Complète !"}</div></div></div>`];
   if (S.cp.champs.has("cat")) parts.push(`<section>${titre("cat")}
-    <span class="lbl">Catégorie</span>${pastilles("categorie", valeursDe("categorie", r.categorie).slice(0, 8))}
-    <span class="lbl">Protéine</span>${pastilles("proteine", valeursDe("proteine", r.proteine).slice(0, 10))}</section>`);
+    <span class="lbl">Catégorie</span>${liste("categorie", valeursDe("categorie"))}</section>`);
   if (S.cp.champs.has("ing")) {
     const ings = r.ingredients || [];
     parts.push(`<section>${titre("ing")}
@@ -2620,8 +2623,8 @@ function htmlCarteCp(r) {
   if (S.cp.champs.has("niv")) parts.push(`<section>${titre("niv")}${Object.keys(NIVEAUX).map(k => `<div class="niv"><span class="lbl">${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</span>
     <span class="seg">${NIVEAUX[k].map((l, i) => `<button class="${r[k] === i + 1 ? "on" : ""}" data-cp-niv="${k}" data-v="${i + 1}">${l}</button>`).join("")}</span></div>`).join("")}</section>`);
   if (S.cp.champs.has("opt")) parts.push(`<section>${titre("opt")}
-    <span class="lbl">Saison</span>${pastilles("saison", SAISONS.includes(r.saison) || !r.saison ? SAISONS : [...SAISONS, r.saison])}
-    <div class="cases">${[["vege", "leaf", "Végé"], ["prep", "box", "À l'avance"], ["date", "glass", "Invités"], ["favori", "star", "Favori"]]
+    <span class="lbl">Saison</span>${liste("saison", SAISONS.slice())}
+    <div class="cases">${[["vege", "leaf", "Végé"], ["prep", "box", "Prepmeal"], ["date", "glass", "Invités"], ["favori", "star", "Favori"]]
       .map(([k, i, t]) => `<button class="chip ${r[k] ? "on" : ""}" data-cp-case="${k}">${icone(i)}${t}</button>`).join("")}</div></section>`);
   return parts.join("");
 }
@@ -2709,8 +2712,6 @@ function clicCompleter(t) {
   if (!$("#cp-ecran")) return false;
   const ch = t.closest("[data-cp-champ]");
   if (ch) { const k = ch.dataset.cpChamp; S.cp.champs.has(k) ? S.cp.champs.delete(k) : S.cp.champs.add(k); vibrer("pas"); majCp(); return true; }
-  const val = t.closest("[data-cp-val]");
-  if (val) { const k = val.dataset.cpVal, v = val.dataset.v; majRecetteCp(r => { if (r[k] === v) delete r[k]; else r[k] = v; }); return true; }
   const niv = t.closest("[data-cp-niv]");
   if (niv) { const k = niv.dataset.cpNiv, v = +niv.dataset.v; majRecetteCp(r => { if (r[k] === v) delete r[k]; else r[k] = v; }); return true; }
   const cas = t.closest("[data-cp-case]");
@@ -2798,10 +2799,8 @@ document.addEventListener("click", e => {
   if (rc) { vibrer(rc.classList.toggle("on") ? "pas" : "decoche"); return; }
   const bqOuvrir = t.closest("[data-bq-ouvrir]");
   if (bqOuvrir) { S.bq.scroll = $("#bq-corps").scrollTop; S.bq.detail = bqOuvrir.dataset.bqOuvrir; S.bq.suppr = null; return majBanque(); }
-  const ap = t.closest("[data-asm-p]");
-  if (ap) { S.asm.princ = S.asm.princ === ap.dataset.asmP ? null : ap.dataset.asmP; S.asm.nom = ""; vibrer("pas"); return majAssembler(); }
-  const aa = t.closest("[data-asm-a]");
-  if (aa) { const l = S.asm.accs, v = aa.dataset.asmA, i = l.indexOf(v); i >= 0 ? l.splice(i, 1) : l.push(v); S.asm.nom = ""; vibrer(i >= 0 ? "decoche" : "pas"); return majAssembler(); }
+  const ax = t.closest("[data-asm-x]");
+  if (ax) { S.asm.accs.splice(+ax.dataset.asmX, 1); S.asm.nom = ""; vibrer("decoche"); return majAssembler(); }
   const vp = t.closest("[data-var-propo]");
   if (vp) { const x = S.propo.repas[+vp.dataset.varPropo], r = recette(vp.dataset.v); if (x && r) { x.id = r.id; if (!veutAccomp(r)) x.side = null; else if (!x.side) x.side = tirerAccomp(accompsPris()); sauverPropo(); vibrer("pas"); renderMenu(); } return; }
   const bqRayon = t.closest("[data-bq-rayon]");
@@ -2885,22 +2884,20 @@ document.addEventListener("click", e => {
     case "dupliquer": dupliquer(); break;
     case "variante": nouvelleVariante(); break;
     case "assembler": ouvrirAssembler($("#modal").dataset.recette); break;
-    case "asm-tout": S.asm.tout = true; majAssembler(); break;
     case "asm-menu": assemblerAuMenu(); break;
     case "asm-garder": assemblerGarder(); break;
     case "asm-repas": { const o = repasOuvert(); if (o) { const x = o.l[o.i]; ouvrirAssembler(x.id, accompsDe(x), o.src === "p" ? o.i : null); } break; }
     case "filtres": ouvrirFiltres(); break;
-    case "filtres-effacer": S.f.cats = []; S.f.prots = []; renderRecettes(); ouvrirFiltres(); break;
+    case "filtres-effacer": S.f.cats = []; renderRecettes(); ouvrirFiltres(); break;
     case "supprimer": supprimer(); break;
     case "enregistrer": enregistrer(); break;
-    case "autre": pastilleAutre(el); break;
     case "ajout-ing": ajouterIngredient(); break;
     case "retirer-ing": el.closest(".li").remove(); break;
     case "plus": {
       const ouvert = $("#f-plus").hidden;
       $("#f-plus").hidden = !ouvert;
       el.setAttribute("aria-expanded", ouvert);
-      el.innerHTML = ouvert ? `${icone("up")}<span>Moins</span>` : `${icone("down")}<span>Plus : saison, origine, prix, notes…</span>`;
+      el.querySelector("b").textContent = ouvert ? "Moins de détails" : "Plus de détails";
       break;
     }
     case "portions": {
@@ -2931,6 +2928,19 @@ document.addEventListener("change", e => {
   if (e.target.id === "fichier" && e.target.files[0]) importerFichier(e.target.files[0]);
   if (e.target.id === "f-tex" && e.target.files.length) importerTextures([...e.target.files]);
   if (e.target.id === "bq-nom") renommerIngredient(S.bq.detail, e.target.value);
+  const t = e.target, d = t.dataset || {};
+  // Formulaire recette : « Autre… » dans une liste de tags
+  if (d.champ && t.value === "__autre") tagAutre(t);
+  // Compléter : chaque choix est enregistré tout de suite
+  if (d.cpSel) { const k = d.cpSel, v = t.value; majRecetteCp(r => { if (v) r[k] = v; else delete r[k]; }); }
+  // Assembler : plat principal, accompagnement changé, retiré (« — ») ou ajouté
+  if (d.asmSel) {
+    const a = S.asm, v = t.value;
+    if (d.asmSel === "p") a.princ = v || null;
+    else if (d.asmSel === "a") { if (v) a.accs[+d.i] = v; else a.accs.splice(+d.i, 1); }
+    else if (v) a.accs.push(v);
+    a.nom = ""; vibrer("pas"); majAssembler();
+  }
 });
 // Revenir dans la case d'ajout rouvre la liste déroulante (elle se ferme quand on touche ailleurs)
 document.addEventListener("focusin", e => { if (e.target.id === "ajout-art") majSuggArt(); });
