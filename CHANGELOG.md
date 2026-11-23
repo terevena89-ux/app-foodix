@@ -1,5 +1,12 @@
 # Foodix — journal des nouveautés
 
+## 0.21.0 — 2026-11-23
+- Ingrédients au choix : « 4 chipolatas ou merguez ». L'icône est celle du premier. En ajoutant le plat à la liste depuis sa fiche, la fenêtre « Avant la liste de courses » demande lequel (le premier est choisi d'office). Un menu tiré au sort prend le premier ; on change dans le Menu, en touchant le plat (« Pour ce repas »). La liste de courses n'a que l'ingrédient choisi.
+- Ingrédients optionnels : écrire « (optionnel) », « option », « opt », « fac » ou « facultatif » au bout de la ligne. Petite étiquette « opt. » dans le formulaire, italique sur la fiche. Pris d'office ; « Pas cette fois » dans la question avant la liste ou dans « Pour ce repas » le retire de la liste.
+- Fiche : boutons de l'en-tête resserrés, nom sur deux lignes au plus. Toucher l'étoile ne relance plus l'animation d'ouverture de la fiche.
+- Assembler : onglets Favoris, Principal, Accomp., Mezzé. Un favori est aussi dans son onglet normal. Au départ : Favoris s'il y en a, sinon Accomp. pour un plat principal, Principal pour le reste.
+- Filtres : la feuille garde sa hauteur ; la famille touchée reste à sa place et s'ouvre vers le bas, on fait défiler.
+
 ## 0.20.0 — 2026-11-23
 - Liste des recettes rangée par catégorie (titre avec un point vert ; on replie une catégorie en touchant son titre, elle reste repliée). Ordre réglable dans Réglages › Ordre des catégories (par défaut : Principal seul, Plat complet, Accompagnement, Mezzé / Apéro, les autres, puis les bases).
 - Bouton de tri : Catégorie, Nom, Récentes, Temps, Maîtrise. Le choix est gardé ; quand ce n'est plus « Catégorie », la pastille passe en vert avec une croix pour revenir. Interrupteur « Regrouper les variantes » : regroupées, une famille tient sur une ligne et la toucher propose ses variantes.

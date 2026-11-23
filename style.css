@@ -1047,3 +1047,36 @@ body.pc .fo .bsc, body.pc .fo .ld-b { height: 32px; }
 .fi-var { white-space: nowrap; min-width: 0; }
 .fi-var .fv-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .fi-var b.v { flex-shrink: 0; }
+
+/* ---------- v0.21.0 ---------- */
+/* Fiche : en-tête H1 — boutons resserrés, nom sur 2 lignes au plus */
+.fr .fi-hd h2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 18px; line-height: 1.2; }
+.fr .fi-hd > .ib { width: 30px; height: 30px; margin: -2px -3px 0 0; }
+.fr .fi-hd > .ib .ic { width: 18px; height: 18px; }
+.fr .fi-hd > .fi-etoile .ic { width: 20px; height: 20px; }
+/* « ou » et optionnel */
+.ings li i.ou { color: var(--discret); font-weight: 600; }
+.ings li.opt span { font-style: italic; color: var(--discret); }
+.li-tag { flex-shrink: 0; font-size: 10px; font-weight: 800; color: var(--pale); border: 1px solid var(--trait); border-radius: 999px; padding: 0 6px; margin-right: 2px; line-height: 16px; }
+.li-tag:empty { display: none; }
+.fo .ingl .li.opt input { font-style: italic; color: var(--discret); }
+.choix-q b.opt, .pour-repas b.opt { font-style: italic; }
+.choix-q .seg button, .pour-repas .seg button { display: inline-flex; align-items: center; gap: 5px; }
+.choix-q .seg img, .pour-repas .seg img { width: 16px; height: 16px; }
+.pour-repas { display: flex; flex-direction: column; gap: 8px; background: var(--creux); border-radius: 14px; padding: 10px 12px; }
+.pr-t { font: 800 10.5px var(--texte); text-transform: uppercase; letter-spacing: .08em; color: var(--discret); }
+.pr-l { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.pr-l b { font-weight: 700; font-size: 14px; min-width: 0; }
+.pr-c { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.pour-repas .seg { background: var(--carte); }
+.pour-repas .seg button.on { background: var(--accent-doux); color: var(--accent); }
+/* Assembler : onglets soulignés */
+.as-ong { display: flex; position: sticky; top: -10px; z-index: 2; background: var(--carte); margin: 0 -14px; padding: 0 10px; border-bottom: 1px solid var(--trait); }
+.as-ong button { flex: 1; border: 0; background: none; font-size: 13px; font-weight: 700; padding: 10px 2px 8px; color: var(--discret); white-space: nowrap; border-bottom: 2.5px solid transparent; margin-bottom: -1px; display: inline-flex; justify-content: center; align-items: center; gap: 4px; }
+.as-ong button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 800; }
+.as-ong button .ic { width: 14px; height: 14px; color: var(--fav); }
+.as-ong button.fav.on .ic { fill: currentColor; }
+.as-vide { color: var(--discret); font-size: 13.5px; text-align: center; padding: 18px 10px; margin: 0; }
+/* Filtres : hauteur fixe, la famille s'ouvre vers le bas, on fait défiler */
+.fiche.filtres-f { height: min(80vh, 660px); height: min(80dvh, 660px); }
+.filtres-f .pied2 { margin-top: auto; position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom, 0px)); background: var(--carte); padding: 8px 0 calc(4px + env(safe-area-inset-bottom, 0px)); z-index: 2; }

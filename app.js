@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.20.0";
+const VERSION = "0.21.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -369,7 +369,11 @@ function rerendre() {
   if (a && a.id === "q") { majListe(); renderPanneau(); return; }
   render();
   // la fiche ouverte suit les changements (mais on ne touche jamais au formulaire en cours de saisie)
-  if ($("#modal").dataset.recette && !$("#modal").dataset.form) ouvrirFiche($("#modal").dataset.recette);
+  if ($("#modal").dataset.recette && !$("#modal").dataset.form) {
+    const f0 = $("#modal .fiche"), haut = f0 ? f0.scrollTop : 0;
+    ouvrirFiche($("#modal").dataset.recette);
+    const f = $("#modal .fiche"); if (f) { f.style.animation = "none"; f.parentElement.style.animation = "none"; f.scrollTop = haut; }
+  }
   if (S.bq.ouvert) majBanque();
   if ($("#cp-ecran")) majCp(false);  // venu de l'autre appareil : pas pendant qu'on tape
 }
@@ -515,6 +519,30 @@ const estBase = r => /^bases?\b/.test(norm(r && r.categorie));
 const estSection = t => /^\s*#/.test(t || "");
 const nomSection = t => (t || "").replace(/^\s*#+\s*/, "").trim();
 const ingsSeuls = r => ((r && r.ingredients) || []).filter(t => !estSection(t));
+// Ingrédient optionnel : « 50 g parmesan (optionnel) » (ou option, opt, fac, facultatif, avec ou sans parenthèses)
+const RE_OPT = /\s*\(?\s*\b(optionnel(?:le)?|option|opt\.?|fac\.?|facultati(?:f|ve))\s*\)?\s*$/i;
+const estOptionnel = t => !!t && !estSection(t) && RE_OPT.test(t);
+const sansOpt = t => (t || "").replace(RE_OPT, "").trim();
+// Ingrédient au choix : « 4 chipolatas ou merguez » (deux choix). La quantité du premier vaut pour le second s'il n'en a pas.
+function alternatives(t) {
+  const s = sansOpt(t), m = s.split(/\s+ou\s+/i);
+  if (m.length !== 2 || !m[0].trim() || !m[1].trim()) return null;
+  const a = m[0].trim(), b = m[1].trim(), ia = parseItem(a), ib = parseItem(b);
+  const prefixe = ia && ia.name ? a.slice(0, a.length - ia.name.length) : "";
+  return [a, ib && ib.qty != null ? b : (prefixe + b).trim()];
+}
+// L'ingrédient qu'on achète vraiment, selon les choix du repas (x.choix = { alt: { texte: 1 }, sans: [texte] }) ; null = pas pris
+function ingChoisi(t, choix) {
+  const c = choix || {};
+  if (estOptionnel(t) && (c.sans || []).includes(t)) return null;
+  const alt = alternatives(t);
+  return alt ? alt[(c.alt || {})[t] ? 1 : 0] : sansOpt(t);
+}
+// Pour l'icône et la banque : le premier choix, sans « (optionnel) »
+const maj1 = v => String(v || "").charAt(0).toUpperCase() + String(v || "").slice(1);
+const ingPourIcone = t => { const a = alternatives(t); return a ? a[0] : sansOpt(t); };
+// Les questions d'un plat : ses lignes « ou » et optionnelles (et celles de ses accompagnements)
+const lignesAuChoix = r => ingsSeuls(r).filter(t => alternatives(t) || estOptionnel(t));
 const nomCrochets = txt => { const m = /^\s*\[(.+)\]\s*$/.exec(txt || ""); return m ? m[1].trim() : null; };
 const recetteParNom = nom => S.recettes.find(r => norm(r.nom) === norm(nom));
 const sousRecette = txt => { const n = nomCrochets(txt); const r = n && recetteParNom(n); return r && r.ingredients ? r : null; };
@@ -642,27 +670,41 @@ function accepterTout(choixFait) {
 }
 
 // Un plat qui entre dans la liste : { id, side, fait, achete: [bases achetées toutes prêtes] }
-const repasListe = x => { const o = { id: x.id, side: x.side || null, fait: false }; if (x.sides) o.sides = x.sides; if (x.achete && x.achete.length) o.achete = x.achete; return o; };
+const repasListe = x => { const o = { id: x.id, side: x.side || null, fait: false }; if (x.sides) o.sides = x.sides; if (x.achete && x.achete.length) o.achete = x.achete; if (x.choix) o.choix = x.choix; return o; };
 
 // Avant d'ajouter des plats qui utilisent une base (pâte, sauce…) : « je la fais » ou « je l'achète toute prête » ?
 // On demande à chaque fois (rien n'est retenu). Le choix est noté sur le plat (x.achete), puis on continue.
-function demanderBases(plats, ensuite) {
-  const q = [];
+// Noter un choix sur un repas : « ou » (0 = premier, 1 = second) ou optionnel pas pris
+function noterChoix(x, t, sorte, v) {
+  const c = x.choix = x.choix || {};
+  if (sorte === "alt") { c.alt = c.alt || {}; if (v) c.alt[t] = 1; else delete c.alt[t]; if (!Object.keys(c.alt).length) delete c.alt; }
+  else { const l = new Set(c.sans || []); v ? l.add(t) : l.delete(t); if (l.size) c.sans = [...l]; else delete c.sans; }
+  if (!Object.keys(c).length) delete x.choix;
+}
+function demanderBases(plats, ensuite, avecChoix = false) {
+  const q = [], qc = [];
   plats.forEach((x, n) => [x.id, ...accompsDe(x)].forEach(id => basesDe(recette(id)).forEach(b => q.push({ n, plat: recette(id).nom, b }))));
-  if (!q.length) return ensuite();
+  if (avecChoix) plats.forEach((x, n) => [x.id, ...accompsDe(x)].forEach(id => lignesAuChoix(recette(id)).forEach(t => qc.push({ n, plat: recette(id).nom, t }))));
+  if (!q.length && !qc.length) return ensuite();
   const md = $("#modal");
   ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete md.dataset[k]);
   md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Bases">
-    <div class="fi-hd"><div class="txt"><h2>Je la fais ou je l'achète ?</h2><div class="sub">Pour la liste de courses</div></div>
+    <div class="fi-hd"><div class="txt"><h2>${qc.length ? "Avant la liste de courses" : "Je la fais ou je l'achète ?"}</h2><div class="sub">Pour la liste de courses</div></div>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     ${q.map((o, k) => `<div class="base-q"><div class="w"><b>${esc(o.b.nom)}</b><span class="sub">pour ${esc(o.plat)}</span></div>
       <span class="seg" data-base-q="${k}" data-n="${o.n}" data-nom="${esc(o.b.nom)}"><button class="on" data-v="fais">Je la fais</button><button data-v="achete">Je l'achète</button></span></div>`).join("")}
+    ${qc.map(o => { const alt = alternatives(o.t);
+      return `<div class="base-q choix-q"><div class="w"><b class="${estOptionnel(o.t) ? "opt" : ""}">${esc(sansOpt(o.t))}</b><span class="sub">${alt ? "laquelle ?" : "optionnel"}</span></div>
+      ${alt ? `<span class="seg" data-alt-q data-n="${o.n}" data-t="${esc(o.t)}"><button class="on" data-v="0">${imgIng(alt[0], 16)}${esc(maj1(parseItem(alt[0]) ? parseItem(alt[0]).name : alt[0]))}</button><button data-v="1">${imgIng(alt[1], 16)}${esc(maj1(parseItem(alt[1]) ? parseItem(alt[1]).name : alt[1]))}</button></span>` : ""}
+      ${estOptionnel(o.t) ? `<span class="seg" data-opt-q data-n="${o.n}" data-t="${esc(o.t)}"><button class="on" data-v="oui">Je le prends</button><button data-v="non">Pas cette fois</button></span>` : ""}</div>`; }).join("")}
     <div class="pied2"><button class="btn" data-act="fermer">Annuler</button><button class="btn pri" data-act="bases-ok">${icone("cart")}Ajouter à la liste</button></div></div></div>`;
   md.suite = () => {
     document.querySelectorAll("[data-base-q]").forEach(g => {
       if (!g.querySelector('[data-v="achete"]').classList.contains("on")) return;
       const x = plats[+g.dataset.n]; x.achete = [...new Set([...(x.achete || []), g.dataset.nom])];
     });
+    document.querySelectorAll("[data-alt-q]").forEach(g => { if (g.querySelector('[data-v="1"]').classList.contains("on")) noterChoix(plats[+g.dataset.n], g.dataset.t, "alt", 1); });
+    document.querySelectorAll("[data-opt-q]").forEach(g => { if (g.querySelector('[data-v="non"]').classList.contains("on")) noterChoix(plats[+g.dataset.n], g.dataset.t, "sans", true); });
     fermer(); ensuite();
   };
 }
@@ -738,6 +780,12 @@ function ouvrirRepas(i, src) {
   md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
     <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>${s ? `<div class="sub">+ ${esc(s)}</div>` : ""}</div>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    ${(() => { const lc = [x.id, ...accompsDe(x)].flatMap(id => lignesAuChoix(recette(id))); if (!lc.length) return "";
+      const c = x.choix || {};
+      return `<div class="pour-repas"><div class="pr-t">Pour ce repas</div>${lc.map(t => { const alt = alternatives(t), nom = v => esc(maj1(parseItem(v) ? parseItem(v).name : v)), a = (c.alt || {})[t] ? 1 : 0, sans = (c.sans || []).includes(t);
+        return `<div class="pr-l"><b class="${estOptionnel(t) ? "opt" : ""}">${esc(sansOpt(t))}</b><span class="pr-c">
+          ${alt ? `<span class="seg"><button class="${a ? "" : "on"}" data-repas-alt="0" data-t="${esc(t)}">${imgIng(alt[0], 16)}${nom(alt[0])}</button><button class="${a ? "on" : ""}" data-repas-alt="1" data-t="${esc(t)}">${imgIng(alt[1], 16)}${nom(alt[1])}</button></span>` : ""}
+          ${estOptionnel(t) ? `<span class="seg"><button class="${sans ? "" : "on"}" data-repas-opt="oui" data-t="${esc(t)}">Je le prends</button><button class="${sans ? "on" : ""}" data-repas-opt="non" data-t="${esc(t)}">Pas cette fois</button></span>` : ""}</span></div>`; }).join("")}</div>`; })()}
     <div class="actions">
       ${src === "p" ? `<button class="act pri" data-act="accepter" data-i="${i}">${icone("cart")}Ajouter à la liste de courses</button>
       <button class="act" data-act="remplacer">${icone("refresh")}Remplacer (au hasard)</button>
@@ -808,7 +856,7 @@ function auMenu() {
   S.propo.repas = S.propo.repas.filter(x => x.id !== r.id);
   sauverPropo(); ecrireMenu(m); render(); ouvrirFiche(r.id);
   toast("Ajouté à la liste de courses"); vibrer("ajout");
-  });
+  }, true);
 }
 
 /* ---------- 4 bis bis. Assembler un plat complet (principal + un ou plusieurs accompagnements) ---------- */
@@ -824,7 +872,9 @@ const nomAssemble = (p, as) => p.nom + " & " + as.map(a => a.nom.charAt(0).toLow
 function ouvrirAssembler(depart, accs = [], repasI = null, src = "p") {
   const r = recette(depart); if (!r) return;
   const prefs = (r.preferes || []).filter(id => assemblable(recette(id)));
-  S.asm = { depart, sel: new Set(accs.length ? accs : prefs), repasI, src };
+  // onglet de départ : Favoris s'il y en a, sinon Accomp. pour un plat principal, Principal pour le reste
+  const onglet = prefs.length ? "fav" : veutAccomp(r) ? "acc" : "princ";
+  S.asm = { depart, sel: new Set(accs.length ? accs : prefs), repasI, src, onglet };
   vibrer("pas");
   majAssembler(true);
 }
@@ -840,10 +890,12 @@ function majAssembler(premier) {
   const prefs = (r.preferes || []).map(recette).filter(x => assemblable(x) && x.id !== r.id);
   const ligne = x => `<div class="ao ${a.sel.has(x.id) ? "on" : ""}"><button type="button" class="ao-c" data-asm-sel="${esc(x.id)}"><span class="cb">${icone("check")}</span>${dishImg(x, 24)}<span class="nm">${esc(x.nom)}</span></button>
     <button type="button" class="ao-p ${(r.preferes || []).includes(x.id) ? "on" : ""}" data-asm-pref="${esc(x.id)}" aria-label="Suggestion préférée">${icone("star")}</button></div>`;
-  const groupes = [["Principal seul", veutAccomp], ["Accompagnement", estAccomp], ["Mezzé / Apéro", estMezze]].map(([titre, test]) => {
-    const l = S.recettes.filter(x => x.id !== r.id && !estBase(x) && test(x) && !prefs.includes(x)).sort(parNom);
-    return l.length ? `<div class="as-t">${esc(titre)}</div><div class="as-l">${l.map(ligne).join("")}</div>` : "";
-  }).join("");
+  // Onglets : un favori est aussi dans son onglet normal
+  const ONG = [["fav", `${icone("star")}Favoris`, null], ["princ", "Principal", veutAccomp], ["acc", "Accomp.", estAccomp], ["mez", "Mezzé", estMezze]];
+  const test = (ONG.find(o => o[0] === a.onglet) || ONG[0])[2];
+  const l = test ? S.recettes.filter(x => x.id !== r.id && !estBase(x) && test(x)).sort(parNom) : prefs;
+  const groupes = `<div class="as-ong" role="tablist">${ONG.map(([k, lib]) => `<button type="button" role="tab" class="${k === a.onglet ? "on" : ""} ${k}" data-asm-ong="${k}" aria-selected="${k === a.onglet}">${lib}</button>`).join("")}</div>
+    ${l.length ? `<div class="as-l">${l.map(ligne).join("")}</div>` : `<p class="as-vide">${a.onglet === "fav" ? "Pas encore de favori pour ce plat : touche l'étoile d'une recette dans les autres onglets." : "Rien dans cette catégorie."}</p>`}`;
   const { princ, accs } = repasAssemble(), pret = accs.length > 0;
   md.dataset.asm = "1";
   ["recette", "form", "rep", "src", "choix", "archive", "filtres", "vc"].forEach(k => delete md.dataset[k]);
@@ -851,7 +903,6 @@ function majAssembler(premier) {
     <div class="as-hd">${dishImg(r, 32)}<div class="txt"><small>Avec quoi ?</small><b>${esc(r.nom)}</b></div><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="as-corps">
       <div class="as-resume">${pret ? `Au menu : ${[princ, ...accs].map(id => `<b>${esc(recette(id).nom)}</b>`).join(" + ")}` : "Coche ce qui va avec."}</div>
-      ${prefs.length ? `<div class="as-t pref">${icone("star")}Suggestions préférées</div><div class="as-l">${prefs.map(ligne).join("")}</div>` : ""}
       ${groupes}
     </div>
     <div class="as-pied"><div class="l2"><button class="btn sec" data-act="asm-garder" ${pret ? "" : "disabled"}>${icone("book")}Garder comme plat</button>
@@ -908,7 +959,7 @@ function articles(m) {
     // Une base entre crochets : ses ingrédients (même échelle que le plat), ou elle-même si je l'achète toute prête.
     // Un plat entre crochets (plat assemblé) : ses ingrédients à son échelle à lui, et ses bases à lui.
     const lignes = [];
-    const deplier = (rec, k, niveau) => ingsSeuls(rec).forEach(txt => {
+    const deplier = (rec, k, niveau) => ingsSeuls(rec).map(t => ingChoisi(t, x.choix)).filter(Boolean).forEach(txt => {
       const b = niveau < 2 && sousRecette(txt);
       if (!b || b === rec) return lignes.push([nomCrochets(txt) || txt, k]);
       if (estBase(b) && (x.achete || []).includes(b.nom)) return lignes.push([b.nom.replace(/\s+maison$/i, "") + " (tout prêt)", null]);
@@ -1268,11 +1319,11 @@ const rayonsDe = menage => menage ? RAYONS_MENAGE.map(r => r[0]) : AISLES_FOOD;
 const libelleRayon = id => { const m = RAYONS_MENAGE.find(r => r[0] === id); return m ? m[1] : aisleLabel(id); };
 const entreeDe = cle => S.banque.find(x => cleStockee(x) === cle);
 // Dessin d'un ingrédient (celui choisi dans la banque, sinon deviné d'après le nom)
-const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return ingImg(nom, px, b && b.icone, b && b.mc, b && b.menage); };
+const imgIng = (nom0, px = 18) => { const nom = ingPourIcone(nom0); const b = entreeDe(cleBanque(nom)); return ingImg(nom, px, b && b.icone, b && b.mc, b && b.menage); };
 
 function banque() {
   const auto = new Map();
-  S.recettes.forEach(r => ingsSeuls(r).forEach(txt => {
+  S.recettes.forEach(r => ingsSeuls(r).flatMap(t => alternatives(t) || [sansOpt(t)]).forEach(txt => {
     if (nomCrochets(txt)) return;  // une base : ce n'est pas un ingrédient
     const it = parseItem(txt); if (!it || !it.name) return;
     const e = auto.get(it.key) || { noms: {}, recettes: [] };
@@ -1725,12 +1776,13 @@ function ouvrirFiche(id) {
         ${ouvert ? `<div class="base-in">${ingsSeuls(b).map(x => `<span>${imgIng(x, 16)}${esc(x)}</span>`).join("")}<button class="lien-btn" data-fiche="${esc(b.id)}">Ouvrir la recette ${icone("right")}</button></div>` : ""}</li>`;
     }
     const propre = communs && !communs.includes(t);
-    return `<li class="${propre ? "propre" : ""} ${dans}">${imgIng(t, 18)}<span>${esc(t)}</span></li>`;
+    const txt = esc(sansOpt(t)).replace(/\s+ou\s+/i, ' <i class="ou">ou</i> ');
+    return `<li class="${propre ? "propre" : ""} ${dans} ${estOptionnel(t) ? "opt" : ""}">${imgIng(t, 18)}<span>${txt}</span></li>`;
   }).join("");
   const utilisee = estBase(r) ? S.recettes.filter(x => (x.ingredients || []).some(t => norm(nomCrochets(t) || "") === norm(r.nom))) : [];
   ["form", "rep", "choix", "filtres", "vc", "asm"].forEach(k => delete $("#modal").dataset[k]);
   $("#modal").dataset.recette = id;
-  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
+  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche fr" role="dialog" aria-label="${esc(r.nom)}">
     <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>
       ${fam.length > 1 ? `<button class="fi-var" data-act="var-menu" aria-label="Variante : changer">${icone("branche")}<span class="fv-t"><b>${esc(r.famille)}</b> ·</span><b class="v">${esc(r.variante || r.nom)}${icone("down")}</b></button>` : ""}</div>
       <button class="ib fi-etoile ${r.favori ? "on" : ""}" data-act="favori" aria-label="${r.favori ? "Retirer des favoris" : "Mettre en favori"}">${icone("star")}</button>
@@ -1975,9 +2027,11 @@ const ligneIngredient = (txt = "", ajout = false) => {
   const b = !ajout && sousRecette(txt);
   if (b) return `<div class="li sous"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>${icone("book", "li-livre")}
     <span class="li-nom">${esc(b.nom)}<small>${estBase(b) ? "sous-recette" : "plat"}</small></span><input type="hidden" value="${esc(txt)}"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
-  return `<div class="li ${ajout ? "ajout" : ""}"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
-  <span class="li-plus">${icone("plus")}</span>${dessinIng(txt)}<input value="${esc(txt)}" placeholder="${ajout ? "Ajouter un ingrédient" : "ex. 250 g pâtes"}" autocomplete="off" enterkeyhint="next">${ajout ? `<button type="button" class="fo-sect-b" data-act="ajout-section">${icone("plus")}Section</button>` : ""}<button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
+  return `<div class="li ${ajout ? "ajout" : ""} ${estOptionnel(txt) ? "opt" : ""}"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
+  <span class="li-plus">${icone("plus")}</span>${dessinIng(txt)}<input value="${esc(txt)}" placeholder="${ajout ? "Ajouter un ingrédient" : "ex. 250 g pâtes"}" autocomplete="off" enterkeyhint="next">${etiquetteIng(txt)}${ajout ? `<button type="button" class="fo-sect-b" data-act="ajout-section">${icone("plus")}Section</button>` : ""}<button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
 };
+// « ou » / « opt. » : petite étiquette discrète au bout de la ligne
+const etiquetteIng = t => `<span class="li-tag">${alternatives(t) ? "ou" : ""}${alternatives(t) && estOptionnel(t) ? " · " : ""}${estOptionnel(t) ? "opt." : ""}</span>`;
 const ligneSection = (nom = "") => `<div class="li sect"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
   <input class="sect-nom" value="${esc(nom)}" placeholder="Nom de la section (ex. Sauce)" autocomplete="off" enterkeyhint="next" aria-label="Nom de la section"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer la section">${icone("x")}</button></div>`;
 // Les ingrédients qui suivent une section sont décalés d'un cran (jusqu'à la section suivante)
@@ -3072,7 +3126,12 @@ document.addEventListener("click", e => {
     return;
   }
   const ff = t.closest("[data-ff]");
-  if (ff) { S.fOuvert = S.fOuvert === ff.dataset.ff ? null : ff.dataset.ff; vibrer("pas"); return ouvrirFiltres(); }
+  if (ff) {
+    const k = ff.dataset.ff, y0 = ff.getBoundingClientRect().top;
+    S.fOuvert = S.fOuvert === k ? null : k; vibrer("pas"); ouvrirFiltres();
+    const n = $(`[data-ff="${k}"]`), fi = $("#modal .fiche"); if (n && fi) fi.scrollTop += n.getBoundingClientRect().top - y0;
+    return;
+  }
   const ffv = t.closest("[data-ffv]");
   if (ffv) {
     const k = ffv.dataset.ffv, v = NIV_F[k] ? +ffv.dataset.v : ffv.dataset.v, l = S.f[k] = S.f[k] || [], i = l.indexOf(v);
@@ -3084,7 +3143,16 @@ document.addEventListener("click", e => {
   if (fc) { const l = S.f[fc.dataset.filtreCase], v = fc.dataset.v, i = l.indexOf(v); i >= 0 ? l.splice(i, 1) : l.push(v); vibrer("pas"); renderRecettes(); return ouvrirFiltres(); }
   const rf = t.closest("[data-retire-f]");
   if (rf) { const l = S.f[rf.dataset.retireF], i = l.indexOf(rf.dataset.v); if (i >= 0) l.splice(i, 1); vibrer("decoche"); return flip("#liste [data-k]", renderRecettes); }
-  const bq = t.closest("[data-base-q] button");
+  const prc = t.closest("[data-repas-alt], [data-repas-opt]");
+  if (prc) {
+    const o = repasOuvert(); if (!o) return;
+    const x = o.l[o.i], tt = prc.dataset.t;
+    if (prc.dataset.repasAlt != null) noterChoix(x, tt, "alt", prc.dataset.repasAlt === "1"); else noterChoix(x, tt, "sans", prc.dataset.repasOpt === "non");
+    o.save(); vibrer("pas"); render(); ouvrirRepas(o.i, o.src);
+    const f = $("#modal .fiche"); if (f) { f.style.animation = "none"; f.parentElement.style.animation = "none"; }
+    return;
+  }
+  const bq = t.closest("[data-base-q] button, [data-alt-q] button, [data-opt-q] button");
   if (bq) { bq.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === bq)); vibrer("pas"); return; }
   const coche = t.closest("[data-coche]");
   if (coche) return cocher(coche.dataset.coche, coche);
@@ -3110,6 +3178,8 @@ document.addEventListener("click", e => {
   if (rc) { vibrer(rc.classList.toggle("on") ? "pas" : "decoche"); return; }
   const bqOuvrir = t.closest("[data-bq-ouvrir]");
   if (bqOuvrir) { S.bq.scroll = $("#bq-corps").scrollTop; S.bq.detail = bqOuvrir.dataset.bqOuvrir; S.bq.suppr = null; return majBanque(); }
+  const aong = t.closest("[data-asm-ong]");
+  if (aong) { S.asm.onglet = aong.dataset.asmOng; vibrer("pas"); majAssembler(); $("#modal .as-corps").scrollTop = 0; return; }
   const asel = t.closest("[data-asm-sel]");
   if (asel) { const id = asel.dataset.asmSel, l = S.asm.sel; l.has(id) ? l.delete(id) : l.add(id); vibrer(l.has(id) ? "coche" : "decoche"); return majAssembler(); }
   const apref = t.closest("[data-asm-pref]");
@@ -3275,7 +3345,11 @@ document.addEventListener("input", e => {
   // En tapant un ingrédient, son petit dessin se met à jour
   const li = e.target.closest && e.target.closest("#f-ings .li");
   if (li && li.classList.contains("ajout") && e.target.value.trim()) activerLigneAjout(li);
-  if (li && !li.classList.contains("sect") && li.querySelector("img")) { li.querySelector("img").outerHTML = dessinIng(e.target.value); majSuggIng(li); }
+  if (li && !li.classList.contains("sect") && li.querySelector("img")) {
+    li.querySelector("img").outerHTML = dessinIng(e.target.value); majSuggIng(li);
+    li.classList.toggle("opt", estOptionnel(e.target.value));
+    const tg = li.querySelector(".li-tag"); if (tg) tg.outerHTML = etiquetteIng(e.target.value);
+  }
 });
 // Les suggestions suivent la ligne où l'on écrit, et disparaissent quand on la quitte
 document.addEventListener("focusin", e => {
