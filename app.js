@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.18.3";
+const VERSION = "0.19.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -510,6 +510,11 @@ const estPlat = r => /plat complet|principal/.test(norm(r.categorie));
 // Bases (sous-recettes) : une recette de catégorie « Base », appelée dans une autre en écrivant son nom entre crochets : [Pâte brisée maison].
 // Un seul niveau (les crochets dans une base sont lus comme un ingrédient normal). Jamais proposées dans le menu.
 const estBase = r => norm(r.categorie) === "base";
+// Sections d'une recette (« Sauce », « Garniture »…) : une ligne « # Sauce » dans les ingrédients.
+// Les ingrédients qui suivent appartiennent à la section, jusqu'à la suivante. Ce n'est pas un ingrédient (ni courses, ni banque).
+const estSection = t => /^\s*#/.test(t || "");
+const nomSection = t => (t || "").replace(/^\s*#+\s*/, "").trim();
+const ingsSeuls = r => ((r && r.ingredients) || []).filter(t => !estSection(t));
 const nomCrochets = txt => { const m = /^\s*\[(.+)\]\s*$/.exec(txt || ""); return m ? m[1].trim() : null; };
 const recetteParNom = nom => S.recettes.find(r => norm(r.nom) === norm(nom));
 const sousRecette = txt => { const n = nomCrochets(txt); const r = n && recetteParNom(n); return r && r.ingredients ? r : null; };
@@ -524,7 +529,7 @@ const basesDe = r => {
   return [...new Set(out)];
 };
 // Plat assemblé : ses ingrédients sont seulement des plats entre crochets ([Saumon]; [Riz]). Reconnu aussi après un import Excel.
-const estAssemble = r => !!r && (r.assemble || ((r.ingredients || []).length > 1 && r.ingredients.every(t => { const b = sousRecette(t); return b && !estBase(b); })));
+const estAssemble = r => !!r && (r.assemble || (ingsSeuls(r).length > 1 && ingsSeuls(r).every(t => { const b = sousRecette(t); return b && !estBase(b); })));
 // Les accompagnements d'un plat du menu ou de la liste : un seul tiré au sort (side), ou plusieurs choisis en l'assemblant (sides)
 const accompsDe = x => x.sides && x.sides.length ? x.sides : x.side ? [x.side] : [];
 // Familles (variantes) : des recettes qui sont des versions du même plat (Burger bœuf / végé / poulet), même « famille »
@@ -849,7 +854,7 @@ function majAssembler(premier) {
     <div class="sect">Accompagnements <i>· un ou plusieurs</i></div>
     <div class="asm-accs">${a.accs.map((id, i) => `<div class="asm-ligne">${liste("asm-a" + i, "accomp", avecP, id, a.accs, "—", v => { if (v) a.accs[i] = v; })}<button class="ib" data-asm-x="${i}" aria-label="Retirer">${icone("x")}</button></div>`).join("")}
       ${liste("asm-add", "accomp", avecP, null, a.accs, a.accs.length ? "Ajouter un autre accompagnement" : "Choisir un accompagnement…", v => { if (v) a.accs.push(v); })}</div>
-    ${pret ? `<div class="asm-apercu">${[p, ...as].map((x, k) => `${k ? `<span class="asm-plus">+</span>` : ""}<div class="asm-bloc">${dishImg(x, 26)}<div><b>${esc(x.nom)}</b><small>${(x.ingredients || []).length} ingrédient${(x.ingredients || []).length > 1 ? "s" : ""} · pour ${x.portions || 2}</small></div></div>`).join("")}</div>
+    ${pret ? `<div class="asm-apercu">${[p, ...as].map((x, k) => `${k ? `<span class="asm-plus">+</span>` : ""}<div class="asm-bloc">${dishImg(x, 26)}<div><b>${esc(x.nom)}</b><small>${ingsSeuls(x).length} ingrédient${ingsSeuls(x).length > 1 ? "s" : ""} · pour ${x.portions || 2}</small></div></div>`).join("")}</div>
     <div class="champ"><label for="asm-nom">Nom</label><input class="saisie" id="asm-nom" value="${esc(nom)}" autocomplete="off"></div>` : `<p class="infos">Choisis un plat principal et au moins un accompagnement.</p>`}
     <div class="pied2"><button class="btn" data-act="asm-garder" ${pret ? "" : "disabled"}>${icone("book")}Garder dans mes recettes</button>
       <button class="btn pri" data-act="asm-menu" ${pret ? "" : "disabled"}>${icone("cal")}Juste au menu</button></div>
@@ -898,7 +903,7 @@ function articles(m) {
     // Une base entre crochets : ses ingrédients (même échelle que le plat), ou elle-même si je l'achète toute prête.
     // Un plat entre crochets (plat assemblé) : ses ingrédients à son échelle à lui, et ses bases à lui.
     const lignes = [];
-    const deplier = (rec, k, niveau) => (rec.ingredients || []).forEach(txt => {
+    const deplier = (rec, k, niveau) => ingsSeuls(rec).forEach(txt => {
       const b = niveau < 2 && sousRecette(txt);
       if (!b || b === rec) return lignes.push([nomCrochets(txt) || txt, k]);
       if (estBase(b) && (x.achete || []).includes(b.nom)) return lignes.push([b.nom.replace(/\s+maison$/i, "") + " (tout prêt)", null]);
@@ -1262,7 +1267,7 @@ const imgIng = (nom, px = 18) => { const b = entreeDe(cleBanque(nom)); return in
 
 function banque() {
   const auto = new Map();
-  S.recettes.forEach(r => (r.ingredients || []).forEach(txt => {
+  S.recettes.forEach(r => ingsSeuls(r).forEach(txt => {
     if (nomCrochets(txt)) return;  // une base : ce n'est pas un ingrédient
     const it = parseItem(txt); if (!it || !it.name) return;
     const e = auto.get(it.key) || { noms: {}, recettes: [] };
@@ -1592,15 +1597,17 @@ function ouvrirFiche(id) {
     `<div><dt>${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</dt><dd>${NIVEAUX[k][r[k] - 1]}</dd></div>`).join("");
   // Variantes : pastilles pour passer de l'une à l'autre ; les ingrédients propres à cette variante sont marqués
   const fam = familleDe(r), communs = fam.length > 1 ? (r.ingredients || []).filter(t => fam.every(x => (x.ingredients || []).includes(t))) : null;
+  let dansSection = false;
   const ings = (r.ingredients || []).map((t, i) => {
-    const b = sousRecette(t);
+    if (estSection(t)) { dansSection = true; return `<li class="sect-f">${esc(nomSection(t))}</li>`; }
+    const b = sousRecette(t), dans = dansSection ? "dans" : "";
     if (b && !estBase(r)) {
       const ouvert = S.basesOuvertes && S.basesOuvertes.has(b.id);
-      return `<li class="base-l ${ouvert ? "ouvert" : ""}"><button class="base-hd" data-deplier="${esc(b.id)}" aria-expanded="${!!ouvert}">${icone("book")}<span>${esc(b.nom)}</span>${icone("right", "chev")}</button>
-        ${ouvert ? `<div class="base-in">${(b.ingredients || []).map(x => `<span>${imgIng(x, 16)}${esc(x)}</span>`).join("")}<button class="lien-btn" data-fiche="${esc(b.id)}">Ouvrir la recette ${icone("right")}</button></div>` : ""}</li>`;
+      return `<li class="base-l ${dans} ${ouvert ? "ouvert" : ""}"><button class="base-hd" data-deplier="${esc(b.id)}" aria-expanded="${!!ouvert}">${icone("book")}<span>${esc(b.nom)}<small>${estBase(b) ? "sous-recette" : "plat"}</small></span>${icone("right", "chev")}</button>
+        ${ouvert ? `<div class="base-in">${ingsSeuls(b).map(x => `<span>${imgIng(x, 16)}${esc(x)}</span>`).join("")}<button class="lien-btn" data-fiche="${esc(b.id)}">Ouvrir la recette ${icone("right")}</button></div>` : ""}</li>`;
     }
     const propre = communs && !communs.includes(t);
-    return `<li class="${propre ? "propre" : ""}">${imgIng(t, 18)}<span>${esc(t)}</span></li>`;
+    return `<li class="${propre ? "propre" : ""} ${dans}">${imgIng(t, 18)}<span>${esc(t)}</span></li>`;
   }).join("");
   const utilisee = estBase(r) ? S.recettes.filter(x => (x.ingredients || []).some(t => norm(nomCrochets(t) || "") === norm(r.nom))) : [];
   ["form", "rep", "choix", "filtres"].forEach(k => delete $("#modal").dataset[k]);
@@ -1818,6 +1825,8 @@ function ouvrirFormulaire(brouillon, titre) {
   </div></div>`;
   m.brouillon = r; // gardé à côté du formulaire jusqu'à l'enregistrement
   rendreTriable($("#f-ings"), ".li:not(.ajout)", $(".fo-corps"));
+  majSections();
+  $("#f-ings").addEventListener("pointerup", () => setTimeout(() => { const aj = $("#f-ings .li.ajout"); if (aj && aj.nextElementSibling) $("#f-ings").appendChild(aj); majSections(); }, 30));
   // une ombre sous l'en-tête dès qu'on fait défiler
   const corps = $(".fo-corps"), hd = $(".fo-hd");
   corps.addEventListener("scroll", () => hd.classList.toggle("ombre", corps.scrollTop > 4), { passive: true });
@@ -1836,14 +1845,40 @@ function demanderAbandon() {
 
 // Une ligne d'ingrédient : poignée pour glisser, dessin, texte, croix
 // La dernière ligne (« ajout ») est toujours vide : on y tape, elle devient une vraie ligne et une nouvelle case vide attend dessous.
-const ligneIngredient = (txt = "", ajout = false) => `<div class="li ${ajout ? "ajout" : ""}"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
-  <span class="li-plus">${icone("plus")}</span>${dessinIng(txt)}<input value="${esc(txt)}" placeholder="${ajout ? "Ajouter un ingrédient" : "ex. 250 g pâtes"}" autocomplete="off" enterkeyhint="next"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
+// Une section (« # Sauce ») : son nom se tape dans la ligne. Une sous-recette ([Pâte brisée]) : ligne discrète avec un livre orange.
+const ligneIngredient = (txt = "", ajout = false) => {
+  if (!ajout && estSection(txt)) return ligneSection(nomSection(txt));
+  const b = !ajout && sousRecette(txt);
+  if (b) return `<div class="li sous"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>${icone("book", "li-livre")}
+    <span class="li-nom">${esc(b.nom)}<small>${estBase(b) ? "sous-recette" : "plat"}</small></span><input type="hidden" value="${esc(txt)}"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
+  return `<div class="li ${ajout ? "ajout" : ""}"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
+  <span class="li-plus">${icone("plus")}</span>${dessinIng(txt)}<input value="${esc(txt)}" placeholder="${ajout ? "Ajouter un ingrédient" : "ex. 250 g pâtes"}" autocomplete="off" enterkeyhint="next">${ajout ? `<button type="button" class="fo-sect-b" data-act="ajout-section">${icone("plus")}Section</button>` : ""}<button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
+};
+const ligneSection = (nom = "") => `<div class="li sect"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
+  <input class="sect-nom" value="${esc(nom)}" placeholder="Nom de la section (ex. Sauce)" autocomplete="off" enterkeyhint="next" aria-label="Nom de la section"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer la section">${icone("x")}</button></div>`;
+// Les ingrédients qui suivent une section sont décalés d'un cran (jusqu'à la section suivante)
+function majSections() {
+  let dans = false;
+  document.querySelectorAll("#f-ings > .li").forEach(li => {
+    if (li.classList.contains("sect")) { dans = true; return; }
+    li.classList.toggle("dans", dans && !li.classList.contains("ajout"));
+  });
+}
 // La ligne d'ajout reçoit du texte : elle devient une ligne normale, une nouvelle ligne d'ajout se place en bas
 function activerLigneAjout(li) {
   vibrer("pas");
   li.classList.remove("ajout");
   li.querySelector("input").placeholder = "ex. 250 g pâtes";
+  const bs = li.querySelector(".fo-sect-b"); if (bs) bs.remove();
   $("#f-ings").insertAdjacentHTML("beforeend", ligneIngredient("", true));
+  majSections();
+}
+// « + Section » : une ligne de section juste avant la case d'ajout ; ce qu'on tape ensuite va dedans
+function ajouterSection() {
+  const aj = $("#f-ings .li.ajout");
+  aj.insertAdjacentHTML("beforebegin", ligneSection());
+  majSections(); vibrer("pas");
+  aj.previousElementSibling.querySelector("input").focus();
 }
 function dessinIng(txt) {
   const it = parseItem(txt);
@@ -1857,16 +1892,20 @@ function majSuggIng(li) {
   const it = parseItem(li.querySelector("input").value);
   if (!it || norm(it.name).length < 2) return;
   const q = norm(it.name);
-  const bases = S.recettes.filter(b => estBase(b) && norm(b.nom).includes(q)).slice(0, 3);
+  const bases = S.recettes.filter(b => estBase(b) && norm(b.nom).includes(q)).slice(0, 2);
   const l = banque().filter(e => !e.menage && norm(e.court) !== q && (norm(e.court).includes(q) || e.cle === it.key))
-    .sort((a, b) => (a.cle === it.key ? 0 : 1) - (b.cle === it.key ? 0 : 1) || (norm(a.court).startsWith(q) ? 0 : 1) - (norm(b.court).startsWith(q) ? 0 : 1) || b.recettes.length - a.recettes.length || parNom(a, b)).slice(0, 6);
+    .sort((a, b) => (a.cle === it.key ? 0 : 1) - (b.cle === it.key ? 0 : 1) || (norm(a.court).startsWith(q) ? 0 : 1) - (norm(b.court).startsWith(q) ? 0 : 1) || b.recettes.length - a.recettes.length || parNom(a, b)).slice(0, 5 - bases.length);
   if (!l.length && !bases.length) return;
+  // ce qui est déjà sur une autre ligne de la recette
+  const ici = new Set([...document.querySelectorAll("#f-ings .li:not(.sect) input")].filter(i => i.closest(".li") !== li).map(i => { const x = parseItem(i.value); return x && x.key; }));
   const box = document.createElement("div");
   box.className = "sugg-ing";
-  // « on » = c'est déjà le même ingrédient, écrit autrement : à uniformiser
-  box.innerHTML = bases.map(b => `<button type="button" class="chip base" data-sugg-base="${esc(b.nom)}">${icone("book")}${esc(b.nom)}</button>`).join("")
-    + l.map(e => `<button type="button" class="chip ${e.cle === it.key ? "on" : ""}" data-sugg-ing="${esc(e.court)}">${esc(e.court)}</button>`).join("");
+  box.innerHTML = l.map(e => `<button type="button" class="sg ${ici.has(e.cle) ? "ici" : ""}" data-sugg-ing="${esc(e.court)}">${imgIng(e.court, 18)}<span>${esc(e.court)}</span>${ici.has(e.cle) ? "<small>déjà dans la recette</small>" : ""}</button>`).join("")
+    + bases.map(b => `<button type="button" class="sg base" data-sugg-base="${esc(b.nom)}">${icone("book")}<span>${esc(b.nom)}</span><small>sous-recette</small></button>`).join("");
   li.appendChild(box);
+  // au-dessus de la ligne, sauf s'il n'y a pas la place (on la met alors dessous)
+  const zone = li.closest(".fo-corps");
+  if (zone && li.getBoundingClientRect().top - zone.getBoundingClientRect().top < box.offsetHeight + 8) box.classList.add("dessous");
 }
 function choisirSuggIng(btn) {
   const li = btn.closest(".li"), champ = li.querySelector("input");
@@ -1884,6 +1923,7 @@ function ajouterIngredient(apres) {
   tmp.innerHTML = ligneIngredient();
   const ligne = tmp.firstElementChild;
   if (apres) apres.after(ligne); else $("#f-ings").appendChild(ligne);
+  majSections();
   ligne.querySelector("input").focus();
 }
 
@@ -1898,7 +1938,10 @@ function lireFormulaire() {
     if (on) r[g.dataset.niv] = +on.dataset.v; else delete r[g.dataset.niv];
   });
   r.portions = +$("#f-portions").textContent || 2;
-  const ings = [...document.querySelectorAll("#f-ings input")].map(i => i.value.trim()).filter(Boolean);
+  const ings = [...document.querySelectorAll("#f-ings > .li")].map(li => {
+    const v = li.querySelector("input").value.trim();
+    return li.classList.contains("sect") ? (v ? "# " + v : "") : v;
+  }).filter(Boolean);
   // Ingrédients touchés : ce ne sont plus des « suggestions »
   if (ings.join("|") !== (r.ingredients || []).join("|")) r.ingredientsSource = "app";
   r.ingredients = ings;
@@ -2911,7 +2954,12 @@ document.addEventListener("click", e => {
   if (artB) { const cle = versLaBanque(artB.dataset.artBanque); fermer(); renderCourses(); return ouvrirFicheBanque(cle, true); }
   if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); vibrer("ajout"); flip(zid() + " .it", renderCourses); $("#ajout-art").focus(); } return; }
   const sb = t.closest("[data-sugg-base]");
-  if (sb) { const li = sb.closest(".li"), c = li.querySelector("input"); c.value = "[" + sb.dataset.suggBase + "]"; li.querySelector("img").outerHTML = dessinIng(c.value); majSuggIng(null); c.focus(); return; }
+  if (sb) {
+    const li = sb.closest(".li"); majSuggIng(null);
+    if (li.classList.contains("ajout")) activerLigneAjout(li);
+    li.outerHTML = ligneIngredient("[" + sb.dataset.suggBase + "]");
+    majSections(); vibrer("ajout"); $("#f-ings .li.ajout input").focus(); return;
+  }
   const suggIng = t.closest("[data-sugg-ing]");
   if (suggIng) return choisirSuggIng(suggIng);
   const rc = t.closest("[data-rc]");
@@ -3011,7 +3059,8 @@ document.addEventListener("click", e => {
     case "supprimer": supprimer(); break;
     case "enregistrer": enregistrer(); break;
     case "ajout-ing": ajouterIngredient(); break;
-    case "retirer-ing": el.closest(".li").remove(); vibrer("retire"); break;
+    case "retirer-ing": el.closest(".li").remove(); majSections(); vibrer("retire"); break;
+    case "ajout-section": ajouterSection(); break;
     case "plus": {
       const ouvert = $("#f-plus").hidden;
       fermerLd(); vibrer("pas");
@@ -3068,7 +3117,7 @@ document.addEventListener("input", e => {
   // En tapant un ingrédient, son petit dessin se met à jour
   const li = e.target.closest && e.target.closest("#f-ings .li");
   if (li && li.classList.contains("ajout") && e.target.value.trim()) activerLigneAjout(li);
-  if (li) { li.querySelector("img").outerHTML = dessinIng(e.target.value); majSuggIng(li); }
+  if (li && !li.classList.contains("sect") && li.querySelector("img")) { li.querySelector("img").outerHTML = dessinIng(e.target.value); majSuggIng(li); }
 });
 // Les suggestions suivent la ligne où l'on écrit, et disparaissent quand on la quitte
 document.addEventListener("focusin", e => {

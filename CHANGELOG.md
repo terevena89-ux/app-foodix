@@ -1,5 +1,11 @@
 # Foodix — journal des nouveautés
 
+## 0.19.0 — 2026-11-23
+- Sections dans une recette : bouton « + Section » au bout de la case d'ajout (ex. « Sauce », « Garniture »). Les ingrédients qui suivent sont décalés d'un cran, jusqu'à la section suivante. On les déplace en les glissant. Supprimer une section garde ses ingrédients. Sur la fiche, le titre de la section est en vert. La liste de courses n'est pas touchée.
+- Excel : une section s'écrit « # Sauce » au milieu des ingrédients.
+- Suggestions pendant qu'on tape un ingrédient : petite liste au-dessus de la ligne (dessous s'il n'y a pas la place), 5 au plus, avec le dessin de chaque ingrédient. « déjà dans la recette » est signalé. Les sous-recettes y apparaissent avec un livre orange.
+- Sous-recettes plus discrètes : dans le formulaire et sur la fiche, un livre orange, le nom en noir et le petit mot « sous-recette » (plus de bloc orange plein, plus de crochets dans le formulaire).
+
 ## 0.18.3 — 2026-11-23
 - Formulaire recette un peu moins serré : ingrédients en 15 px, lignes plus hautes, étiquettes et détails un peu plus grands, plus d'espace entre les blocs.
 - Le bloc des ingrédients est blanc (on ne voit plus le petit cadre derrière les icônes), la case « Ajouter un ingrédient » reste grise en bas.

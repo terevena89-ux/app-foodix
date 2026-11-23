@@ -851,3 +851,37 @@ body.pc .fo .bsc, body.pc .fo .ld-b { height: 32px; }
 .fo-niv .seg button { padding: 5px 2px; font-size: 12.5px; }
 .fo .fo-notes .saisie { height: 40px; font-size: 15px; }
 .fo .fo-notes textarea.saisie { height: auto; }
+
+/* ---------- v0.19.0 : suggestions au-dessus de la ligne, sous-recettes discrètes, sections ---------- */
+.fo .ingl .li { position: relative; }
+/* Suggestions : petite liste au-dessus de la ligne qu'on tape (dessous s'il n'y a pas la place) */
+.fo .sugg-ing { position: absolute; left: -1px; right: -1px; bottom: calc(100% + 4px); z-index: 9; flex: none; display: flex; flex-direction: column; gap: 0; padding: 4px;
+  background: var(--carte); border: 1px solid var(--trait); border-radius: 14px; box-shadow: 0 10px 28px rgb(0 0 0 / .18); }
+.fo .sugg-ing.dessous { bottom: auto; top: calc(100% + 4px); }
+.sg { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 0 9px; border: 0; background: none; border-radius: 9px; font-size: 14.5px; color: var(--encre); text-align: left; width: 100%; }
+.sg:active, .sg:hover { background: var(--creux); }
+.sg span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sg img { width: 18px; height: 18px; flex-shrink: 0; }
+.sg small { font-size: 11.5px; color: var(--discret); white-space: nowrap; }
+.sg.ici { color: var(--discret); }
+.sg.base .ic { width: 17px; height: 17px; color: var(--fav); }
+.sg.base small { color: var(--fav); }
+/* Sous-recette dans la liste : discrète (livre orange, nom en noir, petit mot) */
+.li-livre { width: 16px; height: 16px; color: var(--fav); flex-shrink: 0; margin: 0 1px; }
+.li-nom { flex: 1; min-width: 0; font-size: 15px; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.li-nom small { font-size: 11.5px; font-weight: 700; color: var(--fav); opacity: .85; }
+/* Section : titre en petites capitales vertes ; ses ingrédients décalés d'un cran */
+.fo .ingl .li.sect { min-height: 36px; }
+.fo .ingl .li.sect input { font: 800 12px var(--texte); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+.fo .ingl .li.sect input::placeholder { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--pale); }
+.fo .ingl .li.dans { margin-left: 14px; }
+.fo-sect-b { flex-shrink: 0; display: inline-flex; align-items: center; gap: 3px; border: 0; border-radius: 999px; padding: 3px 10px; margin-right: 6px; background: var(--accent-doux); color: var(--accent); font-size: 12px; font-weight: 800; }
+.fo-sect-b .ic { width: 12px; height: 12px; }
+.fo .ingl .li.ajout .fo-sect-b { display: inline-flex; }
+/* Fiche : sections et sous-recette discrète */
+.ings li.sect-f { grid-column: 1 / -1; margin-top: 4px; font: 800 11px var(--texte); text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+.ings li.dans { padding-left: 10px; }
+.base-hd { background: none; color: var(--encre); padding: 4px 2px; font-weight: 700; }
+.base-hd .ic:first-child { color: var(--fav); }
+.base-hd small { color: var(--fav); font-weight: 700; font-size: 11.5px; margin-left: 6px; }
+.base-in { border-left-color: var(--trait); }
