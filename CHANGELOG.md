@@ -1,5 +1,16 @@
 # Foodix — journal des nouveautés
 
+## 0.20.0 — 2026-11-23
+- Liste des recettes rangée par catégorie (titre avec un point vert ; on replie une catégorie en touchant son titre, elle reste repliée). Ordre réglable dans Réglages › Ordre des catégories (par défaut : Principal seul, Plat complet, Accompagnement, Mezzé / Apéro, les autres, puis les bases).
+- Bouton de tri : Catégorie, Nom, Récentes, Temps, Maîtrise. Le choix est gardé ; quand ce n'est plus « Catégorie », la pastille passe en vert avec une croix pour revenir. Interrupteur « Regrouper les variantes » : regroupées, une famille tient sur une ligne et la toucher propose ses variantes.
+- Haut de la liste : recherche en pilule, « + » rond. Une recherche sans résultat propose « Créer la recette « … » » (le « + » aussi), avec le nom déjà rempli. Une seule rangée, sans défilement : tri, entonnoir des filtres, puis Favoris, Végé, De saison, Lunchbox, Invités en icônes. Appui long sur une icône : son nom et le nombre de recettes dans une bulle qui reste dans l'écran.
+- Plus de bouton Ingrédients en haut : appui long sur l'onglet Recettes (Ingrédients, Nouvelle recette).
+- Filtres : une ligne par famille (Catégorie, Saison — Été, Hiver, Toute l'année —, Origine, Préparation, Prix, Temps, Difficulté), qu'on déplie pour choisir. Couleurs du formulaire.
+- Fiche : étoile Favori en haut ; variante dans le sous-titre avec sa petite liste (plus de gros boutons) ; catégorie puis Végé / Lunchbox / Invités sur une ligne (en icônes si ça ne tient pas) ; saison seulement si Été ou Hiver, avec soleil ou flocon ; niveaux en 4 cases discrètes (€, points, horloges, maîtrise en couleur).
+- Nouvel écran « Assembler » (bouton en bas de la fiche, et « Changer l'accompagnement » dans le Menu) : toutes les recettes Principal seul, Accompagnement et Mezzé / Apéro à cocher. L'étoile d'une ligne en fait une suggestion préférée du plat (plusieurs possibles) : cochée d'office, et proposée en premier par le tirage du menu. « Au menu » ou « Garder comme plat » (un plat complet, étiqueté « Assemblé » dans la liste).
+- Catégories renommées au premier lancement : Mezzé → Mezzé / Apéro, Principal → Principal seul, Sandwichs et burgers → Plat complet, Sauces et marinades et Base → Bases (sous-recettes).
+- Le tag Protéine est supprimé de toutes les recettes.
+
 ## 0.19.0 — 2026-11-23
 - Sections dans une recette : bouton « + Section » au bout de la case d'ajout (ex. « Sauce », « Garniture »). Les ingrédients qui suivent sont décalés d'un cran, jusqu'à la section suivante. On les déplace en les glissant. Supprimer une section garde ses ingrédients. Sur la fiche, le titre de la section est en vert. La liste de courses n'est pas touchée.
 - Excel : une section s'écrit « # Sauce » au milieu des ingrédients.

@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.19.0";
+const VERSION = "0.20.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -66,7 +66,7 @@ const S = {
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
   onglet: lireLocal("fx-onglet", "courses"),
   // filtres de l'écran Recettes
-  f: { q: "", cats: [], fav: false, vege: false, saison: false, avance: false, invites: false }
+  f: { q: "", cats: [], saisons: [], origines: [], preps: [], prix: [], temps: [], diff: [], fav: false, vege: false, saison: false, avance: false, invites: false }
 };
 
 /* ---------- 2. Stockage : Firebase ---------- */
@@ -509,7 +509,7 @@ const recette = id => S.recettes.find(r => r.id === id);
 const estPlat = r => /plat complet|principal/.test(norm(r.categorie));
 // Bases (sous-recettes) : une recette de catégorie « Base », appelée dans une autre en écrivant son nom entre crochets : [Pâte brisée maison].
 // Un seul niveau (les crochets dans une base sont lus comme un ingrédient normal). Jamais proposées dans le menu.
-const estBase = r => norm(r.categorie) === "base";
+const estBase = r => /^bases?\b/.test(norm(r && r.categorie));
 // Sections d'une recette (« Sauce », « Garniture »…) : une ligne « # Sauce » dans les ingrédients.
 // Les ingrédients qui suivent appartiennent à la section, jusqu'à la suivante. Ce n'est pas un ingrédient (ni courses, ni banque).
 const estSection = t => /^\s*#/.test(t || "");
@@ -536,7 +536,10 @@ const accompsDe = x => x.sides && x.sides.length ? x.sides : x.side ? [x.side] :
 const familleDe = r => r && r.famille ? S.recettes.filter(x => norm(x.famille) === norm(r.famille)).sort((a, b) => (a.variante || a.nom).localeCompare(b.variante || b.nom, "fr")) : (r ? [r] : []);
 const cleFamille = r => r.famille ? "f:" + norm(r.famille) : r.id;
 const estAccomp = r => /accompagnement/.test(norm(r.categorie));
-const veutAccomp = r => /principal/.test(norm(r.categorie));
+const estMezze = r => /mezze|apero/.test(norm(r.categorie));
+// Ce qu'on peut assembler : Principal seul, Accompagnement, Mezzé / Apéro (pas les plats complets ni les bases)
+const assemblable = r => !!r && !estBase(r) && (veutAccomp(r) || estAccomp(r) || estMezze(r));
+const veutAccomp = r => /principal/.test(norm(r && r.categorie));
 // Les plats déjà pris : propositions + liste en cours (pour ne pas proposer deux fois le même)
 const platsPris = () => [...S.propo.repas.map(x => x.id), ...((menuEnCours() || {}).repas || []).map(x => x.id)];
 const accompsPris = () => [...S.propo.repas, ...((menuEnCours() || {}).repas || [])].flatMap(accompsDe);
@@ -584,7 +587,12 @@ function tirerAccomp(exclus = []) {
   return r ? r.id : null;
 }
 // Une proposition : { id: recette, side: accompagnement ou null }
-const nouveauRepas = r => ({ id: r.id, side: veutAccomp(r) ? tirerAccomp(accompsPris()) : null });
+// Suggestions préférées du plat (étoile dans Assembler) : l'une d'elles, sinon un accompagnement au hasard
+function tirerPrefere(r) {
+  const l = (r.preferes || []).filter(id => { const a = recette(id); return a && !estBase(a); });
+  return l.length ? l[Math.floor(Math.random() * l.length)] : null;
+}
+const nouveauRepas = r => ({ id: r.id, side: veutAccomp(r) ? (tirerPrefere(r) || tirerAccomp(accompsPris())) : null });
 
 // Une liste de courses vide (les plats acceptés, les articles ajoutés, ce qui est coché)
 const creerListe = () => ({ id: "m" + Date.now(), cree: Date.now(), pers: S.prefs.pers, repas: [], ajouts: [], coches: {}, dispo: {} });
@@ -734,8 +742,7 @@ function ouvrirRepas(i, src) {
       ${src === "p" ? `<button class="act pri" data-act="accepter" data-i="${i}">${icone("cart")}Ajouter à la liste de courses</button>
       <button class="act" data-act="remplacer">${icone("refresh")}Remplacer (au hasard)</button>
       <button class="act" data-act="choisir">${icone("search")}Choisir un autre plat…</button>` : ""}
-      ${veutAccomp(r) && !x.sides ? `<button class="act" data-act="accomp">${icone("refresh")}Changer l'accompagnement</button>` : ""}
-      ${veutAccomp(r) ? `<button class="act" data-act="asm-repas">${icone("utensils")}${x.sides ? "Modifier l'assemblage" : "Assembler avec d'autres accompagnements"}</button>` : ""}
+      ${assemblable(r) ? `<button class="act" data-act="accomp">${icone("utensils")}Changer l'accompagnement</button>` : ""}
       <button class="act" data-act="voir">${icone("book")}Voir la recette</button>
       <button class="act danger" data-act="retirer">${icone("trash")}${src === "p" ? "Retirer des propositions" : "Retirer de la liste de courses"}</button>
     </div></div></div>`;
@@ -810,72 +817,70 @@ function auMenu() {
 // ou « Garder dans mes recettes » (une vraie recette « Plat complet » : [Principal]; [Accompagnement]…, liée à ses morceaux).
 // Dans les deux cas, le plat arrive dans les propositions du menu.
 
-// Ce qui va avec : d'abord ce que j'ai déjà mangé ensemble, puis les favoris, puis ce qui est de saison
-function vaAvec(cherche, avec) {
-  const ensemble = new Map();
-  const noter = (p, a) => { const k = p + "|" + a; ensemble.set(k, (ensemble.get(k) || 0) + 1); };
-  [...S.menus.flatMap(m => m.repas), ...S.propo.repas].forEach(x => accompsDe(x).forEach(a => noter(x.id, a)));
-  S.recettes.filter(estAssemble).forEach(r => { const [p, ...as] = (r.ingredients || []).map(sousRecette).filter(Boolean); if (p) as.forEach(a => noter(p.id, a.id)); });
-  const l = S.recettes.filter(cherche === "accomp" ? estAccomp : veutAccomp);
-  const score = r => {
-    const deja = avec.reduce((n, id) => n + (ensemble.get(cherche === "accomp" ? id + "|" + r.id : r.id + "|" + id) || 0), 0);
-    return { r, deja, s: deja * 10 + (r.favori ? 3 : 0) + (deSaison(r) ? 1 : 0) };
-  };
-  return l.map(score).sort((a, b) => b.s - a.s || parNom(a.r, b.r));
-}
 const nomAssemble = (p, as) => p.nom + " & " + as.map(a => a.nom.charAt(0).toLowerCase() + a.nom.slice(1)).join(", ");
 
-function ouvrirAssembler(depart, accs = [], repasI = null) {
+// Depuis la fiche d'un plat (ou « Changer l'accompagnement » d'un repas du menu) : on coche ce qui va avec,
+// parmi tous les Principal seul / Accompagnement / Mezzé / Apéro. Les suggestions préférées (étoile) sont cochées d'office.
+function ouvrirAssembler(depart, accs = [], repasI = null, src = "p") {
   const r = recette(depart); if (!r) return;
-  S.asm = { princ: veutAccomp(r) ? r.id : null, accs: estAccomp(r) ? [r.id] : accs.slice(), nom: "", repasI };
+  const prefs = (r.preferes || []).filter(id => assemblable(recette(id)));
+  S.asm = { depart, sel: new Set(accs.length ? accs : prefs), repasI, src };
   vibrer("pas");
   majAssembler(true);
 }
+// Le plat principal du repas : le premier « Principal seul » choisi (sinon le plat de départ) ; le reste l'accompagne
+function repasAssemble() {
+  const a = S.asm, tous = [a.depart, ...[...a.sel].filter(id => id !== a.depart && recette(id))];
+  const princ = tous.find(id => veutAccomp(recette(id))) || a.depart;
+  return { princ, accs: tous.filter(id => id !== princ) };
+}
 function majAssembler(premier) {
-  const a = S.asm, md = $("#modal"), haut = !premier && $("#modal .fiche") ? $("#modal .fiche").scrollTop : 0;
-  const p = a.princ && recette(a.princ), as = a.accs.map(recette).filter(Boolean);
-  // Listes de l'appli rangées en trois groupes : déjà mangé ensemble, favoris, le reste (ordre de vaAvec)
-  const liste = (id, cherche, avec, choisi, exclus, vide, choisir) => ld(id, {
-    plein: true, teinte: "accent", placeholder: vide, vide: null,
-    val: () => choisi || "", affiche: v => (recette(v) || {}).nom || v,
-    items: () => vaAvec(cherche, avec).filter(o => o.r.id === choisi || !exclus.includes(o.r.id))
-      .map(o => ({ v: o.r.id, t: o.r.nom, g: o.deja ? "Déjà mangé ensemble" : o.r.favori ? "★ Favoris" : cherche === "accomp" ? "Autres accompagnements" : "Autres plats" })),
-    choisir: v => { choisir(v); a.nom = ""; majAssembler(); }
-  });
-  const avecP = a.princ ? [a.princ] : [];
-  const nom = a.nom || (p && as.length ? nomAssemble(p, as) : "");
-  const pret = p && as.length;
+  const a = S.asm, md = $("#modal"), r = recette(a.depart); if (!r) return;
+  const haut = !premier && $("#modal .as-corps") ? $("#modal .as-corps").scrollTop : 0;
+  const prefs = (r.preferes || []).map(recette).filter(x => assemblable(x) && x.id !== r.id);
+  const ligne = x => `<div class="ao ${a.sel.has(x.id) ? "on" : ""}"><button type="button" class="ao-c" data-asm-sel="${esc(x.id)}"><span class="cb">${icone("check")}</span>${dishImg(x, 24)}<span class="nm">${esc(x.nom)}</span></button>
+    <button type="button" class="ao-p ${(r.preferes || []).includes(x.id) ? "on" : ""}" data-asm-pref="${esc(x.id)}" aria-label="Suggestion préférée">${icone("star")}</button></div>`;
+  const groupes = [["Principal seul", veutAccomp], ["Accompagnement", estAccomp], ["Mezzé / Apéro", estMezze]].map(([titre, test]) => {
+    const l = S.recettes.filter(x => x.id !== r.id && !estBase(x) && test(x) && !prefs.includes(x)).sort(parNom);
+    return l.length ? `<div class="as-t">${esc(titre)}</div><div class="as-l">${l.map(ligne).join("")}</div>` : "";
+  }).join("");
+  const { princ, accs } = repasAssemble(), pret = accs.length > 0;
   md.dataset.asm = "1";
-  ["recette", "form", "rep", "src", "choix", "archive", "filtres"].forEach(k => delete md.dataset[k]);
-  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche asm" role="dialog" aria-label="Assembler un plat complet">
-    <div class="fi-hd"><div class="txt"><h2>Assembler un plat complet</h2><div class="sub">Provisoire tant que je ne le garde pas</div></div>
-      <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
-    <div class="sect">Plat principal</div>${liste("asm-p", "princ", a.accs, a.princ, [], "Choisir un plat principal…", v => { a.princ = v || null; })}
-    <div class="sect">Accompagnements <i>· un ou plusieurs</i></div>
-    <div class="asm-accs">${a.accs.map((id, i) => `<div class="asm-ligne">${liste("asm-a" + i, "accomp", avecP, id, a.accs, "—", v => { if (v) a.accs[i] = v; })}<button class="ib" data-asm-x="${i}" aria-label="Retirer">${icone("x")}</button></div>`).join("")}
-      ${liste("asm-add", "accomp", avecP, null, a.accs, a.accs.length ? "Ajouter un autre accompagnement" : "Choisir un accompagnement…", v => { if (v) a.accs.push(v); })}</div>
-    ${pret ? `<div class="asm-apercu">${[p, ...as].map((x, k) => `${k ? `<span class="asm-plus">+</span>` : ""}<div class="asm-bloc">${dishImg(x, 26)}<div><b>${esc(x.nom)}</b><small>${ingsSeuls(x).length} ingrédient${ingsSeuls(x).length > 1 ? "s" : ""} · pour ${x.portions || 2}</small></div></div>`).join("")}</div>
-    <div class="champ"><label for="asm-nom">Nom</label><input class="saisie" id="asm-nom" value="${esc(nom)}" autocomplete="off"></div>` : `<p class="infos">Choisis un plat principal et au moins un accompagnement.</p>`}
-    <div class="pied2"><button class="btn" data-act="asm-garder" ${pret ? "" : "disabled"}>${icone("book")}Garder dans mes recettes</button>
-      <button class="btn pri" data-act="asm-menu" ${pret ? "" : "disabled"}>${icone("cal")}Juste au menu</button></div>
+  ["recette", "form", "rep", "src", "choix", "archive", "filtres", "vc"].forEach(k => delete md.dataset[k]);
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche asm2" role="dialog" aria-label="Assembler">
+    <div class="as-hd">${dishImg(r, 32)}<div class="txt"><small>Avec quoi ?</small><b>${esc(r.nom)}</b></div><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="as-corps">
+      <div class="as-resume">${pret ? `Au menu : ${[princ, ...accs].map(id => `<b>${esc(recette(id).nom)}</b>`).join(" + ")}` : "Coche ce qui va avec."}</div>
+      ${prefs.length ? `<div class="as-t pref">${icone("star")}Suggestions préférées</div><div class="as-l">${prefs.map(ligne).join("")}</div>` : ""}
+      ${groupes}
+    </div>
+    <div class="as-pied"><div class="l2"><button class="btn sec" data-act="asm-garder" ${pret ? "" : "disabled"}>${icone("book")}Garder comme plat</button>
+      <button class="btn pri" data-act="asm-menu" ${pret ? "" : "disabled"}>${icone("cal")}Au menu</button></div>
+      <div class="aide">L'étoile : suggestion préférée de ce plat (plusieurs possibles).</div></div>
   </div></div>`;
-  if (!premier) { const f = $("#modal .fiche"); f.style.animation = "none"; f.parentElement.style.animation = "none"; f.scrollTop = haut; }
+  if (!premier) { const f = $("#modal .fiche"); f.style.animation = "none"; f.parentElement.style.animation = "none"; $("#modal .as-corps").scrollTop = haut; }
 }
 // Le plat assemblé arrive dans les propositions (ou remplace le plat du menu qu'on était en train d'assembler)
 function poserAuMenu(x, msg) {
-  const i = S.asm.repasI, avant = S.propo.repas.slice();
+  const i = S.asm.repasI, m = menuEnCours();
+  // depuis la liste de courses : on remplace le repas dans la liste ; sinon dans les propositions
+  if (S.asm.src === "l" && m && i != null && m.repas[i]) {
+    const avant = m.repas[i]; m.repas[i] = Object.assign({}, avant, x); ecrireMenu(m); fermer(); render(); vibrer("ajout");
+    return toast(msg, () => { m.repas[i] = avant; ecrireMenu(m); render(); });
+  }
+  const avant = S.propo.repas.slice();
   if (i != null && S.propo.repas[i]) S.propo.repas[i] = x; else S.propo.repas.push(x);
   S.cascade = false; sauverPropo(); fermer(); render();
   vibrer("ajout");
   toast(msg, () => { S.propo.repas = avant; sauverPropo(); render(); });
 }
 function assemblerAuMenu() {
-  const a = S.asm; if (!a.princ || !a.accs.length) return;
-  poserAuMenu({ id: a.princ, side: a.accs[0], sides: a.accs.slice() }, "Au menu (provisoire)");
+  const { princ, accs } = repasAssemble(); if (!accs.length) return;
+  poserAuMenu({ id: princ, side: accs[0], sides: accs.slice() }, "Au menu");
 }
 function assemblerGarder() {
-  const a = S.asm, p = recette(a.princ), as = a.accs.map(recette).filter(Boolean); if (!p || !as.length) return;
-  const nom = ($("#asm-nom").value || "").trim() || nomAssemble(p, as);
+  const { princ, accs } = repasAssemble(), p = recette(princ), as = accs.map(recette).filter(Boolean); if (!p || !as.length) return;
+  const nom = nomAssemble(p, as);
   let id = idDe(nom), n = 2;
   while (S.recettes.some(x => x.id === id)) id = idDe(nom) + "-" + n++;
   const r = { id, nom, categorie: "Plat complet", assemble: true, portions: p.portions || 2, ingredients: [p, ...as].map(x => "[" + x.nom + "]"), ingredientsSource: "app",
@@ -1318,9 +1323,14 @@ function majEntree(cle, chg) {
 }
 // v0.18.0 : des valeurs renommées (« Poêlée » → « Poêle & casserole », saison « Annuel » → « Aucune »), réécrites une fois dans toutes les recettes
 const TAGS_RENOMMES = { poelee: "Poêle & casserole", annuel: "Aucune" };
+// v0.20.0 : catégories renommées ou fusionnées
+const CATS_RENOMMEES = { mezze: "Mezzé / Apéro", principal: "Principal seul", "sandwichs et burgers": "Plat complet", "sauces et marinades": "Bases (sous-recettes)", base: "Bases (sous-recettes)" };
 function migrerTags() {
   const chg = S.recettes.filter(r => {
     let c = false;
+    const nc = r.categorie && CATS_RENOMMEES[norm(r.categorie)];
+    if (nc && r.categorie !== nc) { r.categorie = nc; c = true; }
+    if ("proteine" in r) { delete r.proteine; c = true; }  // le tag Protéine n'existe plus
     ["categorie", "preparation", "origine", "saison"].forEach(k => { const n = r[k] && TAGS_RENOMMES[norm(r[k])]; if (n && r[k] !== n) { r[k] = n; c = true; } });
     return c;
   });
@@ -1502,13 +1512,24 @@ function basculerPick(cle) {
 
 /* ---------- 5. Écran Recettes ---------- */
 
-// Les recettes qui passent la recherche et les filtres
+// Les recettes qui passent la recherche et les filtres (plusieurs valeurs d'une famille : l'une OU l'autre ; familles entre elles : ET)
+const saisonFiltre = r => /^ete$/.test(norm(r.saison)) ? "Été" : /^hiver$/.test(norm(r.saison)) ? "Hiver" : !r.saison || /^(aucune|annuel)$/.test(norm(r.saison)) ? "Toute l'année" : r.saison;
+const FAMILLES_F = [
+  ["cats", "Catégorie", "neutre", r => r.categorie || "Sans catégorie"],
+  ["saisons", "Saison", "ambre", saisonFiltre],
+  ["origines", "Origine", "bleu", r => r.origine],
+  ["preps", "Préparation", "prune", r => r.preparation],
+  ["prix", "Prix", "accent", r => r.prix],
+  ["temps", "Temps", "accent", r => r.temps],
+  ["diff", "Difficulté", "accent", r => r.difficulte],
+];
+const NIV_F = { prix: "prix", temps: "temps", diff: "difficulte" };
+const nbFiltres = () => FAMILLES_F.reduce((n, [k]) => n + (S.f[k] || []).length, 0);
 function filtrees() {
   const f = S.f, q = norm(f.q);
   return S.recettes.filter(r =>
-    (!q || norm([r.nom, r.origine, (r.ingredients || []).join(" ")].join(" ")).includes(q)) &&
-    // plusieurs catégories cochées : l'une OU l'autre
-    (!f.cats.length || f.cats.includes(r.categorie)) &&
+    (!q || norm([r.nom, r.famille, r.origine, ingsSeuls(r).join(" ")].join(" ")).includes(q)) &&
+    FAMILLES_F.every(([k, , , val]) => !(f[k] || []).length || f[k].includes(val(r))) &&
     (!f.fav || r.favori) && (!f.vege || r.vege) && (!f.saison || deSaison(r)) &&
     (!f.avance || r.prep) && (!f.invites || r.date)
   ).sort(parNom);
@@ -1521,65 +1542,157 @@ function renderRecettes() {
       <div style="margin-top:10px"><button class="btn" data-act="banque">${icone("carrot")}Banque d'ingrédients</button></div></div>`;
     return;
   }
-  const f = S.f, n = f.cats.length;
-  // Bouton « Filtres » (ouvre une feuille avec des cases) ; les filtres choisis restent en pastilles, une croix pour les enlever
-  const liste = () => `<button class="chip filtres ${n ? "on" : ""}" data-act="filtres">${icone("sliders")}Filtres${n ? `<b>${n}</b>` : ""}</button>`
-    + f.cats.map(c => `<button class="chip on" data-retire-f="cats" data-v="${esc(c)}">${esc(c)}${icone("x")}</button>`).join("");
-  const bascule = (k, ic, txt) => `<button class="chip ${f[k] ? "on" : ""}" data-bascule="${k}">${ic ? icone(ic) : ""}${txt}</button>`;
-  const cherche = `<label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off">
+  const f = S.f, nf = nbFiltres();
+  // Rangée sans défilement : tri, entonnoir des filtres, puis les 5 étiquettes en icônes (appui long = leur nom)
+  const ico = (k, ic, nom) => `<button class="chip ico ${f[k] ? "on" : ""}" data-bascule="${k}" data-nom="${nom}" data-teinte="${k}" aria-label="${nom}" aria-pressed="${!!f[k]}">${icone(ic)}</button>`;
+  const cherche = `<label class="cherche">${icone("search")}<input id="q" type="search" placeholder="Chercher…" value="${esc(f.q)}" autocomplete="off" enterkeyhint="search">
       ${f.q ? `<button data-act="effacer-q" aria-label="Effacer">${icone("x")}</button>` : ""}</label>`;
+  const barre = `<div class="barre-r">
+      <button class="chip tri ${S.tri !== "categorie" ? "change" : ""}" data-act="trier" aria-label="Trier">${icone(TRIS[S.tri][1])}<b>${TRIS[S.tri][0]}</b>${S.tri !== "categorie" ? `<span class="tri-x" data-act="tri-reset" aria-label="Revenir au tri par catégorie">${icone("x")}</span>` : ""}</button>
+      <button class="chip ico entonnoir ${nf ? "on" : ""}" data-act="filtres" aria-label="Filtres">${icone("entonnoir")}${nf ? `<b>${nf}</b>` : ""}</button>
+      <span class="barre-sep"></span>
+      ${ico("fav", "star", "Favoris")}${ico("vege", "leaf", "Végé")}${ico("saison", "sun", "De saison")}${ico("avance", "box", "Lunchbox")}${ico("invites", "glass", "Invités")}</div>`;
   $("#main").innerHTML = (estPC()
     ? `<div class="pc-tete"><h1>${f.cats.length === 1 ? esc(f.cats[0]) : "Recettes"}</h1>${cherche}<span class="spacer"></span>
       <button class="btn ${panneauOuvert ? "on" : ""}" data-act="panneau">${icone("cart")}Liste</button>
-      <button class="btn pri" data-act="nouvelle">${icone("plus")}Recette</button></div>`
-    : `<div class="srow">${cherche}
-      <button class="btn" data-act="banque" aria-label="Banque d'ingrédients">${icone("carrot")}Ingrédients</button>
-      <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>`) + `
-    <div class="defile">${liste()}
-      ${bascule("fav", "star", "Favoris")}${bascule("vege", "leaf", "Végé")}${bascule("saison", "sun", "De saison")}
-      ${bascule("avance", "box", "Lunchbox")}${bascule("invites", "glass", "Invités")}</div>
+      <button class="btn pri" data-act="nouvelle" id="fab-r">${icone("plus")}Recette</button></div>`
+    : `<div class="srow">${cherche}<button class="fab" data-act="nouvelle" id="fab-r" aria-label="Ajouter une recette">${icone("plus")}</button></div>`) + `
+    ${barre}
     <div id="liste"></div>`;
   majListe();
+}
+// ---------- Tri, regroupement des variantes, catégories repliées (gardés sur l'appareil) ----------
+const TRIS = { categorie: ["Catégorie", "rows"], nom: ["Nom", "grid"], recentes: ["Récentes", "history"], temps: ["Temps", "clock"], maitrise: ["Maîtrise", "check"] };
+S.tri = TRIS[lireLocal("fx-tri", "categorie")] ? lireLocal("fx-tri", "categorie") : "categorie";
+S.regroupe = lireLocal("fx-regroupe", "1") === "1";
+S.replies = new Set((() => { try { return JSON.parse(lireLocal("fx-replies", "[]")); } catch (e) { return []; } })());
+function choisirTri(v) {
+  S.tri = TRIS[v] ? v : "categorie"; ecrireLocal("fx-tri", S.tri); vibrer("pas"); fermerTri(); renderRecettes();
+}
+function fermerTri() { const m = $("#menu-tri"); if (m) m.remove(); }
+function ouvrirTri(btn) {
+  if ($("#menu-tri")) return fermerTri();
+  const b = btn.getBoundingClientRect(), m = document.createElement("div");
+  m.id = "menu-tri"; m.className = "menu-tri";
+  m.innerHTML = `<div class="mt-t">Trier par</div>${Object.entries(TRIS).map(([k, [nom, ic]]) => `<button class="${S.tri === k ? "on" : ""}" data-act="tri" data-v="${k}">${icone(ic)}${nom}</button>`).join("")}
+    <button class="mt-sw ${S.regroupe ? "on" : ""}" data-act="regroupe">${icone("branche")}Regrouper les variantes<i></i></button>`;
+  m.style.left = Math.max(8, b.left) + "px"; m.style.top = (b.bottom + 6) + "px";
+  document.body.appendChild(m); vibrer("pas");
+}
+// Ordre des catégories : réglable (Réglages), sinon Principal seul, Plat complet, Accompagnement, Mezzé / Apéro, les autres, les bases
+const ORDRE_CATS = ["Principal seul", "Plat complet", "Accompagnement", "Mezzé / Apéro"];
+function ordreCategories() {
+  const presentes = [...new Set(S.recettes.map(r => r.categorie || "Sans catégorie"))];
+  const base = (S.prefs.ordreCats && S.prefs.ordreCats.length ? S.prefs.ordreCats : ORDRE_CATS);
+  const reste = presentes.filter(c => !base.includes(c)).sort((a, b) => (/^bases?\b/.test(norm(a)) - /^bases?\b/.test(norm(b))) || a.localeCompare(b, "fr"));
+  return [...base.filter(c => presentes.includes(c)), ...reste];
+}
+// Réglages › Ordre des catégories : on glisse les lignes
+function ouvrirOrdreCats() {
+  const l = ordreCategories();
+  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Ordre des catégories">
+    <button class="retour" data-act="reglages">‹ Réglages</button>
+    <h2 class="titre-r">Ordre des catégories</h2>
+    <p class="sub">Glisse les catégories pour changer l'ordre de la liste des recettes.</p>
+    <div class="oc-l" id="oc-l">${l.map(c => `<div class="oc" data-cat-o="${esc(c)}"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span><span>${esc(c)}</span></div>`).join("")}</div>
+    <button class="btn" data-act="ordre-defaut" style="align-self:flex-start">${icone("refresh")}Remettre l'ordre par défaut</button>
+  </div></div>`;
+  rendreTriable($("#oc-l"), ".oc", $("#modal .fiche"));
+  $("#oc-l").addEventListener("pointerup", () => setTimeout(() => {
+    S.prefs.ordreCats = [...document.querySelectorAll("#oc-l .oc")].map(x => x.dataset.catO); sauverPrefs(); vibrer("pas");
+  }, 30));
 }
 
 // Redessine seulement la liste (pendant la frappe dans la recherche)
 // Une famille = une seule ligne (« Burger · Bœuf, Végé, Poulet »), sur la 1re variante qui passe les filtres.
 // Les bases (sous-recettes) sont rangées à part, en bas.
 function majListe() {
-  const vues = new Set(), l = filtrees().filter(r => { const k = cleFamille(r); if (vues.has(k)) return false; vues.add(k); return true; });
+  const l0 = filtrees();
+  const vues = new Set(), l = S.regroupe ? l0.filter(r => { const k = cleFamille(r); if (vues.has(k)) return false; vues.add(k); return true; }) : l0;
+  const nomDe = r => { const fam = S.regroupe ? familleDe(r) : [r]; return fam.length > 1 ? r.famille : r.nom; };
+  const icones = r => { const fam = S.regroupe ? familleDe(r) : [r];
+    return `${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${fam.some(x => x.prep) ? icone("box", "lb") : ""}${fam.some(x => x.date) ? icone("glass", "inv") : ""}`; };
+  const attrs = r => { const fam = S.regroupe ? familleDe(r) : [r];
+    return fam.length > 1 ? `data-famille="${esc(cleFamille(r))}" data-fiche="${esc(r.id)}"` : `data-fiche="${esc(r.id)}"`; };
   const ligne = r => {
-    const fam = familleDe(r), nom = fam.length > 1 ? r.famille : r.nom;
-    return `<button class="ligne" data-fiche="${esc(r.id)}" data-k="${esc(cleFamille(r))}">${dishImg(r, 28)}
-      <span class="nm">${esc(nom)}${fam.length > 1 ? `<small>${fam.map(x => esc(x.variante || x.nom)).join(" · ")}</small>` : ""}</span>
-      <span class="ri">${fam.length > 1 ? `<span class="t acc">${fam.length} variantes</span>` : ""}${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
+    const fam = S.regroupe ? familleDe(r) : [r];
+    return `<button class="ligne" ${attrs(r)} data-k="${esc(S.regroupe ? cleFamille(r) : r.id)}">${dishImg(r, 28)}
+      <span class="nm">${esc(nomDe(r))}${fam.length > 1 ? `<small>${fam.map(x => esc(x.variante || x.nom)).join(" · ")}</small>` : ""}</span>
+      <span class="ri">${fam.length > 1 ? `<span class="t acc">${fam.length} variantes</span>` : ""}${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${icones(r)}</span></button>`;
   };
   // PC : cartes en grille (même contenu, rangé en hauteur)
   const carte = r => {
-    const fam = familleDe(r), nom = fam.length > 1 ? r.famille : r.nom;
+    const fam = S.regroupe ? familleDe(r) : [r];
     const mt = fam.length > 1 ? fam.map(x => x.variante || x.nom).join(" · ") : [r.categorie, r.preparation].filter(Boolean).join(" · ");
-    return `<button class="carte-r" data-fiche="${esc(r.id)}" data-k="${esc(cleFamille(r))}"><span class="ph">${dishImg(r, 48)}</span>
-      <span class="nm">${esc(nom)}</span><span class="mt">${esc(mt)}</span>
-      <span class="ri">${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${fam.some(x => x.favori) ? icone("star", "fav") : ""}${fam.some(x => x.vege) ? icone("leaf", "acc") : ""}${r.prep ? icone("box") : ""}${r.date ? icone("glass") : ""}</span></button>`;
+    return `<button class="carte-r" ${attrs(r)} data-k="${esc(S.regroupe ? cleFamille(r) : r.id)}"><span class="ph">${dishImg(r, 48)}</span>
+      <span class="nm">${esc(nomDe(r))}</span><span class="mt">${esc(mt)}</span>
+      <span class="ri">${estBase(r) ? `<span class="t fav">Base</span>` : ""}${estAssemble(r) ? `<span class="t acc">Assemblé</span>` : ""}${icones(r)}</span></button>`;
   };
   const bloc = estPC() ? a => `<div class="grille-r">${a.map(carte).join("")}</div>` : a => a.map(ligne).join("");
-  const plats = l.filter(r => !estBase(r)), bases = l.filter(estBase);
-  $("#liste").innerHTML = l.length ? bloc(plats) + (bases.length ? `<div class="sec-t"><h3>Bases (sous-recettes)</h3></div>` + bloc(bases) : "")
+  // tri
+  const nv = (r, k) => r[k] || 99;
+  const tri = { nom: (a, b) => nomDe(a).localeCompare(nomDe(b), "fr"), recentes: (a, b) => (b.maj || 0) - (a.maj || 0) || parNom(a, b),
+    temps: (a, b) => nv(a, "temps") - nv(b, "temps") || parNom(a, b), maitrise: (a, b) => (b.maitrise || 0) - (a.maitrise || 0) || parNom(a, b) }[S.tri];
+  let html;
+  if (!l.length) html = S.f.q.trim() ? `<div class="vide">Aucune recette « ${esc(S.f.q.trim())} ».<button class="btn pri cree-q" data-act="nouvelle-q">${icone("plus")}Créer la recette « ${esc(S.f.q.trim().replace(/^./, c => c.toUpperCase()))} »</button></div>`
     : `<div class="vide">Aucune recette ne correspond.</div>`;
+  else if (S.tri === "categorie") {
+    html = ordreCategories().map(c => {
+      const g = l.filter(r => (r.categorie || "Sans catégorie") === c).sort((a, b) => nomDe(a).localeCompare(nomDe(b), "fr")); if (!g.length) return "";
+      const replie = S.replies.has(c);
+      return `<button class="grp ${replie ? "replie" : ""}" data-grp="${esc(c)}" aria-expanded="${!replie}"><i></i><span>${esc(c)}</span>${icone("down")}</button>${replie ? "" : `<div class="grp-l">${bloc(g)}</div>`}`;
+    }).join("");
+  } else {
+    const plats = l.filter(r => !estBase(r)).sort(tri), bases = l.filter(estBase).sort(tri);
+    html = bloc(plats) + (bases.length ? `<div class="sec-t"><h3>Bases (sous-recettes)</h3></div>` + bloc(bases) : "");
+  }
+  $("#liste").innerHTML = html;
+  // recherche sans résultat : le + devient « + Tajine » et ouvre le formulaire avec ce nom
+  const fab = $("#fab-r"), q = S.f.q.trim();
+  if (fab && !estPC()) {
+    const cree = !l.length && q;
+    fab.classList.toggle("large", !!cree); fab.dataset.act = cree ? "nouvelle-q" : "nouvelle";
+    fab.innerHTML = icone("plus") + (cree ? `<span>${esc(q.replace(/^./, c => c.toUpperCase()))}</span>` : "");
+  }
   majCadre();
 }
+// Une famille regroupée dans la liste : on choisit la variante à ouvrir
+function ouvrirChoixVariante(cle) {
+  const r0 = S.recettes.find(r => cleFamille(r) === cle); if (!r0) return;
+  const fam = familleDe(r0), md = $("#modal");
+  ["recette", "form", "rep", "src", "choix", "archive", "filtres", "asm"].forEach(k => delete md.dataset[k]);
+  md.dataset.vc = "1";
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche vc" role="dialog" aria-label="${esc(r0.famille)}">
+    <div class="vc-t">${icone("branche")}<b>${esc(r0.famille)}</b><small>${fam.length} variantes</small></div>
+    ${fam.map(x => `<button class="vc-o" data-fiche="${esc(x.id)}">${dishImg(x, 26)}<span>${esc(x.variante || x.nom)}</span><span class="ri">${x.vege ? icone("leaf", "acc") : ""}${x.prep ? icone("box", "lb") : ""}${x.date ? icone("glass", "inv") : ""}${x.favori ? icone("star", "fav") : ""}</span></button>`).join("")}
+  </div></div>`;
+  vibrer("pas");
+}
 
-// Feuille « Filtres » : catégories, plusieurs à la fois
+// Feuille « Filtres » : une ligne par famille, fermée (« Toutes ») ; on l'ouvre pour voir toutes les valeurs et en choisir
 function ouvrirFiltres() {
-  const f = S.f, valeurs = k => [...new Set(S.recettes.map(r => r[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
-  const nb = (k, v) => S.recettes.filter(r => r[k] === v).length;
-  const cases = (fk, k) => valeurs(k).map(v => `<button class="rc ${f[fk].includes(v) ? "on" : ""}" data-filtre-case="${fk}" data-v="${esc(v)}"><span class="cb">${icone("check")}</span><span class="nm">${esc(v)}</span><span class="t">${nb(k, v)}</span></button>`).join("");
-  const n = filtrees().length;
-  ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete $("#modal").dataset[k]);
+  const f = S.f, n = filtrees().length;
+  const libelle = (k, v) => NIV_F[k] ? NIVEAUX[NIV_F[k]][v - 1] : v;
+  const fam = ([k, titre, teinte, val]) => {
+    const nb = new Map();
+    S.recettes.forEach(r => { const v = val(r); if (v != null && v !== "") nb.set(v, (nb.get(v) || 0) + 1); });
+    let vals = [...nb.keys()];
+    if (NIV_F[k]) vals.sort((a, b) => a - b);
+    else if (k === "saisons") vals = ["Été", "Hiver", "Toute l'année", ...vals.filter(v => !["Été", "Hiver", "Toute l'année"].includes(v))].filter(v => nb.has(v));
+    else if (k === "cats") vals = ordreCategories().filter(v => nb.has(v));
+    else vals.sort((a, b) => String(a).localeCompare(String(b), "fr"));
+    if (!vals.length) return "";
+    const sel = f[k] || [], ouvert = S.fOuvert === k;
+    const resume = sel.length ? sel.map(v => libelle(k, v)).join(", ") : "Toutes";
+    return `<div class="ff ${ouvert ? "ouvert" : ""}" data-teinte="${teinte}"><button class="ff-hd" data-ff="${k}" aria-expanded="${ouvert}"><span>${titre}</span><span class="v ${sel.length ? "on" : ""}">${esc(String(resume))}</span>${icone("down")}</button>
+      ${ouvert ? `<div class="ff-c">${vals.map(v => `<button class="ffp ${sel.includes(v) ? "on" : ""}" data-ffv="${k}" data-v="${esc(String(v))}">${k === "saisons" && v === "Été" ? icone("sun") : k === "saisons" && v === "Hiver" ? icone("flocon") : ""}${esc(String(libelle(k, v)))} <em>${nb.get(v)}</em></button>`).join("")}</div>` : ""}</div>`;
+  };
+  ["recette", "form", "rep", "src", "choix", "archive", "vc", "asm"].forEach(k => delete $("#modal").dataset[k]);
   $("#modal").dataset.filtres = "1";
-  const haut = $("#modal .fiche") && $("#modal").dataset.filtres ? $("#modal .fiche").scrollTop : 0, deja = !!$("#modal .filtres-f");
+  const haut = $("#modal .filtres-f") ? $("#modal .fiche").scrollTop : 0, deja = !!$("#modal .filtres-f");
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche filtres-f" role="dialog" aria-label="Filtres">
     <div class="fi-hd"><h2 class="titre-r" style="flex:1">Filtres</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
-    <div class="sect">Catégories</div><div class="grille2">${cases("cats", "categorie")}</div>
+    ${FAMILLES_F.map(fam).join("")}
     <div class="pied2"><button class="btn" data-act="filtres-effacer">Tout effacer</button><button class="btn pri" data-act="fermer">Voir ${n} recette${n > 1 ? "s" : ""}</button></div></div></div>`;
   if (deja) { const fi = $("#modal .fiche"); fi.style.animation = "none"; fi.parentElement.style.animation = "none"; fi.scrollTop = haut; }
 }
@@ -1589,12 +1702,17 @@ function ouvrirFiltres() {
 function ouvrirFiche(id) {
   const r = S.recettes.find(x => x.id === id);
   if (!r) return fermer();
-  const tags = [r.categorie, r.origine, r.saison, r.preparation].filter(Boolean).map(t => `<span class="t">${esc(t)}</span>`);
-  if (r.vege) tags.push(`<span class="t acc">${icone("leaf")}Végé</span>`);
-  if (r.prep) tags.push(`<span class="t acc">${icone("box")}Lunchbox</span>`);
-  if (r.date) tags.push(`<span class="t fav">${icone("glass")}Invités</span>`);
-  const faits = Object.keys(NIVEAUX).filter(k => r[k]).map(k =>
-    `<div><dt>${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</dt><dd>${NIVEAUX[k][r[k] - 1]}</dd></div>`).join("");
+  // Catégorie puis les 3 étiquettes sur une ligne ; saison (Été / Hiver seulement), origine, préparation en texte coloré dessous
+  const etiq = ETIQUETTES.filter(([k]) => r[k]).map(([k, i, t]) => `<span class="fe" data-teinte="${k}">${icone(i)}<span>${t}</span></span>`).join("");
+  const s2 = [/^ete$/.test(norm(r.saison)) ? `<span class="ft ete">${icone("sun")}Été</span>` : /^hiver$/.test(norm(r.saison)) ? `<span class="ft hiver">${icone("flocon")}Hiver</span>` : "",
+    r.origine ? `<span class="ft" data-teinte="bleu">${esc(r.origine)}</span>` : "", r.preparation ? `<span class="ft" data-teinte="prune">${esc(r.preparation)}</span>` : ""].filter(Boolean).join("");
+  // Niveaux sur une ligne : € (les manquants en gris), difficulté en points, temps en horloges, maîtrise en couleur
+  const n3 = (n, f) => [1, 2, 3].map(i => f(i > n)).join("");
+  const nivs = Object.keys(NIVEAUX).some(k => r[k]) ? `<div class="fi-niv">
+    <div><small>Prix</small><b>${r.prix ? `${"€".repeat(r.prix)}<span class="off">${"€".repeat(3 - r.prix)}</span>` : `<span class="off">—</span>`}</b></div>
+    <div><small>Difficulté</small><b>${r.difficulte ? n3(r.difficulte, off => `<i class="pt ${off ? "off" : ""}"></i>`) : `<span class="off">—</span>`}</b></div>
+    <div><small>Temps</small><b>${r.temps ? n3(r.temps, off => `<span class="${off ? "off" : ""}">${icone("clock")}</span>`) : `<span class="off">—</span>`}</b></div>
+    <div><small>Maîtrise</small><b class="${r.maitrise ? "m" + r.maitrise : ""}">${r.maitrise ? NIVEAUX.maitrise[r.maitrise - 1] : `<span class="off">—</span>`}</b></div></div>` : "";
   // Variantes : pastilles pour passer de l'une à l'autre ; les ingrédients propres à cette variante sont marqués
   const fam = familleDe(r), communs = fam.length > 1 ? (r.ingredients || []).filter(t => fam.every(x => (x.ingredients || []).includes(t))) : null;
   let dansSection = false;
@@ -1610,10 +1728,12 @@ function ouvrirFiche(id) {
     return `<li class="${propre ? "propre" : ""} ${dans}">${imgIng(t, 18)}<span>${esc(t)}</span></li>`;
   }).join("");
   const utilisee = estBase(r) ? S.recettes.filter(x => (x.ingredients || []).some(t => norm(nomCrochets(t) || "") === norm(r.nom))) : [];
-  ["form", "rep", "choix", "filtres"].forEach(k => delete $("#modal").dataset[k]);
+  ["form", "rep", "choix", "filtres", "vc", "asm"].forEach(k => delete $("#modal").dataset[k]);
   $("#modal").dataset.recette = id;
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="${esc(r.nom)}">
-    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(fam.length > 1 ? r.famille : r.nom)}</h2><div class="tg">${tags.join("")}</div></div>
+    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>
+      ${fam.length > 1 ? `<button class="fi-var" data-act="var-menu" aria-label="Variante : changer">${icone("branche")}<span class="fv-t"><b>${esc(r.famille)}</b> ·</span><b class="v">${esc(r.variante || r.nom)}${icone("down")}</b></button>` : ""}</div>
+      <button class="ib fi-etoile ${r.favori ? "on" : ""}" data-act="favori" aria-label="${r.favori ? "Retirer des favoris" : "Mettre en favori"}">${icone("star")}</button>
       <button class="ib" data-act="menu3" aria-label="Plus d'actions">${icone("more")}</button>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="menu3" id="menu3" hidden>
@@ -1622,33 +1742,37 @@ function ouvrirFiche(id) {
       ${mcActif() ? `<button data-act="rec-icone">${icone("grid")}Icône</button>` : ""}
       ${estBase(r) ? "" : `<button data-act="variante">${icone("plus")}Nouvelle variante</button>`}
       <button class="danger" data-act="supprimer">${icone("trash")}Supprimer</button></div>
-    ${fam.length > 1 ? `<div class="variantes">${fam.map(x => `<button class="chip ${x.id === r.id ? "on" : ""}" data-fiche="${esc(x.id)}" data-variante>${x.vege ? icone("leaf") : ""}${esc(x.variante || x.nom)}</button>`).join("")}</div>` : ""}
+    ${fam.length > 1 ? `<div class="menu3 var-menu" id="var-menu" hidden>${fam.map(x => `<button class="${x.id === r.id ? "on" : ""}" data-fiche="${esc(x.id)}" data-variante>${x.vege ? icone("leaf") : icone("branche")}${esc(x.variante || x.nom)}</button>`).join("")}</div>` : ""}
+    ${r.categorie || etiq ? `<div class="fi-tags1">${r.categorie ? `<span class="fc">${esc(r.categorie)}</span>` : ""}${r.categorie && etiq ? `<span class="fsep"></span>` : ""}${etiq}</div>` : ""}
+    ${s2 ? `<div class="fi-tags2">${s2}</div>` : ""}
     ${utilisee.length ? `<p class="infos">Base (sous-recette) : elle sert dans ${utilisee.map(u => `<b>${esc(u.nom)}</b>`).join(", ")}. Jamais proposée dans le menu.</p>` : ""}
-    ${faits ? `<dl class="faits">${faits}</dl>` : ""}
+    ${nivs}
     <div><div class="h4">Ingrédients <i>pour ${r.portions || 2}${r.ingredientsSource === "suggestion" ? " · suggérés" : ""}</i></div>
       ${communs ? `<div class="legende"><i></i>propre à « ${esc(r.variante || r.nom)} » · le reste est commun</div>` : ""}
       ${ings ? `<ul class="ings">${ings}</ul>` : `<div class="sub">Aucun ingrédient.</div>`}</div>
-    ${veutAccomp(r) || estAccomp(r) ? `<button class="btn asm-btn" data-act="assembler">${icone("utensils")}${estAccomp(r) ? "Avec quel plat ? Assembler un plat complet" : "Avec quoi ? Assembler un plat complet"}</button>` : ""}
     ${r.notes ? `<p class="notes">${esc(r.notes)}</p>` : ""}
     ${/^https?:\/\//.test(r.lien || "") ? `<a class="lien" href="${esc(r.lien)}" target="_blank" rel="noopener">${icone("link")}Voir la recette en ligne</a>` : ""}
-    <div class="gros"><button class="btn ${r.favori ? "fav-on" : ""}" data-act="favori">${icone("star")}${r.favori ? "Favori" : "Mettre en favori"}</button>
-      ${estBase(r) ? "" : menuEnCours() && menuEnCours().repas.some(x => x.id === r.id)
+    ${estBase(r) ? "" : `<div class="gros">${assemblable(r) ? `<button class="btn fi-asm" data-act="assembler">${icone("utensils")}Assembler</button>` : ""}
+      ${menuEnCours() && menuEnCours().repas.some(x => x.id === r.id)
         ? `<button class="btn" disabled>${icone("check")}Dans la liste</button>`
-        : `<button class="btn pri" data-act="au-menu">${icone("cart")}À la liste</button>`}</div>
+        : `<button class="btn pri" data-act="au-menu">${icone("cart")}À la liste</button>`}</div>`}
   </div></div>`;
+  // catégorie + étiquettes sur une seule ligne : si ça ne tient pas, les étiquettes passent en icônes seules
+  const t1 = $("#modal .fi-tags1"); if (t1 && t1.scrollWidth > t1.clientWidth + 1) t1.classList.add("icones");
 }
 
 function basculerFavori() {
   const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
   if (!r) return;
   r.favori = !r.favori;
-  ecrireRecette(r);
+  ecrireRecette(r); vibrer(r.favori ? "coche" : "decoche");
   render(); ouvrirFiche(r.id);
+  const f = $("#modal .fiche"); if (f) { f.style.animation = "none"; f.parentElement.style.animation = "none"; }
 }
 
 function fermer() {
   $("#modal").innerHTML = "";
-  ["recette", "form", "rep", "src", "choix", "archive", "filtres", "asm", "art"].forEach(k => delete $("#modal").dataset[k]);
+  ["recette", "form", "rep", "src", "choix", "archive", "filtres", "asm", "art", "vc"].forEach(k => delete $("#modal").dataset[k]);
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -1979,8 +2103,8 @@ function enregistrer() {
   toast("Enregistré");
 }
 
-function nouvelle() {
-  ouvrirFormulaire({ nom: "", categorie: "Plat complet", vege: false, favori: false, prep: false, date: false, portions: 2, ingredients: [], ingredientsSource: "app" }, "Nouvelle recette");
+function nouvelle(nom = "") {
+  ouvrirFormulaire({ nom, categorie: "Plat complet", vege: false, favori: false, prep: false, date: false, portions: 2, ingredients: [], ingredientsSource: "app" }, "Nouvelle recette");
 }
 function modifier() {
   const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
@@ -2119,6 +2243,7 @@ function ouvrirReglages() {
       <button class="${vibr === "oui" ? "on" : ""}" data-act="vibr" data-v="oui">Oui</button>
       <button class="${vibr === "non" ? "on" : ""}" data-act="vibr" data-v="non">Non</button></span></div>
     ${uid ? `<div class="sect">Recettes</div>
+    <button class="reg" data-act="ordre-cats"><span>${icone("rows")} Ordre des catégories</span><span class="val">›</span></button>
     <button class="reg" data-act="completer"><span>${icone("pen")} Compléter mes recettes</span><span class="val">${(() => { const n = S.recettes.filter(r => Object.values(GROUPES_CP).some(g => g.manque(r))).length; return n ? n + " à compléter ›" : "›"; })()}</span></button>
     <div class="sect">Idées</div>
     <button class="reg" data-act="idees"><span>Notes</span><span class="val">›</span></button>
@@ -2899,6 +3024,13 @@ function clicCompleter(t) {
 
 document.addEventListener("click", e => {
   const t = e.target;
+  // après un appui long, le clic qui suit ne compte pas
+  const lg = t.closest && t.closest("[data-long]");
+  if (lg) { delete lg.dataset.long; e.preventDefault(); return; }
+  if ($("#menu-tri") && !t.closest("#menu-tri") && !t.closest("[data-act='trier']")) fermerTri();
+  // le petit menu de l'appui long se ferme au clic suivant (après avoir fait ce qu'on a touché dedans)
+  const ml = $("#menu-long"); if (ml) setTimeout(() => ml.remove(), 0);
+  if ($("#var-menu") && !$("#var-menu").hidden && !t.closest("#var-menu") && !t.closest("[data-act='var-menu']")) $("#var-menu").hidden = true;
   if (clicLd(t)) return;
   if (clicCompleter(t)) return;
   // PC : le formulaire reste ouvert à côté de la grille ; on ne le remplace pas par mégarde
@@ -2928,6 +3060,9 @@ document.addEventListener("click", e => {
   if (onglet) return changerOnglet(onglet.dataset.tab);
   const dep = t.closest("[data-deplier]");
   if (dep) { S.basesOuvertes = S.basesOuvertes || new Set(); const k = dep.dataset.deplier; S.basesOuvertes.has(k) ? S.basesOuvertes.delete(k) : S.basesOuvertes.add(k); vibrer("pas"); const fi = $("#modal .fiche"), h = fi ? fi.scrollTop : 0; ouvrirFiche($("#modal").dataset.recette); const f2 = $("#modal .fiche"); if (f2) { f2.style.animation = "none"; f2.parentElement.style.animation = "none"; f2.scrollTop = h; } return; }
+  // une famille regroupée dans la liste : on choisit d'abord la variante
+  const famL = t.closest("#liste [data-famille]");
+  if (famL) return ouvrirChoixVariante(famL.dataset.famille);
   const ligne = t.closest("[data-fiche]");
   if (ligne) {
     const garder = ligne.hasAttribute("data-variante"), fi = $("#modal .fiche");
@@ -2936,6 +3071,15 @@ document.addEventListener("click", e => {
     if (garder && fi) { const f2 = $("#modal .fiche"); f2.style.animation = "none"; f2.parentElement.style.animation = "none"; }
     return;
   }
+  const ff = t.closest("[data-ff]");
+  if (ff) { S.fOuvert = S.fOuvert === ff.dataset.ff ? null : ff.dataset.ff; vibrer("pas"); return ouvrirFiltres(); }
+  const ffv = t.closest("[data-ffv]");
+  if (ffv) {
+    const k = ffv.dataset.ffv, v = NIV_F[k] ? +ffv.dataset.v : ffv.dataset.v, l = S.f[k] = S.f[k] || [], i = l.indexOf(v);
+    i >= 0 ? l.splice(i, 1) : l.push(v); vibrer(i >= 0 ? "decoche" : "pas"); renderRecettes(); return ouvrirFiltres();
+  }
+  const grp = t.closest("[data-grp]");
+  if (grp) { const c = grp.dataset.grp; S.replies.has(c) ? S.replies.delete(c) : S.replies.add(c); ecrireLocal("fx-replies", JSON.stringify([...S.replies])); vibrer("pas"); return majListe(); }
   const fc = t.closest("[data-filtre-case]");
   if (fc) { const l = S.f[fc.dataset.filtreCase], v = fc.dataset.v, i = l.indexOf(v); i >= 0 ? l.splice(i, 1) : l.push(v); vibrer("pas"); renderRecettes(); return ouvrirFiltres(); }
   const rf = t.closest("[data-retire-f]");
@@ -2966,8 +3110,16 @@ document.addEventListener("click", e => {
   if (rc) { vibrer(rc.classList.toggle("on") ? "pas" : "decoche"); return; }
   const bqOuvrir = t.closest("[data-bq-ouvrir]");
   if (bqOuvrir) { S.bq.scroll = $("#bq-corps").scrollTop; S.bq.detail = bqOuvrir.dataset.bqOuvrir; S.bq.suppr = null; return majBanque(); }
-  const ax = t.closest("[data-asm-x]");
-  if (ax) { S.asm.accs.splice(+ax.dataset.asmX, 1); S.asm.nom = ""; vibrer("decoche"); return majAssembler(); }
+  const asel = t.closest("[data-asm-sel]");
+  if (asel) { const id = asel.dataset.asmSel, l = S.asm.sel; l.has(id) ? l.delete(id) : l.add(id); vibrer(l.has(id) ? "coche" : "decoche"); return majAssembler(); }
+  const apref = t.closest("[data-asm-pref]");
+  if (apref) {
+    const r = recette(S.asm.depart), id = apref.dataset.asmPref; if (!r) return;
+    const l = r.preferes || [], on = !l.includes(id);
+    r.preferes = on ? [...l, id] : l.filter(x => x !== id); if (!r.preferes.length) delete r.preferes;
+    if (on) S.asm.sel.add(id);
+    ecrireRecette(r); vibrer(on ? "coche" : "decoche"); return majAssembler();
+  }
   const vp = t.closest("[data-var-propo]");
   if (vp) { const x = S.propo.repas[+vp.dataset.varPropo], r = recette(vp.dataset.v); if (x && r) { x.id = r.id; if (!veutAccomp(r)) x.side = null; else if (!x.side) x.side = tirerAccomp(accompsPris()); sauverPropo(); vibrer("pas"); renderMenu(); } return; }
   const bqRayon = t.closest("[data-bq-rayon]");
@@ -3040,7 +3192,7 @@ document.addEventListener("click", e => {
     case "fait": cocherFait(+el.dataset.i); break;
     case "remplacer": remplacer(); break;
     case "choisir": ouvrirChoix($("#modal").dataset.rep); break;
-    case "accomp": changerAccomp(); break;
+    case "accomp": case "asm-repas": { const o = repasOuvert(); if (o) { const x = o.l[o.i]; ouvrirAssembler(x.id, accompsDe(x), o.i, o.src); } break; }
     case "voir": { const o = repasOuvert(); if (o) ouvrirFiche(o.l[o.i].id); break; }
     case "retirer": retirer(); break;
     case "au-menu": auMenu(); break;
@@ -3053,9 +3205,8 @@ document.addEventListener("click", e => {
     case "assembler": ouvrirAssembler($("#modal").dataset.recette); break;
     case "asm-menu": assemblerAuMenu(); break;
     case "asm-garder": assemblerGarder(); break;
-    case "asm-repas": { const o = repasOuvert(); if (o) { const x = o.l[o.i]; ouvrirAssembler(x.id, accompsDe(x), o.src === "p" ? o.i : null); } break; }
     case "filtres": ouvrirFiltres(); break;
-    case "filtres-effacer": S.f.cats = []; renderRecettes(); ouvrirFiltres(); break;
+    case "filtres-effacer": FAMILLES_F.forEach(([k]) => { S.f[k] = []; }); renderRecettes(); ouvrirFiltres(); break;
     case "supprimer": supprimer(); break;
     case "enregistrer": enregistrer(); break;
     case "ajout-ing": ajouterIngredient(); break;
@@ -3092,6 +3243,14 @@ document.addEventListener("click", e => {
     case "exporter": exporter(el); break;
     case "confirmer-import": confirmerImport(el); break;
     case "favori": basculerFavori(); break;
+    case "var-menu": { const vm = $("#var-menu"); if (vm) { vm.hidden = !vm.hidden; vibrer("pas"); } break; }
+    case "trier": ouvrirTri(el); break;
+    case "tri": choisirTri(el.dataset.v); break;
+    case "tri-reset": choisirTri("categorie"); break;
+    case "regroupe": S.regroupe = !S.regroupe; ecrireLocal("fx-regroupe", S.regroupe ? "1" : "0"); vibrer("pas"); fermerTri(); majListe(); break;
+    case "nouvelle-q": nouvelle(S.f.q.trim().replace(/^./, c => c.toUpperCase())); break;
+    case "ordre-cats": ouvrirOrdreCats(); break;
+    case "ordre-defaut": delete S.prefs.ordreCats; sauverPrefs(); vibrer("pas"); ouvrirOrdreCats(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
     case "fermer": if (formModifie() && !el.dataset.force) { demanderAbandon(); break; }
       if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste [data-k]", renderRecettes); } fermerDoux(); break;
@@ -3106,7 +3265,6 @@ document.addEventListener("change", e => {
 // Revenir dans la case d'ajout rouvre la liste déroulante (elle se ferme quand on touche ailleurs)
 document.addEventListener("focusin", e => { if (e.target.id === "ajout-art") majSuggArt(); });
 document.addEventListener("input", e => {
-  if (e.target.id === "asm-nom") S.asm.nom = e.target.value;
   if (e.target.id === "q") { S.f.q = e.target.value; majListe(); }
   if (e.target.id === "q-choix") majChoix();
   if (e.target.id === "ajout-art") majSuggArt();
@@ -3127,6 +3285,41 @@ document.addEventListener("focusin", e => {
 document.addEventListener("focusout", e => {
   if (!(e.target.closest && e.target.closest("#f-ings .li"))) return;
   setTimeout(() => { if (!(document.activeElement && document.activeElement.closest("#f-ings .li"))) majSuggIng(null); }, 150);
+});
+// Appui long (450 ms sans bouger) : ce qui est appuyé reçoit data-long, pour que le clic qui suit soit ignoré
+function appuiLong(selecteur, action) {
+  let t = null, x = 0, y = 0;
+  const stop = () => { if (t) { clearTimeout(t); t = null; } };
+  document.addEventListener("pointerdown", e => {
+    const el = e.target.closest && e.target.closest(selecteur); if (!el) return;
+    x = e.clientX; y = e.clientY; stop();
+    t = setTimeout(() => { t = null; el.dataset.long = "1"; vibrer("pas"); action(el); setTimeout(() => delete el.dataset.long, 800); }, 450);
+  });
+  document.addEventListener("pointermove", e => { if (t && Math.hypot(e.clientX - x, e.clientY - y) > 10) stop(); });
+  ["pointerup", "pointercancel", "scroll"].forEach(ev => document.addEventListener(ev, stop, true));
+  document.addEventListener("contextmenu", e => { if (e.target.closest && e.target.closest(selecteur)) e.preventDefault(); });
+}
+// La bulle : de la couleur de l'étiquette, avec le nombre de recettes ; jamais hors de l'écran (la flèche reste sur l'icône)
+const NB_ICO = { fav: r => r.favori, vege: r => r.vege, saison: r => deSaison(r), avance: r => r.prep, invites: r => r.date };
+appuiLong(".barre-r [data-bascule]", el => {
+  document.querySelectorAll(".bulle-l").forEach(x => x.remove());
+  const k = el.dataset.bascule, n = S.recettes.filter(NB_ICO[k]).length, b = el.getBoundingClientRect();
+  const bu = document.createElement("div"); bu.className = "bulle-l"; bu.dataset.teinte = k;
+  bu.innerHTML = `${el.innerHTML}<span>${esc(el.dataset.nom)}</span><small>· ${n} recette${n > 1 ? "s" : ""}</small><i></i>`;
+  document.body.appendChild(bu);
+  const w = bu.offsetWidth, cx = b.left + b.width / 2, gauche = Math.min(Math.max(cx - w / 2, 8), innerWidth - w - 8);
+  bu.style.left = gauche + "px"; bu.style.top = (b.top - bu.offsetHeight - 10) + "px";
+  bu.querySelector("i").style.left = (cx - gauche - 5) + "px";
+  setTimeout(() => bu.remove(), 1800);
+});
+// Appui long sur l'onglet Recettes : Ingrédients (la banque) et Nouvelle recette
+appuiLong('#tabs button[data-tab="recettes"]', el => {
+  const b = el.getBoundingClientRect(), m = document.createElement("div");
+  m.id = "menu-long"; m.className = "menu-tri menu-long";
+  m.innerHTML = `<button data-act="banque">${icone("carrot")}<span>Ingrédients<small>La banque d'ingrédients</small></span></button><button data-act="nouvelle">${icone("plus")}<span>Nouvelle recette</span></button>`;
+  document.body.appendChild(m);
+  m.style.left = Math.min(Math.max(b.left + b.width / 2 - m.offsetWidth / 2, 8), innerWidth - m.offsetWidth - 8) + "px";
+  m.style.top = (b.top - m.offsetHeight - 8) + "px";
 });
 // Formulaire sur téléphone : pendant qu'on tape, le pied (Annuler / Enregistrer) laisse sa place au clavier
 const tactile = matchMedia("(pointer: coarse)");
