@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.18.1";
+const VERSION = "0.18.2";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -1808,10 +1808,10 @@ function ouvrirFormulaire(brouillon, titre) {
       <button type="button" class="fo-pd" data-act="plus" aria-expanded="false"><span><span class="lib">Plus de détails</span>${icone("down")}</span></button>
       <div id="f-plus" class="fo-plus" hidden>
         <div class="fo-tags">${ldTag("saison")}${ldTag("origine")}${ldTag("preparation")}</div>
-        <div class="fo-sec"><div class="fo-sec-t">Niveaux</div><div class="fo-niv">${niveaux}</div></div>
-        <div class="fo-sec"><div class="fo-sec-t">Notes</div>
+        <div class="fo-niv">${niveaux}</div>
+        <div class="fo-notes">
           <input class="saisie" id="f-lien" type="url" placeholder="Lien vers la recette" value="${esc(r.lien)}" aria-label="Lien">
-          <textarea class="saisie" id="f-notes" rows="2" placeholder="Astuces, ce qui a plu…" aria-label="Notes">${esc(r.notes)}</textarea></div>
+          <textarea class="saisie" id="f-notes" rows="2" placeholder="Notes : astuces, ce qui a plu…" aria-label="Notes">${esc(r.notes)}</textarea></div>
       </div>
     </div>
     <div class="fo-pied" id="fo-pied">${piedFormulaire()}</div>

@@ -782,3 +782,46 @@ body.pc #modal.lateral .fiche.fo { border-radius: 0; max-height: none; }
 .btn.fo-ok { height: 32px; border-radius: 999px; padding: 0 14px; font-size: 13.5px; }
 .btn.fo-ok .ic { width: 15px; height: 15px; }
 body.pc .fo .bsc, body.pc .fo .ld-b { height: 32px; }
+
+/* ---------- v0.18.2 : formulaire recette plus compact ---------- */
+.fo-corps { gap: 12px; padding: 10px 14px 14px; }
+.fo-hd { padding: 10px 10px 9px 12px; }
+.fo-hd::after { left: 12px; right: 12px; }
+#f-nom { font-size: 18px; }
+.fo-sec { gap: 4px; }
+.fo-sec-t { min-height: 22px; }
+/* étoile Favori : juste l'étoile, sans cadre */
+.fo-etoile, .fo-etoile.on { background: none; border: 0; }
+.fo-etoile .ic { width: 22px; height: 22px; stroke-width: 1.8; }
+/* Végé / Lunchbox / Invités : petite rangée à gauche, contour fin au repos */
+.fo-bsc { display: flex; gap: 5px; }
+.bsc { height: 28px; padding: 0 10px; font-size: 12px; gap: 4px; background: none; border: 1px solid var(--trait); }
+.bsc .ic { width: 13px; height: 13px; }
+.bsc.on { background: var(--cd); border-color: var(--c); }
+/* portions : texte « pour − 2 + », sans pastille */
+.fo-portions { background: none; padding: 0; font-size: 11.5px; gap: 0; }
+.fo-portions > span { padding: 0 4px 0 0; }
+.fo-portions button { width: 24px; height: 24px; background: none; color: var(--accent); font-size: 16px; }
+.fo-portions b { font-size: 12.5px; min-width: 14px; }
+/* ingrédients : bloc gris, texte plus petit */
+.fo .ingl { background: var(--creux); border-radius: 14px; padding: 2px 8px; }
+.fo .ingl .li { min-height: 32px; border-bottom-color: var(--fond); }
+.fo .ingl .li input { font-size: 13.5px; height: 32px; }
+.fo .ingl .li img { width: 14px; height: 14px; padding: 2px; border-radius: 6px; background: var(--carte); }
+.fo .ingl .li .ib { width: 26px; height: 26px; }
+.fo .ingl .li .ib .ic, .fo .ingl .li .poignee .ic { width: 13px; height: 13px; }
+.fo .ingl .li.ajout { margin: 0 -8px -2px; border-radius: 0 0 13px 13px; background: var(--fond); border: 1px dashed var(--trait); min-height: 34px; padding-left: 12px; }
+.fo .ingl .li.ajout:focus-within { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--carte); }
+/* détails (D2) : tout plus petit, sans titres, lien et notes dans un seul bloc */
+.fo-plus { gap: 12px; }
+.fo-plus .fo-tags { gap: 5px; }
+.fo-plus .ld-b { height: 30px; font-size: 12.5px; padding: 0 9px 0 10px; }
+.fo-niv { gap: 3px; }
+.fo-niv .niv { grid-template-columns: 62px minmax(0, 1fr); }
+.fo-niv .niv .lbl { font-size: 11.5px; }
+.fo-niv .seg button { padding: 3px 2px; font-size: 11.5px; }
+.fo-notes { display: flex; flex-direction: column; background: var(--creux); border-radius: 12px; overflow: hidden; }
+.fo .fo-notes .saisie { background: none; border-radius: 0; height: 34px; font-size: 14px; padding: 0 12px; }
+.fo .fo-notes textarea.saisie { height: auto; padding: 7px 12px; }
+.fo .fo-notes #f-lien { border-bottom: 1px solid var(--fond); }
+.fo .fo-notes .saisie:focus { background: var(--carte); }

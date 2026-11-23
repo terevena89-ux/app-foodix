@@ -1,5 +1,10 @@
 # Foodix — journal des nouveautés
 
+## 0.18.2 — 2026-11-23
+- Formulaire recette plus compact : espaces resserrés, étoile Favori sans cadre, Végé / Lunchbox / Invités en petite rangée, portions en texte « pour − 2 + ».
+- Ingrédients plus petits, dans un bloc gris.
+- Détails plus compacts : tags et niveaux plus petits, sans titres de section, lien et notes dans un seul bloc.
+
 ## 0.18.1 — 2026-11-23
 - Formulaire recette : le titre ne se déforme plus quand on fait défiler.
 - Retour haptique (vibration) dans le formulaire : étiquettes et étoile, niveaux, portions, listes, nouvelle valeur, ligne d'ingrédient ajoutée ou retirée, OK de la variante, enregistrement.
