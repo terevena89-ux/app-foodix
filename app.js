@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.18.0";
+const VERSION = "0.18.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -1702,7 +1702,7 @@ function ldValider() {
   const id = ldOuvert; if (!id) return;
   const c = LD[id], champ = elLd(id) && elLd(id).querySelector("[data-ld-txt]"), v = champ ? champ.value.trim() : "";
   ldOuvert = null; ldSaisie = false;
-  if (v) (c.ajouter || c.choisir)(v);
+  if (v) { (c.ajouter || c.choisir)(v); vibrer("ajout"); }
   majLd(id);
 }
 // Clics sur une liste : true = géré. Toucher ailleurs ferme la liste ouverte (et le clic continue son chemin).
@@ -1820,7 +1820,7 @@ function ouvrirFormulaire(brouillon, titre) {
   rendreTriable($("#f-ings"), ".li:not(.ajout)", $(".fo-corps"));
   // une ombre sous l'en-tête dès qu'on fait défiler
   const corps = $(".fo-corps"), hd = $(".fo-hd");
-  corps.addEventListener("scroll", () => hd.classList.toggle("defile", corps.scrollTop > 4), { passive: true });
+  corps.addEventListener("scroll", () => hd.classList.toggle("ombre", corps.scrollTop > 4), { passive: true });
   m.depart = JSON.stringify(lireFormulaire());  // pour savoir si quelque chose a changé en fermant
   if (!r.id) $("#f-nom").focus();
 }
@@ -1840,6 +1840,7 @@ const ligneIngredient = (txt = "", ajout = false) => `<div class="li ${ajout ? "
   <span class="li-plus">${icone("plus")}</span>${dessinIng(txt)}<input value="${esc(txt)}" placeholder="${ajout ? "Ajouter un ingrédient" : "ex. 250 g pâtes"}" autocomplete="off" enterkeyhint="next"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
 // La ligne d'ajout reçoit du texte : elle devient une ligne normale, une nouvelle ligne d'ajout se place en bas
 function activerLigneAjout(li) {
+  vibrer("pas");
   li.classList.remove("ajout");
   li.querySelector("input").placeholder = "ex. 250 g pâtes";
   $("#f-ings").insertAdjacentHTML("beforeend", ligneIngredient("", true));
@@ -1929,6 +1930,7 @@ function enregistrer() {
     delete r.varianteDe;
   }
   ecrireRecette(r);
+  vibrer("ajout");
   render();
   ouvrirFiche(r.id);
   toast("Enregistré");
@@ -1966,12 +1968,13 @@ function dupliquer() {
 // Clics à l'intérieur du formulaire qui ne font que changer l'allure des boutons
 function clicFormulaire(t) {
   const cas = t.closest("[data-case]");
-  if (cas) { cas.classList.toggle("on"); return true; }
+  if (cas) { vibrer(cas.classList.toggle("on") ? "coche" : "decoche"); return true; }
   const niv = t.closest("[data-niv] button");
   if (niv) {
     const etait = niv.classList.contains("on");
     niv.parentElement.querySelectorAll("button").forEach(b => b.classList.remove("on"));
     if (!etait) niv.classList.add("on");
+    vibrer(etait ? "decoche" : "pas");
     return true;
   }
   return false;
@@ -3008,22 +3011,22 @@ document.addEventListener("click", e => {
     case "supprimer": supprimer(); break;
     case "enregistrer": enregistrer(); break;
     case "ajout-ing": ajouterIngredient(); break;
-    case "retirer-ing": el.closest(".li").remove(); break;
+    case "retirer-ing": el.closest(".li").remove(); vibrer("retire"); break;
     case "plus": {
       const ouvert = $("#f-plus").hidden;
-      fermerLd();
+      fermerLd(); vibrer("pas");
       $("#f-plus").hidden = !ouvert;
       el.setAttribute("aria-expanded", ouvert);
       el.querySelector(".lib").textContent = ouvert ? "Moins de détails" : "Plus de détails";
       break;
     }
-    case "fo-variante": $("#fo-var") ? fermerVariante() : ouvrirVariante(); break;
-    case "fo-var-ok": fermerVariante(); break;
+    case "fo-variante": $("#fo-var") ? fermerVariante() : ouvrirVariante(); vibrer("pas"); break;
+    case "fo-var-ok": fermerVariante(); vibrer("coche"); break;
     case "fo-sans-var": S.fo.famille = ""; S.fo.variante = ""; fermerVariante(); vibrer("decoche"); break;
     case "fo-continuer": $("#fo-pied").innerHTML = piedFormulaire(); break;
     case "portions": {
       const n = Math.min(12, Math.max(1, +$("#f-portions").textContent + +el.dataset.v));
-      $("#f-portions").textContent = n;
+      $("#f-portions").textContent = n; vibrer("pas");
       break;
     }
     case "connexion": seConnecter(el); break;

@@ -697,9 +697,9 @@ body.pc .accepte { height: 30px; }
 #modal[data-form] .voile { align-items: center; padding: 12px; }
 .fiche.fo { padding: 0; gap: 0; overflow: hidden; border-radius: 20px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); background: var(--fond); }
 body.pc #modal.lateral .fiche.fo { border-radius: 0; max-height: none; }
-.fo-hd { display: flex; align-items: flex-start; gap: 8px; padding: 12px 12px 11px 14px; position: relative; z-index: 3; transition: box-shadow .2s; }
+.fo-hd { flex-shrink: 0; display: flex; align-items: flex-start; gap: 8px; padding: 12px 12px 11px 14px; position: relative; z-index: 3; transition: box-shadow .2s; }
 .fo-hd::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 1px; background: var(--trait); }
-.fo-hd.defile { box-shadow: 0 6px 12px -8px rgb(0 0 0 / .28); }
+.fo-hd.ombre { box-shadow: 0 6px 12px -8px rgb(0 0 0 / .28); }
 .fo-plat { margin-top: 3px; flex-shrink: 0; }
 .fo-plat .dish { border-radius: 9px; }
 .fo-titre { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -716,7 +716,7 @@ body.pc #modal.lateral .fiche.fo { border-radius: 0; max-height: none; }
 .fo-etoile.on { background: var(--fav-doux); border-color: var(--fav); color: var(--fav); }
 .fo-etoile.on .ic { fill: currentColor; }
 .fo-corps { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px 18px; display: flex; flex-direction: column; gap: 18px; }
-.fo-pied { display: flex; align-items: center; gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.fo-pied { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
 .fo-pied .btn { height: 46px; border-radius: 999px; border: 0; font-size: 15px; font-weight: 800; padding: 0 18px; }
 .fo-pied .btn.pri { flex: 1; }
 .btn.ghost { background: none; color: var(--discret); border-color: transparent; }

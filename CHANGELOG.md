@@ -1,5 +1,9 @@
 # Foodix — journal des nouveautés
 
+## 0.18.1 — 2026-11-23
+- Formulaire recette : le titre ne se déforme plus quand on fait défiler.
+- Retour haptique (vibration) dans le formulaire : étiquettes et étoile, niveaux, portions, listes, nouvelle valeur, ligne d'ingrédient ajoutée ou retirée, OK de la variante, enregistrement.
+
 ## 0.18.0 — 2026-11-23
 - Formulaire recette (ajouter / modifier) refait : un pop-up au centre de l'écran, l'en-tête (nom de la recette) et le pied (Annuler / Enregistrer) restent fixes, seul le milieu défile. Sur PC, il s'ouvre toujours dans la colonne de droite.
 - Le nom de la recette est dans l'en-tête, avec l'étoile Favori à côté. En dessous, si la recette est une variante : « Variante de Curry · Poulet ».
