@@ -19,6 +19,12 @@
   --fav: #C8691C;        /* carotte : favoris */
   --fav-doux: #F8E6D4;
   --danger: #B3261E;
+  --pale: #9AA09A;       /* boutons au repos */
+  --bleu: #2F6390; --bleu-doux: #E1ECF5;       /* tag Origine */
+  --prune: #7B4A86; --prune-doux: #F0E6F2;     /* tag Préparation */
+  --ambre: #8A6A00; --ambre-doux: #F6EDC8;     /* tag Saison */
+  --rose: #B8406E; --rose-doux: #F9E3EC;       /* Invités */
+  --neutre: #3B423C; --neutre-doux: #E8EAE4;   /* tag Catégorie */
   --voile: rgb(10 20 14 / .45);
   --titres: "Bricolage Grotesque", system-ui, sans-serif;
   --texte: "Nunito Sans", system-ui, sans-serif;
@@ -38,6 +44,12 @@
   --fav: #D9A08A;
   --fav-doux: #3A2B26;
   --danger: #F2B8B5;
+  --pale: #6B7487;
+  --bleu: #8FB8DE; --bleu-doux: #23303F;
+  --prune: #C9A2D4; --prune-doux: #33283A;
+  --ambre: #E3C66A; --ambre-doux: #37321F;
+  --rose: #E9A3BF; --rose-doux: #3B2531;
+  --neutre: #DFE4EC; --neutre-doux: #2C3444;
   --voile: rgb(5 8 12 / .6);
   color-scheme: dark;
 }
@@ -207,23 +219,9 @@ textarea.saisie { height: auto; padding: 7px 10px; resize: vertical; line-height
 input.chip.autre { border-style: solid; color: var(--encre); outline: none; width: 110px; }
 .cases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
 .cases .chip { justify-content: center; padding: 0 4px; }
-/* v0.18.0 : « Plus de détails » en vrai bandeau, la flèche tourne à l'ouverture */
-.plus { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; border: 1px dashed var(--accent); background: var(--accent-doux); border-radius: 12px; padding: 9px 12px; color: var(--accent); text-align: left; }
-.plus .plus-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.plus b { font-size: 14px; font-weight: 800; }
-.plus small { font-size: 11.5px; font-weight: 600; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.plus .ic { width: 20px; height: 20px; flex-shrink: 0; transition: transform .2s; }
-.plus[aria-expanded="true"] { border-style: solid; }
-.plus[aria-expanded="true"] .ic { transform: rotate(180deg); }
-/* v0.18.0 : tags en listes déroulantes */
-select.saisie.choix { appearance: none; -webkit-appearance: none; padding-right: 30px; text-overflow: ellipsis;
-  background-image: linear-gradient(45deg, transparent 50%, var(--discret) 50%), linear-gradient(135deg, var(--discret) 50%, transparent 50%);
-  background-position: right 15px center, right 10px center; background-size: 5px 5px; background-repeat: no-repeat; }
-.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.trio select.saisie.choix { font-size: 14px; padding-left: 9px; }
 .asm-accs { display: flex; flex-direction: column; gap: 6px; }
 .asm-ligne { display: flex; gap: 6px; align-items: center; }
-.asm-ligne select { flex: 1; }
+.asm-ligne .ld { flex: 1; }
 #f-plus { display: flex; flex-direction: column; gap: 9px; }
 .niv { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 6px; }
 .niv .lbl { font-size: 12.5px; color: var(--discret); font-weight: 700; }
@@ -600,7 +598,7 @@ body.pc #pzone .defile { flex-wrap: wrap; overflow: visible; margin: 0 0 10px; p
 body.pc #pzone .astuce { display: none; }
 
 /* Fiche et formulaire de recette : à la place de la colonne de droite */
-body.pc #modal.lateral .voile { left: auto; width: var(--lp, 380px); z-index: 4; padding: 0; align-items: stretch; background: none; animation: none; }
+body.pc #modal.lateral .voile { left: auto; width: var(--lp, 380px); z-index: 6; padding: 0; align-items: stretch; background: none; animation: none; }
 body.pc #modal.lateral .fiche { max-width: none; max-height: none; height: 100%; border-radius: 0; box-shadow: none; border-left: 1px solid var(--trait); animation: none; }
 
 /* Banque : au centre (la barre de gauche reste visible) */
@@ -641,3 +639,146 @@ body.pc .accepte { height: 30px; }
 .rayon.compact .it .ib { width: 34px; height: 34px; }
 .rayon.compact .pl { padding: 3px 0; gap: 3px; }
 .rayon.compact .pl-b .chip { height: 30px; }
+
+/* ---------- v0.18.0 : listes déroulantes de l'appli ---------- */
+/* Une pastille teintée (couleur du tag) qui déplie un panneau. Vide : « + Origine » sur fond gris léger. */
+[data-teinte="accent"], [data-teinte="vege"] { --c: var(--accent); --cd: var(--accent-doux); }
+[data-teinte="neutre"] { --c: var(--neutre); --cd: var(--neutre-doux); }
+[data-teinte="ambre"] { --c: var(--ambre); --cd: var(--ambre-doux); }
+[data-teinte="bleu"] { --c: var(--bleu); --cd: var(--bleu-doux); }
+[data-teinte="prune"] { --c: var(--prune); --cd: var(--prune-doux); }
+[data-teinte="prep"] { --c: var(--fav); --cd: var(--fav-doux); }
+[data-teinte="date"] { --c: var(--rose); --cd: var(--rose-doux); }
+.ld { position: relative; min-width: 0; }
+.ld-b { border: 1.5px solid transparent; display: inline-flex; align-items: center; gap: 5px; height: 34px; border-radius: 999px; padding: 0 10px 0 12px;
+  background: var(--cd); color: var(--c); font-weight: 800; font-size: 13.5px; max-width: 100%; white-space: nowrap; }
+.ld-b .v { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ld-b .k { font-weight: 600; opacity: .75; }
+.ld-b .ic { width: 14px; height: 14px; transition: transform .15s; }
+.ld-b .ld-plus { display: none; }
+.ld-b.vide { background: var(--creux); color: var(--discret); padding-left: 9px; }
+.ld-b.vide .k { opacity: 1; }
+.ld-b.vide .ld-plus { display: block; }
+.ld-b.vide .ld-chev { display: none; }
+.ld.ouvert > .ld-b { border-color: var(--c); }
+.ld.ouvert > .ld-b .ld-chev { transform: rotate(180deg); }
+.ld-p { position: absolute; z-index: 8; left: 0; top: calc(100% + 4px); width: max-content; min-width: 100%; max-width: min(270px, 80vw);
+  background: var(--carte); border: 1px solid var(--trait); border-radius: 14px; box-shadow: 0 12px 32px rgb(0 0 0 / .22); padding: 4px; }
+.ld-p.droite { left: auto; right: 0; }
+.ld-l { max-height: 230px; overflow-y: auto; overscroll-behavior: contain; }
+.ld-o { width: 100%; border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 9px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; white-space: nowrap; color: var(--encre); }
+.ld-o:hover { background: var(--creux); }
+.ld-o.on { color: var(--c); font-weight: 800; background: var(--cd); }
+.ld-o .ld-ck { width: 15px; height: 15px; margin-left: auto; }
+.ld-o.aucun { color: var(--discret); }
+.ld-g { font: 800 10.5px var(--texte); text-transform: uppercase; letter-spacing: .07em; color: var(--discret); padding: 8px 10px 2px; }
+.ld-nouv { width: 100%; border: 0; border-top: 1px solid var(--trait); background: none; margin-top: 3px; padding: 9px 10px; display: flex; align-items: center; gap: 8px;
+  color: var(--c); font-weight: 800; font-size: 14px; border-radius: 0 0 9px 9px; }
+.ld-nouv .ic { width: 16px; height: 16px; }
+.ld-nouv-l { display: flex; gap: 4px; padding: 6px 3px 3px; border-top: 1px solid var(--trait); margin-top: 3px; }
+.ld-nouv-l input { flex: 1; min-width: 0; height: 36px; border-radius: 10px; border: 1.5px solid var(--c); background: var(--carte); padding: 0 10px; font-size: 16px; outline: none; }
+.ld-nouv-l button { width: 36px; height: 36px; border: 0; display: grid; place-items: center; background: var(--c); color: var(--carte); border-radius: 10px; flex-shrink: 0; }
+.ld-pied { border-top: 1px solid var(--trait); margin-top: 3px; padding-top: 3px; }
+.ld-var { width: 100%; border: 0; background: none; text-align: left; padding: 9px 10px; border-radius: 0 0 9px 9px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--discret); white-space: nowrap; }
+.ld-var:hover { background: var(--creux); }
+.ld-var .ic { width: 16px; height: 16px; color: var(--accent); }
+.ld-var.rempli { color: var(--accent); }
+.ld-var b { font-weight: 800; }
+/* pleine largeur (Assembler) : un champ arrondi plutôt qu'une pastille */
+.ld.plein { width: 100%; }
+.ld.plein .ld-b { width: 100%; height: 42px; border-radius: 14px; padding: 0 12px 0 14px; font-size: 15px; }
+.ld.plein .ld-b .v { flex: 1; text-align: left; }
+.ld.plein .ld-b.vide .ld-chev { display: block; }
+.ld.plein .ld-b.vide .ld-plus { display: none; }
+.ld.plein .ld-p { right: 0; max-width: none; }
+.cp-carte .ld { align-self: flex-start; }
+
+/* ---------- v0.18.0 : formulaire recette en pop-up (en-tête et pied fixes, le milieu défile) ---------- */
+#modal[data-form] .voile { align-items: center; padding: 12px; }
+.fiche.fo { padding: 0; gap: 0; overflow: hidden; border-radius: 20px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); background: var(--fond); }
+body.pc #modal.lateral .fiche.fo { border-radius: 0; max-height: none; }
+.fo-hd { display: flex; align-items: flex-start; gap: 8px; padding: 12px 12px 11px 14px; position: relative; z-index: 3; transition: box-shadow .2s; }
+.fo-hd::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 1px; background: var(--trait); }
+.fo-hd.defile { box-shadow: 0 6px 12px -8px rgb(0 0 0 / .28); }
+.fo-plat { margin-top: 3px; flex-shrink: 0; }
+.fo-plat .dish { border-radius: 9px; }
+.fo-titre { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fo-titre small { font: 800 10.5px var(--texte); text-transform: uppercase; letter-spacing: .08em; color: var(--discret); }
+#f-nom { min-width: 0; width: 100%; border: 0; border-bottom: 2px solid transparent; background: none; padding: 0; outline: none; font: 800 19px/1.3 var(--titres); color: var(--encre); }
+#f-nom:focus { border-bottom-color: var(--accent); }
+#f-nom::placeholder { color: var(--pale); }
+.fo-sous { align-self: flex-start; border: 0; background: none; padding: 2px 0 0; display: inline-flex; align-items: center; gap: 5px; max-width: 100%; color: var(--discret); font-size: 12.5px; font-weight: 600; text-align: left; }
+.fo-sous .ic { width: 14px; height: 14px; color: var(--accent); }
+.fo-sous span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fo-sous b { font-weight: 800; color: var(--encre); }
+.fo-hd .ib { margin-top: 2px; }
+.fo-etoile { background: none; border: 1.5px solid var(--trait); color: var(--pale); }
+.fo-etoile.on { background: var(--fav-doux); border-color: var(--fav); color: var(--fav); }
+.fo-etoile.on .ic { fill: currentColor; }
+.fo-corps { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px 18px; display: flex; flex-direction: column; gap: 18px; }
+.fo-pied { display: flex; align-items: center; gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.fo-pied .btn { height: 46px; border-radius: 999px; border: 0; font-size: 15px; font-weight: 800; padding: 0 18px; }
+.fo-pied .btn.pri { flex: 1; }
+.btn.ghost { background: none; color: var(--discret); border-color: transparent; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: var(--carte); }
+.fo-abandon { flex: 1; font-weight: 800; font-size: 13.5px; }
+.fo-pied:has(.fo-abandon) .btn { flex: 0 0 auto; padding: 0 14px; }
+.fo.clavier .fo-pied { display: none; }
+.fo .saisie { border: 1.5px solid transparent; background: var(--creux); border-radius: 14px; height: 40px; font-size: 16px; }
+.fo .saisie:focus { outline: none; border-color: var(--accent); background: var(--carte); }
+.fo textarea.saisie { height: auto; padding: 9px 12px; }
+.fo-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fo-sec { display: flex; flex-direction: column; gap: 6px; }
+.fo-sec-t { display: flex; align-items: center; gap: 8px; min-height: 26px; font: 800 10.5px var(--texte); text-transform: uppercase; letter-spacing: .08em; color: var(--discret); }
+/* Végé / Lunchbox / Invités : grisés au repos, leur couleur une fois cochés, l'icône reste */
+.fo-bsc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bsc { height: 38px; border-radius: 999px; border: 1.5px solid transparent; background: var(--creux); color: var(--pale); font-weight: 700; font-size: 13.5px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.bsc .ic { width: 17px; height: 17px; }
+.bsc.on { background: var(--cd); border-color: var(--c); color: var(--c); font-weight: 800; }
+.bsc.on .ic { stroke-width: 2.4; }
+/* Ingrédients : lignes simples séparées par un trait fin ; la dernière est la case d'ajout */
+.fo-portions { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; background: var(--creux); border-radius: 999px; padding: 2px; text-transform: none; letter-spacing: 0; color: var(--encre); font-size: 13px; }
+.fo-portions > span { padding: 0 4px 0 8px; color: var(--discret); font-weight: 700; }
+.fo-portions button { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--carte); font-weight: 800; font-size: 16px; line-height: 1; color: var(--discret); padding: 0; }
+.fo-portions b { min-width: 18px; text-align: center; font-size: 14px; }
+.fo .ingl { gap: 0; }
+.fo .ingl .li { border: 0; border-bottom: 1px solid var(--trait); border-radius: 0; background: none; min-height: 42px; padding: 0 0 0 2px; }
+.fo .ingl .li .poignee { opacity: .6; }
+.fo .ingl .li img { background: var(--creux); border-radius: 8px; padding: 3px; box-sizing: content-box; }
+.fo .ingl .li .ib { background: none; color: var(--pale); }
+.li-plus { display: none; }
+.fo .ingl .li.ajout { border: 0; margin-top: 6px; background: var(--creux); border-radius: 12px; padding-left: 10px; }
+.fo .ingl .li.ajout:focus-within { box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--carte); }
+.fo .ingl .li.ajout .poignee, .fo .ingl .li.ajout > img, .fo .ingl .li.ajout > .ib { display: none; }
+.fo .ingl .li.ajout .li-plus { display: grid; place-items: center; color: var(--accent); }
+.fo .ingl .li.ajout .li-plus .ic { width: 16px; height: 16px; }
+/* « Plus de détails » : texte gris posé sur un trait */
+.fo-pd { display: flex; align-items: center; gap: 10px; border: 0; background: none; color: var(--discret); font-weight: 700; font-size: 12.5px; padding: 2px 0; width: 100%; }
+.fo-pd::before, .fo-pd::after { content: ""; flex: 1; height: 1px; background: var(--trait); }
+.fo-pd > span { display: inline-flex; align-items: center; gap: 4px; }
+.fo-pd .ic { width: 14px; height: 14px; transition: transform .2s; }
+.fo-pd[aria-expanded="true"] .ic { transform: rotate(180deg); }
+.fo-plus { display: flex; flex-direction: column; gap: 18px; }
+.fo-plus[hidden] { display: none; }
+.fo-plus .saisie + .saisie { margin-top: 2px; }
+/* Niveaux : mêmes boutons, plus fins, le choix en vert */
+.fo-niv { display: flex; flex-direction: column; gap: 5px; }
+.fo-niv .niv { grid-template-columns: 74px minmax(0, 1fr); }
+.fo-niv .seg { border-radius: 999px; padding: 2px; }
+.fo-niv .seg button { border-radius: 999px; padding: 5px 2px; }
+.fo-niv .seg button.on { background: var(--accent); color: var(--accent-encre); box-shadow: none; }
+/* Encadré Variante */
+.fo-var { border: 1.5px solid var(--accent); border-radius: 14px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; animation: descend .18s ease-out; }
+@keyframes descend { from { transform: translateY(-6px); opacity: .4; } }
+.fo-var-hd { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 12.5px; color: var(--accent); }
+.fo-var-hd .ic { width: 15px; height: 15px; }
+.fo-var-l { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.fo-var-l .ld-b { width: 100%; }
+.fo-var-l .ld-b .v { flex: 1; text-align: left; }
+.fo-var-l .ld-b:not(.vide) .k { display: none; }
+.fo-var-l .saisie { height: 34px; border-radius: 999px; font-size: 14px; padding: 0 12px; }
+.fo-var-pied { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lien-g { border: 0; background: none; padding: 4px 0; color: var(--discret); font-size: 12.5px; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.btn.fo-ok { height: 32px; border-radius: 999px; padding: 0 14px; font-size: 13.5px; }
+.btn.fo-ok .ic { width: 15px; height: 15px; }
+body.pc .fo .bsc, body.pc .fo .ld-b { height: 32px; }

@@ -39,7 +39,7 @@ const NIVEAUX = {
 const COLONNES = [
   ["id", "ID", 30], ["nom", "Nom", 34], ["famille", "Famille", 16], ["variante", "Variante", 14], ["categorie", "Catégorie", 16],
   ["saison", "Saison", 10], ["origine", "Origine", 15], ["preparation", "Préparation", 13],
-  ["vege", "Végé", 8, "oui"], ["favori", "Favori", 8, "oui"], ["prep", "Prepmeal", 11, "oui"], ["date", "Invités", 9, "oui"],
+  ["vege", "Végé", 8, "oui"], ["favori", "Favori", 8, "oui"], ["prep", "Lunchbox", 11, "oui"], ["date", "Invités", 9, "oui"],
   ["prix", "Prix", 7, "niv"], ["difficulte", "Difficulté", 11, "niv"], ["temps", "Temps", 9, "niv"], ["maitrise", "Maîtrise", 13, "niv"],
   ["portions", "Portions", 9, "nombre"], ["ingredients", "Ingrédients", 70, "liste"],
   ["suggeres", "Ingrédients suggérés", 12, "oui"], ["lien", "Lien", 30], ["notes", "Notes", 40]
@@ -304,7 +304,7 @@ function toast(msg, annuler) {
 const saisonActuelle = () => { const m = new Date().getMonth() + 1; return m >= 4 && m <= 9 ? "ete" : "hiver"; };
 function deSaison(r) {
   const s = norm(r.saison), SAISON = saisonActuelle();
-  return !s || s === "annuel" || s === SAISON || (s === "automne" && SAISON === "hiver") || (s === "printemps" && SAISON === "ete");
+  return !s || s === "annuel" || s === "aucune" || s === SAISON || (s === "automne" && SAISON === "hiver") || (s === "printemps" && SAISON === "ete");
 }
 
 /* ---------- 3 bis. Animations et vibrations ---------- */
@@ -554,7 +554,7 @@ function poids(r, deja, recent) {
   let w = 1;
   if (r.favori) w *= 2.5;                                    // favoris : plus souvent
   if (recent.has(r.id)) w *= 0.12;                           // servi récemment : beaucoup moins
-  if (p.avance && r.prep) w *= 2.5;                          // pastille « Prepmeal »
+  if (p.avance && r.prep) w *= 2.5;                          // pastille « Lunchbox »
   if (p.invites && r.date) w *= 2.5;                         // pastille « Invités »
   return w;
 }
@@ -679,7 +679,7 @@ function renderMenu() {
       <span class="pas"><span class="l">${icone("utensils")}</span><button data-act="nb" data-v="-1" aria-label="Moins de plats">−</button><b class="num">${p.nb}</b><button data-act="nb" data-v="1" aria-label="Plus de plats">+</button></span>
       <span class="pas"><span class="l">${icone("users")}</span><button data-act="pers" data-v="-1" aria-label="Moins de personnes">−</button><b class="num">${p.pers}</b><button data-act="pers" data-v="1" aria-label="Plus de personnes">+</button></span>
       <span class="spacer"></span><button class="btn pri" data-act="nouveau-menu">${icone("shuffle")}Nouveau menu</button></div>
-    <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "Prepmeal")}${pastille("invites", "glass", "Invités")}</div>`;
+    <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "Lunchbox")}${pastille("invites", "glass", "Invités")}</div>`;
   if (!S.recettes.length) { zl().innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
   const infos = (r, s) => `${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s)}</span>` : ""}</span>
         <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span>`;
@@ -829,13 +829,14 @@ function ouvrirAssembler(depart, accs = [], repasI = null) {
 function majAssembler(premier) {
   const a = S.asm, md = $("#modal"), haut = !premier && $("#modal .fiche") ? $("#modal .fiche").scrollTop : 0;
   const p = a.princ && recette(a.princ), as = a.accs.map(recette).filter(Boolean);
-  // Une liste déroulante rangée en trois groupes : déjà mangé ensemble, favoris, le reste (ordre de vaAvec)
-  const liste = (cherche, avec, choisi, exclus, vide, attrs) => {
-    const l = vaAvec(cherche, avec).filter(o => o.r.id === choisi || !exclus.includes(o.r.id));
-    const groupe = (titre, g) => g.length ? `<optgroup label="${titre}">${g.map(o => `<option value="${esc(o.r.id)}" ${o.r.id === choisi ? "selected" : ""}>${esc(o.r.nom)}</option>`).join("")}</optgroup>` : "";
-    return `<select class="saisie choix" ${attrs}><option value="">${vide}</option>
-      ${groupe("Déjà mangé ensemble", l.filter(o => o.deja))}${groupe("★ Favoris", l.filter(o => !o.deja && o.r.favori))}${groupe(cherche === "accomp" ? "Autres accompagnements" : "Autres plats", l.filter(o => !o.deja && !o.r.favori))}</select>`;
-  };
+  // Listes de l'appli rangées en trois groupes : déjà mangé ensemble, favoris, le reste (ordre de vaAvec)
+  const liste = (id, cherche, avec, choisi, exclus, vide, choisir) => ld(id, {
+    plein: true, teinte: "accent", placeholder: vide, vide: null,
+    val: () => choisi || "", affiche: v => (recette(v) || {}).nom || v,
+    items: () => vaAvec(cherche, avec).filter(o => o.r.id === choisi || !exclus.includes(o.r.id))
+      .map(o => ({ v: o.r.id, t: o.r.nom, g: o.deja ? "Déjà mangé ensemble" : o.r.favori ? "★ Favoris" : cherche === "accomp" ? "Autres accompagnements" : "Autres plats" })),
+    choisir: v => { choisir(v); a.nom = ""; majAssembler(); }
+  });
   const avecP = a.princ ? [a.princ] : [];
   const nom = a.nom || (p && as.length ? nomAssemble(p, as) : "");
   const pret = p && as.length;
@@ -844,10 +845,10 @@ function majAssembler(premier) {
   md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche asm" role="dialog" aria-label="Assembler un plat complet">
     <div class="fi-hd"><div class="txt"><h2>Assembler un plat complet</h2><div class="sub">Provisoire tant que je ne le garde pas</div></div>
       <button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
-    <div class="sect">Plat principal</div>${liste("princ", a.accs, a.princ, [], "Choisir un plat principal…", `data-asm-sel="p"`)}
+    <div class="sect">Plat principal</div>${liste("asm-p", "princ", a.accs, a.princ, [], "Choisir un plat principal…", v => { a.princ = v || null; })}
     <div class="sect">Accompagnements <i>· un ou plusieurs</i></div>
-    <div class="asm-accs">${a.accs.map((id, i) => `<div class="asm-ligne">${liste("accomp", avecP, id, a.accs, "—", `data-asm-sel="a" data-i="${i}"`)}<button class="ib" data-asm-x="${i}" aria-label="Retirer">${icone("x")}</button></div>`).join("")}
-      ${liste("accomp", avecP, null, a.accs, a.accs.length ? "+ Ajouter un autre accompagnement…" : "Choisir un accompagnement…", `data-asm-sel="add"`)}</div>
+    <div class="asm-accs">${a.accs.map((id, i) => `<div class="asm-ligne">${liste("asm-a" + i, "accomp", avecP, id, a.accs, "—", v => { if (v) a.accs[i] = v; })}<button class="ib" data-asm-x="${i}" aria-label="Retirer">${icone("x")}</button></div>`).join("")}
+      ${liste("asm-add", "accomp", avecP, null, a.accs, a.accs.length ? "Ajouter un autre accompagnement" : "Choisir un accompagnement…", v => { if (v) a.accs.push(v); })}</div>
     ${pret ? `<div class="asm-apercu">${[p, ...as].map((x, k) => `${k ? `<span class="asm-plus">+</span>` : ""}<div class="asm-bloc">${dishImg(x, 26)}<div><b>${esc(x.nom)}</b><small>${(x.ingredients || []).length} ingrédient${(x.ingredients || []).length > 1 ? "s" : ""} · pour ${x.portions || 2}</small></div></div>`).join("")}</div>
     <div class="champ"><label for="asm-nom">Nom</label><input class="saisie" id="asm-nom" value="${esc(nom)}" autocomplete="off"></div>` : `<p class="infos">Choisis un plat principal et au moins un accompagnement.</p>`}
     <div class="pied2"><button class="btn" data-act="asm-garder" ${pret ? "" : "disabled"}>${icone("book")}Garder dans mes recettes</button>
@@ -1310,8 +1311,8 @@ function majEntree(cle, chg) {
   if (!b.rec && !b.menage && !b.rayon && !b.icone && !b.mc && !b.nomFixe && typeof b.placard !== "boolean" && e.recettes.length) S.banque = S.banque.filter(x => x !== b);
   sauverBanque();
 }
-// v0.18.0 : des valeurs renommées (« Poêlée » → « Poêle & casserole »), réécrites une fois dans toutes les recettes
-const TAGS_RENOMMES = { poelee: "Poêle & casserole" };
+// v0.18.0 : des valeurs renommées (« Poêlée » → « Poêle & casserole », saison « Annuel » → « Aucune »), réécrites une fois dans toutes les recettes
+const TAGS_RENOMMES = { poelee: "Poêle & casserole", annuel: "Aucune" };
 function migrerTags() {
   const chg = S.recettes.filter(r => {
     let c = false;
@@ -1531,7 +1532,7 @@ function renderRecettes() {
       <button class="fab" data-act="nouvelle" aria-label="Ajouter une recette">${icone("plus")}</button></div>`) + `
     <div class="defile">${liste()}
       ${bascule("fav", "star", "Favoris")}${bascule("vege", "leaf", "Végé")}${bascule("saison", "sun", "De saison")}
-      ${bascule("avance", "box", "Prepmeal")}${bascule("invites", "glass", "Invités")}</div>
+      ${bascule("avance", "box", "Lunchbox")}${bascule("invites", "glass", "Invités")}</div>
     <div id="liste"></div>`;
   majListe();
 }
@@ -1585,7 +1586,7 @@ function ouvrirFiche(id) {
   if (!r) return fermer();
   const tags = [r.categorie, r.origine, r.saison, r.preparation].filter(Boolean).map(t => `<span class="t">${esc(t)}</span>`);
   if (r.vege) tags.push(`<span class="t acc">${icone("leaf")}Végé</span>`);
-  if (r.prep) tags.push(`<span class="t acc">${icone("box")}Prepmeal</span>`);
+  if (r.prep) tags.push(`<span class="t acc">${icone("box")}Lunchbox</span>`);
   if (r.date) tags.push(`<span class="t fav">${icone("glass")}Invités</span>`);
   const faits = Object.keys(NIVEAUX).filter(k => r[k]).map(k =>
     `<div><dt>${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</dt><dd>${NIVEAUX[k][r[k] - 1]}</dd></div>`).join("");
@@ -1657,6 +1658,80 @@ function supprimer() {
   });
 }
 
+/* ---------- 6 bis-a. Listes déroulantes de l'appli ---------- */
+// Une pastille qui déplie un panneau de choix, aux couleurs de Foodix (pas la liste du téléphone).
+// Chaque liste a un identifiant et une « recette » dans LD :
+//   lib (nom du tag), teinte, placeholder, plein (pleine largeur), vide (« — » = rien) ou null,
+//   val() → valeur choisie, affiche(v) → texte affiché, items() → [{ v, t, g (groupe) }],
+//   choisir(v), nouveau (« Nouvelle origine » : dernière ligne pour en taper une), ajouter(v), pied() → html en bas.
+const LD = {};
+let ldOuvert = null, ldSaisie = false;
+function ld(id, conf) { LD[id] = conf; return htmlLd(id); }
+function htmlLd(id) {
+  const c = LD[id], v = c.val(), o = ldOuvert === id;
+  const lib = v ? (c.lib && !c.plein ? `<span class="k">${esc(c.lib)} · </span>` : "") + esc(c.affiche ? c.affiche(v) : v) : `<span class="k">${esc(c.placeholder || c.lib)}</span>`;
+  let h = `<div class="ld ${o ? "ouvert" : ""} ${c.plein ? "plein" : ""}" data-ld="${esc(id)}" data-teinte="${c.teinte || "accent"}">
+    <button type="button" class="ld-b ${v ? "" : "vide"}" data-ld-b="${esc(id)}" aria-expanded="${o}">${icone("plus", "ld-plus")}<span class="v">${lib}</span>${icone("down", "ld-chev")}</button>`;
+  if (o) {
+    let g = null;
+    const items = c.items().map(x => {
+      const tete = x.g && x.g !== g ? `<div class="ld-g">${esc(x.g)}</div>` : ""; g = x.g;
+      return tete + `<button type="button" class="ld-o ${x.v === v ? "on" : ""}" data-ld-v="${esc(x.v)}">${esc(x.t || x.v)}${x.v === v ? icone("check", "ld-ck") : ""}</button>`;
+    }).join("");
+    const nouv = !c.nouveau ? "" : ldSaisie
+      ? `<div class="ld-nouv-l"><input data-ld-txt placeholder="${esc(c.nouveau)}" autocomplete="off" enterkeyhint="done"><button type="button" data-ld-ok aria-label="Ajouter">${icone("check")}</button></div>`
+      : `<button type="button" class="ld-nouv" data-ld-nouv>${icone("plus")}${esc(c.nouveau)}</button>`;
+    h += `<div class="ld-p"><div class="ld-l">${c.vide != null ? `<button type="button" class="ld-o aucun" data-ld-v="">${c.vide}</button>` : ""}${items}</div>${nouv}${c.pied ? c.pied() : ""}</div>`;
+  }
+  return h + `</div>`;
+}
+const elLd = id => document.querySelector(`.ld[data-ld="${CSS.escape(id)}"]`);
+function majLd(id) {
+  const el = elLd(id); if (!el) return;
+  el.outerHTML = htmlLd(id);
+  const n = elLd(id), p = n && n.querySelector(".ld-p");
+  if (!p) return;
+  // le panneau ne doit pas sortir de la fenêtre : il se cale à droite si besoin
+  const cadre = (n.closest(".fiche, .cp-carte") || document.body).getBoundingClientRect(), r = p.getBoundingClientRect();
+  if (r.right > cadre.right - 6) p.classList.add("droite");
+  const champ = n.querySelector("[data-ld-txt]");
+  if (champ) champ.focus(); else { const on = n.querySelector(".ld-o.on"); if (on) on.scrollIntoView({ block: "nearest" }); }
+}
+function fermerLd() { const id = ldOuvert; ldOuvert = null; ldSaisie = false; if (id) majLd(id); }
+function ldValider() {
+  const id = ldOuvert; if (!id) return;
+  const c = LD[id], champ = elLd(id) && elLd(id).querySelector("[data-ld-txt]"), v = champ ? champ.value.trim() : "";
+  ldOuvert = null; ldSaisie = false;
+  if (v) (c.ajouter || c.choisir)(v);
+  majLd(id);
+}
+// Clics sur une liste : true = géré. Toucher ailleurs ferme la liste ouverte (et le clic continue son chemin).
+function clicLd(t) {
+  const b = t.closest("[data-ld-b]");
+  if (b) {
+    const id = b.dataset.ldB, avant = ldOuvert;
+    ldOuvert = avant === id ? null : id; ldSaisie = false;
+    if (avant && avant !== id) majLd(avant);
+    majLd(id); vibrer("pas"); return true;
+  }
+  const dans = t.closest(".ld");
+  if (dans && ldOuvert && dans.dataset.ld === ldOuvert) {
+    const o = t.closest("[data-ld-v]");
+    if (o) { const id = ldOuvert; ldOuvert = null; LD[id].choisir(o.dataset.ldV); majLd(id); vibrer("pas"); return true; }
+    if (t.closest("[data-ld-nouv]")) { ldSaisie = true; majLd(ldOuvert); return true; }
+    if (t.closest("[data-ld-ok]")) { ldValider(); return true; }
+    if (t.closest("[data-ld-txt], .ld-g, .ld-l")) return true;
+    return false;  // un bouton du pied de la liste (data-act) : il continue
+  }
+  if (ldOuvert) fermerLd();
+  return false;
+}
+// Couleur et nom de chaque tag
+const TEINTES = { categorie: "neutre", saison: "ambre", origine: "bleu", preparation: "prune" };
+const NOMS_TAG = { categorie: "Catégorie", saison: "Saison", origine: "Origine", preparation: "Préparation" };
+const NOUV_TAG = { categorie: "Nouvelle catégorie", origine: "Nouvelle origine", preparation: "Nouvelle préparation" };
+const ETIQUETTES = [["vege", "leaf", "Végé"], ["prep", "box", "Lunchbox"], ["date", "glass", "Invités"]];
+
 /* ---------- 6 bis. Formulaire (ajouter, modifier, dupliquer) ---------- */
 // Le formulaire travaille sur un brouillon : rien n'est enregistré avant « Enregistrer ».
 // Les pastilles et les cases changent juste leur allure à l'écran ; au moment
@@ -1670,65 +1745,105 @@ function valeursDe(k, actuelle) {
   // la valeur déjà choisie passe en tête, pour être visible sans faire défiler
   return actuelle ? [actuelle, ...liste.filter(v => v !== actuelle)] : liste;
 }
-const SAISONS = ["Annuel", "Été", "Hiver"];
+const SAISONS = ["Aucune", "Été", "Hiver"];
 
-// Un tag = une liste déroulante : « — » (rien), les valeurs déjà utilisées, puis « Autre… » pour en taper une nouvelle
-function listeTag(k, actuelle, valeurs) {
-  const l = valeurs || valeursDe(k), v = actuelle || "";
-  if (v && !l.includes(v)) l.push(v);
-  return `<select class="saisie choix" id="f-${k}" data-champ="${k}"><option value="">—</option>
-    ${l.map(x => `<option value="${esc(x)}" ${x === v ? "selected" : ""}>${esc(x)}</option>`).join("")}<option value="__autre">Autre…</option></select>`;
+// Un tag du formulaire : liste déroulante de l'appli. Les valeurs vivent dans S.fo jusqu'à « Enregistrer ».
+function ldTag(k) {
+  return ld("fo-" + k, {
+    lib: NOMS_TAG[k], teinte: TEINTES[k], vide: "—",
+    val: () => S.fo.v[k] || "",
+    items: () => { const l = k === "saison" ? SAISONS.slice() : valeursDe(k), v = S.fo.v[k]; if (v && !l.includes(v)) l.push(v); return l.map(x => ({ v: x })); },
+    choisir: v => { S.fo.v[k] = v; },
+    nouveau: NOUV_TAG[k] || null,
+    pied: k === "categorie" ? () => `<div class="ld-pied"><button type="button" class="ld-var ${S.fo.famille ? "rempli" : ""}" data-act="fo-variante">${icone("branche")}<span>${S.fo.famille ? texteVariante() : "Variante d'un autre plat…"}</span></button></div>` : null
+  });
 }
-// « Autre… » choisi : la liste devient une case où taper la nouvelle valeur
-function tagAutre(sel) {
-  const champ = document.createElement("input");
-  champ.className = "saisie"; champ.id = sel.id; champ.dataset.champ = sel.dataset.champ;
-  champ.placeholder = "Nouvelle valeur…"; champ.autocomplete = "off";
-  sel.replaceWith(champ);
-  champ.focus();
+// Variante : sous le nom (« Variante de Curry · Poulet »), réglée dans un petit encadré en haut du formulaire
+const texteVariante = () => `Variante de <b>${esc(S.fo.famille)}</b>${S.fo.variante ? " · " + esc(S.fo.variante) : ""}`;
+const htmlSousTitre = () => S.fo.famille ? `<button type="button" class="fo-sous" data-act="fo-variante">${icone("branche")}<span>${texteVariante()}</span></button>` : "";
+function majSousTitre() { const el = $("#fo-sous"); if (el) el.innerHTML = htmlSousTitre(); }
+function familles() {
+  const l = [...new Set(S.recettes.map(x => x.famille).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
+  if (S.fo.famille && !l.includes(S.fo.famille)) l.push(S.fo.famille);
+  return l;
 }
+function htmlVariante() {
+  return `<div class="fo-var" id="fo-var"><div class="fo-var-hd">${icone("branche")}<span>Variante d'un autre plat</span></div>
+    <div class="fo-var-l">${ld("fo-famille", { lib: "Famille", placeholder: "Famille", teinte: "accent", vide: null,
+      val: () => S.fo.famille || "", items: () => familles().map(x => ({ v: x })),
+      choisir: v => { S.fo.famille = v; majSousTitre(); majPiedVariante(); }, nouveau: "Nouvelle famille" })}
+      <input class="saisie" id="f-variante" placeholder="ex. Végé" value="${esc(S.fo.variante)}" autocomplete="off" enterkeyhint="done" aria-label="Nom de la variante"></div>
+    <div class="fo-var-pied" id="fo-var-pied">${piedVariante()}</div></div>`;
+}
+const piedVariante = () => `${S.fo.famille ? `<button type="button" class="lien-g" data-act="fo-sans-var">Ce n'est pas une variante</button>` : "<span></span>"}
+  <button type="button" class="btn pri fo-ok" data-act="fo-var-ok">${icone("check")}OK</button>`;
+function majPiedVariante() { const el = $("#fo-var-pied"); if (el) el.innerHTML = piedVariante(); }
+function ouvrirVariante() {
+  fermerLd();
+  if (!$("#fo-var")) $(".fo-corps").insertAdjacentHTML("afterbegin", htmlVariante());
+  $(".fo-corps").scrollTop = 0;
+}
+function fermerVariante() { if (ldOuvert === "fo-famille") fermerLd(); const el = $("#fo-var"); if (el) el.remove(); majSousTitre(); }
 
 function ouvrirFormulaire(brouillon, titre) {
   const r = brouillon;
-  const cases = [["vege", "leaf", "Végé"], ["favori", "star", "Favori"], ["prep", "box", "Prepmeal"], ["date", "glass", "Invités"]]
-    .map(([k, i, t]) => `<button type="button" class="chip ${r[k] ? "on" : ""}" data-case="${k}">${icone(i)}${t}</button>`).join("");
+  S.fo = { v: { categorie: r.categorie || "", saison: r.saison || "", origine: r.origine || "", preparation: r.preparation || "" }, famille: r.famille || "", variante: r.variante || "" };
+  ldOuvert = null; ldSaisie = false;
   const niveaux = Object.keys(NIVEAUX).map(k => `<div class="niv"><span class="lbl">${{ prix: "Prix", difficulte: "Difficulté", temps: "Temps", maitrise: "Maîtrise" }[k]}</span>
     <span class="seg" data-niv="${k}">${NIVEAUX[k].map((l, i) => `<button type="button" class="${r[k] === i + 1 ? "on" : ""}" data-v="${i + 1}">${l}</button>`).join("")}</span></div>`).join("");
   const m = $("#modal");
   m.dataset.form = "1";
   if (r.id) m.dataset.recette = r.id; else delete m.dataset.recette;
-  m.innerHTML = `<div class="voile"><div class="fiche form" role="dialog" aria-label="${titre}">
-    <div class="fi-hd"><h2 class="titre-r" style="flex:1">${titre}</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
-    <div class="champ"><label for="f-nom">Nom</label><input class="saisie" id="f-nom" value="${esc(r.nom)}" autocomplete="off"></div>
-    <div class="champ"><label for="f-categorie">Catégorie</label>${listeTag("categorie", r.categorie)}</div>
-    <div class="cases">${cases}</div>
-    <div class="champ"><span class="lbl">Ingrédients <i>· pour <span id="f-pour">${r.portions || 2}</span></i></span>
-      <div class="ingl" id="f-ings">${(r.ingredients || []).map(ligneIngredient).join("")}</div>
-      <button type="button" class="btn ajout" data-act="ajout-ing">${icone("plus")}Ajouter un ingrédient</button></div>
-    <button type="button" class="plus" data-act="plus" aria-expanded="false"><span class="plus-t"><b>Plus de détails</b><small>Famille, saison, origine, préparation, prix, notes…</small></span>${icone("down")}</button>
-    <div id="f-plus" hidden>
-      <div class="duo2"><div class="champ"><label for="f-famille">Famille</label><input class="saisie" id="f-famille" list="familles" placeholder="ex. Burger" value="${esc(r.famille || "")}" autocomplete="off"></div>
-        <div class="champ"><label for="f-variante">Variante</label><input class="saisie" id="f-variante" placeholder="ex. Végé" value="${esc(r.variante || "")}" autocomplete="off"></div></div>
-      <datalist id="familles">${[...new Set(S.recettes.map(x => x.famille).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join("")}</datalist>
-      <div class="trio"><div class="champ"><label for="f-saison">Saison</label>${listeTag("saison", r.saison, SAISONS.slice())}</div>
-        <div class="champ"><label for="f-origine">Origine</label>${listeTag("origine", r.origine)}</div>
-        <div class="champ"><label for="f-preparation">Préparation</label>${listeTag("preparation", r.preparation)}</div></div>
-      ${niveaux}
-      <div class="duo"><div class="champ"><span class="lbl">Portions</span><span class="pas">
-          <button type="button" data-act="portions" data-v="-1" aria-label="Moins">−</button><b id="f-portions">${r.portions || 2}</b><button type="button" data-act="portions" data-v="1" aria-label="Plus">+</button></span></div>
-        <div class="champ"><label for="f-lien">Lien</label><input class="saisie" id="f-lien" type="url" placeholder="https://…" value="${esc(r.lien)}"></div></div>
-      <div class="champ"><label for="f-notes">Notes</label><textarea class="saisie" id="f-notes" rows="2">${esc(r.notes)}</textarea></div>
+  // En-tête et pied fixes, seul le milieu défile
+  m.innerHTML = `<div class="voile"><div class="fiche form fo" role="dialog" aria-label="${titre}">
+    <div class="fo-hd"><span class="fo-plat">${dishImg(r, 30)}</span>
+      <div class="fo-titre"><small>${titre}</small><input id="f-nom" value="${esc(r.nom)}" placeholder="Nom de la recette" autocomplete="off" aria-label="Nom"><div id="fo-sous">${htmlSousTitre()}</div></div>
+      <button type="button" class="ib fo-etoile ${r.favori ? "on" : ""}" data-case="favori" aria-label="Favori" title="Favori">${icone("star")}</button>
+      <button type="button" class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="fo-corps">
+      <div class="fo-tags">${ldTag("categorie")}</div>
+      <div class="fo-bsc">${ETIQUETTES.map(([k, i, t]) => `<button type="button" class="bsc ${r[k] ? "on" : ""}" data-case="${k}" data-teinte="${k}">${icone(i)}${t}</button>`).join("")}</div>
+      <div class="fo-sec"><div class="fo-sec-t">Ingrédients<span class="fo-portions"><span>pour</span><button type="button" data-act="portions" data-v="-1" aria-label="Moins">−</button><b id="f-portions">${r.portions || 2}</b><button type="button" data-act="portions" data-v="1" aria-label="Plus">+</button></span></div>
+        <div class="ingl" id="f-ings">${(r.ingredients || []).map(t => ligneIngredient(t)).join("")}${ligneIngredient("", true)}</div></div>
+      <button type="button" class="fo-pd" data-act="plus" aria-expanded="false"><span><span class="lib">Plus de détails</span>${icone("down")}</span></button>
+      <div id="f-plus" class="fo-plus" hidden>
+        <div class="fo-tags">${ldTag("saison")}${ldTag("origine")}${ldTag("preparation")}</div>
+        <div class="fo-sec"><div class="fo-sec-t">Niveaux</div><div class="fo-niv">${niveaux}</div></div>
+        <div class="fo-sec"><div class="fo-sec-t">Notes</div>
+          <input class="saisie" id="f-lien" type="url" placeholder="Lien vers la recette" value="${esc(r.lien)}" aria-label="Lien">
+          <textarea class="saisie" id="f-notes" rows="2" placeholder="Astuces, ce qui a plu…" aria-label="Notes">${esc(r.notes)}</textarea></div>
+      </div>
     </div>
-    <div class="pied2"><button type="button" class="btn" data-act="fermer">Annuler</button><button type="button" class="btn pri" data-act="enregistrer">Enregistrer</button></div>
+    <div class="fo-pied" id="fo-pied">${piedFormulaire()}</div>
   </div></div>`;
   m.brouillon = r; // gardé à côté du formulaire jusqu'à l'enregistrement
-  rendreTriable($("#f-ings"), ".li", $(".form"));
+  rendreTriable($("#f-ings"), ".li:not(.ajout)", $(".fo-corps"));
+  // une ombre sous l'en-tête dès qu'on fait défiler
+  const corps = $(".fo-corps"), hd = $(".fo-hd");
+  corps.addEventListener("scroll", () => hd.classList.toggle("defile", corps.scrollTop > 4), { passive: true });
+  m.depart = JSON.stringify(lireFormulaire());  // pour savoir si quelque chose a changé en fermant
   if (!r.id) $("#f-nom").focus();
+}
+const piedFormulaire = () => `<button type="button" class="btn ghost" data-act="fermer">Annuler</button><button type="button" class="btn pri" data-act="enregistrer">Enregistrer</button>`;
+const formModifie = () => $("#modal").dataset.form && $("#modal").depart && JSON.stringify(lireFormulaire()) !== $("#modal").depart;
+// Fermer avec des changements : on demande avant de tout perdre
+function demanderAbandon() {
+  $("#fo-pied").innerHTML = `<span class="fo-abandon">Abandonner les modifications ?</span>
+    <button type="button" class="btn ghost" data-act="fo-continuer">Continuer</button><button type="button" class="btn danger" data-act="fermer" data-force="1">Abandonner</button>`;
+  $(".fo").classList.remove("clavier");
+  vibrer("pas");
 }
 
 // Une ligne d'ingrédient : poignée pour glisser, dessin, texte, croix
-const ligneIngredient = (txt = "") => `<div class="li"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
-  ${dessinIng(txt)}<input value="${esc(txt)}" placeholder="ex. 250 g pâtes" autocomplete="off"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
+// La dernière ligne (« ajout ») est toujours vide : on y tape, elle devient une vraie ligne et une nouvelle case vide attend dessous.
+const ligneIngredient = (txt = "", ajout = false) => `<div class="li ${ajout ? "ajout" : ""}"><span class="poignee" aria-label="Déplacer">${icone("grip")}</span>
+  <span class="li-plus">${icone("plus")}</span>${dessinIng(txt)}<input value="${esc(txt)}" placeholder="${ajout ? "Ajouter un ingrédient" : "ex. 250 g pâtes"}" autocomplete="off" enterkeyhint="next"><button type="button" class="ib" data-act="retirer-ing" aria-label="Retirer">${icone("x")}</button></div>`;
+// La ligne d'ajout reçoit du texte : elle devient une ligne normale, une nouvelle ligne d'ajout se place en bas
+function activerLigneAjout(li) {
+  li.classList.remove("ajout");
+  li.querySelector("input").placeholder = "ex. 250 g pâtes";
+  $("#f-ings").insertAdjacentHTML("beforeend", ligneIngredient("", true));
+}
 function dessinIng(txt) {
   const it = parseItem(txt);
   return imgIng(txt || "sachet", 18);
@@ -1761,6 +1876,9 @@ function choisirSuggIng(btn) {
   champ.focus();
 }
 function ajouterIngredient(apres) {
+  if (apres && apres.classList.contains("ajout")) return;  // Entrée sur la ligne d'ajout vide : rien à faire
+  const suiv = apres && apres.nextElementSibling;
+  if (suiv && suiv.classList.contains("ajout")) { suiv.querySelector("input").focus(); return; }
   const tmp = document.createElement("div");
   tmp.innerHTML = ligneIngredient();
   const ligne = tmp.firstElementChild;
@@ -1772,11 +1890,8 @@ function ajouterIngredient(apres) {
 function lireFormulaire() {
   const r = Object.assign({}, $("#modal").brouillon);
   r.nom = $("#f-nom").value.trim();
-  document.querySelectorAll("#modal [data-champ]").forEach(g => {
-    const v = g.value === "__autre" ? "" : g.value.trim();
-    if (v) r[g.dataset.champ] = v; else delete r[g.dataset.champ];
-  });
-  document.querySelectorAll("[data-case]").forEach(b => { r[b.dataset.case] = b.classList.contains("on"); });
+  Object.keys(S.fo.v).forEach(k => { const v = (S.fo.v[k] || "").trim(); if (v) r[k] = v; else delete r[k]; });
+  document.querySelectorAll("#modal [data-case]").forEach(b => { r[b.dataset.case] = b.classList.contains("on"); });
   document.querySelectorAll("[data-niv]").forEach(g => {
     const on = g.querySelector("button.on");
     if (on) r[g.dataset.niv] = +on.dataset.v; else delete r[g.dataset.niv];
@@ -1786,7 +1901,7 @@ function lireFormulaire() {
   // Ingrédients touchés : ce ne sont plus des « suggestions »
   if (ings.join("|") !== (r.ingredients || []).join("|")) r.ingredientsSource = "app";
   r.ingredients = ings;
-  const fa = $("#f-famille").value.trim(), va = $("#f-variante").value.trim();
+  const fa = (S.fo.famille || "").trim(), va = (S.fo.variante || "").trim();
   if (fa) r.famille = fa; else delete r.famille;
   if (fa && va) r.variante = va; else delete r.variante;
   const lien = $("#f-lien").value.trim(), notes = $("#f-notes").value.trim();
@@ -1836,8 +1951,7 @@ function nouvelleVariante() {
   copie.nom = copie.famille + " (variante)";
   copie.varianteDe = r.id;
   ouvrirFormulaire(copie, "Nouvelle variante");
-  $("#f-plus").hidden = false;
-  $("[data-act=plus]").setAttribute("aria-expanded", true); $("[data-act=plus] b").textContent = "Moins de détails";
+  ouvrirVariante();
   $("#f-variante").focus();
 }
 function dupliquer() {
@@ -2180,7 +2294,7 @@ function lireRecettes(wb) {
   if (!ws) return [];
   const parEntete = {};
   COLONNES.forEach(c => { parEntete[norm(c[1])] = c; });
-  parEntete[norm("À l'avance")] = COLONNES.find(c => c[0] === "prep");  // en-tête des fichiers d'avant 0.18.0
+  ["À l'avance", "Prepmeal"].forEach(h => { parEntete[norm(h)] = COLONNES.find(c => c[0] === "prep"); });  // anciens en-têtes de cette colonne
   const cols = [];
   ws.getRow(1).eachCell((c, i) => { cols[i] = parEntete[norm(valeurCase(c.value))]; });
   const out = [];
@@ -2551,7 +2665,7 @@ const GROUPES_CP = {
   cat: { nom: "Catégorie", manque: r => !r.categorie },
   ing: { nom: "Ingrédients", manque: r => !(r.ingredients || []).length || r.ingredientsSource === "suggestion" },
   niv: { nom: "Prix, difficulté, temps, maîtrise", manque: r => Object.keys(NIVEAUX).some(k => !r[k]) },
-  opt: { nom: "Saison, végé, prepmeal, invités", manque: r => !r.saison }
+  opt: { nom: "Saison, végé, lunchbox, invités", manque: r => !r.saison }
 };
 const manquesCp = r => [...S.cp.champs].filter(g => GROUPES_CP[g].manque(r));
 const recetteCp = () => S.cp && S.cp.etape === "cartes" ? recette(S.cp.ids[S.cp.i]) : null;
@@ -2608,7 +2722,8 @@ function majCp(force = true) {
 
 function htmlCarteCp(r) {
   const m = manquesCp(r), titre = g => `<div class="cp-t ${m.includes(g) ? "manque" : "ok"}">${m.includes(g) ? "" : icone("check")}${GROUPES_CP[g].nom}</div>`;
-  const liste = (k, l) => { if (r[k] && !l.includes(r[k])) l.push(r[k]); return `<select class="saisie choix" data-cp-sel="${k}"><option value="">—</option>${l.map(v => `<option value="${esc(v)}" ${v === r[k] ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>`; };
+  const liste = (k, l) => { if (r[k] && !l.includes(r[k])) l.push(r[k]); return ld("cp-" + k, { lib: NOMS_TAG[k], teinte: TEINTES[k], vide: "—",
+    val: () => r[k] || "", items: () => l.map(v => ({ v })), choisir: v => majRecetteCp(x => { if (v) x[k] = v; else delete x[k]; }) }); };
   const parts = [`<div class="cp-hd">${dishImg(r, 52)}<div><h3>${esc(r.nom)}</h3><div class="sub">${m.length ? m.length + " chose" + (m.length > 1 ? "s" : "") + " à compléter" : "Complète !"}</div></div></div>`];
   if (S.cp.champs.has("cat")) parts.push(`<section>${titre("cat")}
     <span class="lbl">Catégorie</span>${liste("categorie", valeursDe("categorie"))}</section>`);
@@ -2624,7 +2739,7 @@ function htmlCarteCp(r) {
     <span class="seg">${NIVEAUX[k].map((l, i) => `<button class="${r[k] === i + 1 ? "on" : ""}" data-cp-niv="${k}" data-v="${i + 1}">${l}</button>`).join("")}</span></div>`).join("")}</section>`);
   if (S.cp.champs.has("opt")) parts.push(`<section>${titre("opt")}
     <span class="lbl">Saison</span>${liste("saison", SAISONS.slice())}
-    <div class="cases">${[["vege", "leaf", "Végé"], ["prep", "box", "Prepmeal"], ["date", "glass", "Invités"], ["favori", "star", "Favori"]]
+    <div class="cases">${[["vege", "leaf", "Végé"], ["prep", "box", "Lunchbox"], ["date", "glass", "Invités"], ["favori", "star", "Favori"]]
       .map(([k, i, t]) => `<button class="chip ${r[k] ? "on" : ""}" data-cp-case="${k}">${icone(i)}${t}</button>`).join("")}</div></section>`);
   return parts.join("");
 }
@@ -2738,6 +2853,7 @@ function clicCompleter(t) {
 
 document.addEventListener("click", e => {
   const t = e.target;
+  if (clicLd(t)) return;
   if (clicCompleter(t)) return;
   // PC : le formulaire reste ouvert à côté de la grille ; on ne le remplace pas par mégarde
   if (estPC() && $("#modal").dataset.form && !t.closest("#modal")
@@ -2895,14 +3011,19 @@ document.addEventListener("click", e => {
     case "retirer-ing": el.closest(".li").remove(); break;
     case "plus": {
       const ouvert = $("#f-plus").hidden;
+      fermerLd();
       $("#f-plus").hidden = !ouvert;
       el.setAttribute("aria-expanded", ouvert);
-      el.querySelector("b").textContent = ouvert ? "Moins de détails" : "Plus de détails";
+      el.querySelector(".lib").textContent = ouvert ? "Moins de détails" : "Plus de détails";
       break;
     }
+    case "fo-variante": $("#fo-var") ? fermerVariante() : ouvrirVariante(); break;
+    case "fo-var-ok": fermerVariante(); break;
+    case "fo-sans-var": S.fo.famille = ""; S.fo.variante = ""; fermerVariante(); vibrer("decoche"); break;
+    case "fo-continuer": $("#fo-pied").innerHTML = piedFormulaire(); break;
     case "portions": {
       const n = Math.min(12, Math.max(1, +$("#f-portions").textContent + +el.dataset.v));
-      $("#f-portions").textContent = n; $("#f-pour").textContent = n;
+      $("#f-portions").textContent = n;
       break;
     }
     case "connexion": seConnecter(el); break;
@@ -2920,7 +3041,8 @@ document.addEventListener("click", e => {
     case "confirmer-import": confirmerImport(el); break;
     case "favori": basculerFavori(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
-    case "fermer": if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste [data-k]", renderRecettes); } fermerDoux(); break;
+    case "fermer": if (formModifie() && !el.dataset.force) { demanderAbandon(); break; }
+      if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste [data-k]", renderRecettes); } fermerDoux(); break;
     case "fermer-fond": if (t === el) { delete $("#modal").dataset.filtres; fermerDoux(); } break; // toucher le fond grisé ferme, pas la fiche elle-même
   }
 });
@@ -2928,19 +3050,6 @@ document.addEventListener("change", e => {
   if (e.target.id === "fichier" && e.target.files[0]) importerFichier(e.target.files[0]);
   if (e.target.id === "f-tex" && e.target.files.length) importerTextures([...e.target.files]);
   if (e.target.id === "bq-nom") renommerIngredient(S.bq.detail, e.target.value);
-  const t = e.target, d = t.dataset || {};
-  // Formulaire recette : « Autre… » dans une liste de tags
-  if (d.champ && t.value === "__autre") tagAutre(t);
-  // Compléter : chaque choix est enregistré tout de suite
-  if (d.cpSel) { const k = d.cpSel, v = t.value; majRecetteCp(r => { if (v) r[k] = v; else delete r[k]; }); }
-  // Assembler : plat principal, accompagnement changé, retiré (« — ») ou ajouté
-  if (d.asmSel) {
-    const a = S.asm, v = t.value;
-    if (d.asmSel === "p") a.princ = v || null;
-    else if (d.asmSel === "a") { if (v) a.accs[+d.i] = v; else a.accs.splice(+d.i, 1); }
-    else if (v) a.accs.push(v);
-    a.nom = ""; vibrer("pas"); majAssembler();
-  }
 });
 // Revenir dans la case d'ajout rouvre la liste déroulante (elle se ferme quand on touche ailleurs)
 document.addEventListener("focusin", e => { if (e.target.id === "ajout-art") majSuggArt(); });
@@ -2952,8 +3061,10 @@ document.addEventListener("input", e => {
   if (e.target.id === "q-bq") majBanque();
   if (e.target.id === "tex-q") { texQ = e.target.value; $("#tex-grille").innerHTML = grilleTex(); }
   if (e.target.id === "cp-ing") majSuggCp();
+  if (e.target.id === "f-variante") { S.fo.variante = e.target.value; majSousTitre(); }
   // En tapant un ingrédient, son petit dessin se met à jour
   const li = e.target.closest && e.target.closest("#f-ings .li");
+  if (li && li.classList.contains("ajout") && e.target.value.trim()) activerLigneAjout(li);
   if (li) { li.querySelector("img").outerHTML = dessinIng(e.target.value); majSuggIng(li); }
 });
 // Les suggestions suivent la ligne où l'on écrit, et disparaissent quand on la quitte
@@ -2965,9 +3076,18 @@ document.addEventListener("focusout", e => {
   if (!(e.target.closest && e.target.closest("#f-ings .li"))) return;
   setTimeout(() => { if (!(document.activeElement && document.activeElement.closest("#f-ings .li"))) majSuggIng(null); }, 150);
 });
+// Formulaire sur téléphone : pendant qu'on tape, le pied (Annuler / Enregistrer) laisse sa place au clavier
+const tactile = matchMedia("(pointer: coarse)");
+const champFo = el => el && el.matches && el.matches(".fo-corps input, .fo-corps textarea");
+document.addEventListener("focusin", e => { if (tactile.matches && champFo(e.target) && $(".fo") && !$(".fo-abandon")) $(".fo").classList.add("clavier"); });
+document.addEventListener("focusout", () => setTimeout(() => { const f = $(".fo"); if (f && !champFo(document.activeElement)) f.classList.remove("clavier"); }, 60));
 // Toucher une suggestion ne doit pas faire perdre le champ en cours (le clavier reste ouvert)
 document.addEventListener("mousedown", e => { if (e.target.closest && e.target.closest(".sugg-ing, #sugg-art")) e.preventDefault(); });
 document.addEventListener("keydown", e => {
+  // Listes de l'appli : Entrée valide la nouvelle valeur, Échap referme
+  if (e.key === "Enter" && e.target.matches && e.target.matches("[data-ld-txt]")) { e.preventDefault(); ldValider(); return; }
+  if (e.key === "Escape" && ldOuvert) { fermerLd(); return; }
+  if (e.key === "Enter" && e.target.id === "f-variante") { e.preventDefault(); fermerVariante(); return; }
   // Entrée dans un ingrédient : nouvelle ligne juste en dessous (comme une liste au clavier)
   const li = e.target.closest && e.target.closest("#f-ings .li");
   if (li && e.key === "Enter") { e.preventDefault(); ajouterIngredient(li); return; }
@@ -3004,6 +3124,7 @@ function fermerDessus() {
       retourFormT = Date.now();
       return toast("Encore Retour pour abandonner la saisie");
     }
+    if (md.dataset.form) return fermer();
     const x = md.querySelector('[data-act="fermer"]');
     return x ? x.click() : fermer();
   }

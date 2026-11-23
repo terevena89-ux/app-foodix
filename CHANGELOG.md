@@ -1,13 +1,20 @@
 # Foodix — journal des nouveautés
 
 ## 0.18.0 — 2026-11-23
-- Assembler un plat complet : le plat principal et chaque accompagnement se choisissent dans une liste déroulante (rangée en « Déjà mangé ensemble », « Favoris », le reste). Une ligne par accompagnement, une croix pour l'enlever, une dernière liste pour en ajouter un.
-- Formulaire recette : Catégorie, Saison, Origine et Préparation passent en listes déroulantes (« Autre… » pour taper une nouvelle valeur). Végé, Favori, Prepmeal et Invités restent des boutons ; Prix, Difficulté, Temps et Maîtrise ne changent pas.
-- Compléter mes recettes : Catégorie et Saison en listes déroulantes aussi.
-- Le tag « Protéine » disparaît (formulaire, fiche, filtres, Compléter, export Excel, tirage du menu). Les valeurs déjà enregistrées ne sont pas effacées de la base, juste plus utilisées.
-- « À l'avance » s'appelle maintenant « Prepmeal » (l'import Excel lit encore l'ancien en-tête).
-- « Poêlée » devient « Poêle & casserole » : les recettes existantes sont réécrites toutes seules à l'ouverture.
-- Le bouton « Plus de détails » du formulaire devient un vrai bandeau, la flèche tourne à l'ouverture.
+- Formulaire recette (ajouter / modifier) refait : un pop-up au centre de l'écran, l'en-tête (nom de la recette) et le pied (Annuler / Enregistrer) restent fixes, seul le milieu défile. Sur PC, il s'ouvre toujours dans la colonne de droite.
+- Le nom de la recette est dans l'en-tête, avec l'étoile Favori à côté. En dessous, si la recette est une variante : « Variante de Curry · Poulet ».
+- Listes déroulantes propres à l'appli (plus celles du téléphone) pour Catégorie, Saison, Origine, Préparation, Famille, dans l'assemblage d'un plat complet et dans « Compléter mes recettes ». Chaque tag a sa couleur. Pour une nouvelle valeur : « + Nouvelle … », toujours en bas de la liste.
+- Variante : on la crée depuis la liste Catégorie (dernière ligne « Variante d'un autre plat… »). Un encadré s'ouvre en haut du formulaire : famille (avec « + Nouvelle famille »), nom de la variante, bouton OK, et « Ce n'est pas une variante » pour la retirer.
+- Végé / Lunchbox / Invités : grisés au repos, en couleur une fois cochés (vert, orange, rose), l'icône reste.
+- Ingrédients : lignes plus légères, les portions à côté du titre, une case « Ajouter un ingrédient » toujours en bas de la liste.
+- « Plus de détails » plus discret (texte sur un trait). Dedans : saison, origine, préparation, niveaux, lien et notes.
+- Prix, difficulté, temps et maîtrise : mêmes boutons, plus fins, le choix en vert.
+- Sur téléphone, Annuler / Enregistrer se cachent pendant qu'on tape, pour laisser la place au clavier.
+- Fermer le formulaire après des changements demande « Abandonner les modifications ? » au lieu de tout perdre.
+- « À l'avance » devient « Lunchbox » (même icône, même couleur). L'import Excel lit encore les colonnes « À l'avance » et « Prepmeal ».
+- Saison « Annuel » devient « Aucune ». « Poêlée » devient « Poêle & casserole ». Les recettes existantes sont réécrites toutes seules.
+- Le tag « Protéine » disparaît (formulaire, fiche, filtres, Compléter, export Excel, tirage du menu). Les valeurs déjà enregistrées restent dans la base, juste plus utilisées.
+- PC : la barre « Ajouter un article » de la liste de courses ne passe plus par-dessus le haut du formulaire.
 
 ## 0.17.1 — 2026-11-22
 - Retour à l'allure de la 0.16 (barre Parcourir / Nouvelle liste / Précédente, titres de rayon, blocs du bas). Le panier et la liste compacte restent.
