@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.0.1";
+const VERSION = "1.0.2";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -1179,7 +1179,7 @@ function ajouterArticle(versBanque = false) {
   if (!v) return champ.focus();
   const nouveau = ajouterALaListe(v, false, versBanque); vibrer("ajout");
   champ.value = ""; flip(zid() + " .it", renderCourses);
-  if (nouveau) return ouvrirFicheBanque(nouveau, true);  // on règle tout de suite rayon, icône, ménager…
+  if (nouveau) return ouvrirFicheBanque(nouveau);  // on règle tout de suite rayon, icône, ménager…
   $("#ajout-art").focus(); // on peut enchaîner les ajouts au clavier
 }
 // Toucher un article ajouté à la main : petite fiche pour le ranger dans un rayon (cette liste seulement)
@@ -1457,7 +1457,7 @@ function supprimerIngredient(cle) {
   });
   S.banque = S.banque.filter(x => cleStockee(x) !== cle);
   sauverBanque();
-  S.bq.detail = null; S.bq.suppr = null; majBanque();
+  fermer();
   toast("« " + e.court + " » supprimé", () => {
     avant.forEach(a => { a.r.ingredients = a.ings; if (a.src) a.r.ingredientsSource = a.src; else delete a.r.ingredientsSource; ecrireRecette(a.r); });
     S.banque = sauve; sauverBanque(); majBanque();
@@ -1471,7 +1471,7 @@ function supprimerIngredient(cle) {
 function ouvrirBanque(choisir = false) {
   fermer();
   fermerBanque();
-  S.bq.detail = null; S.bq.suppr = null; S.bq.ouvert = true; S.bq.scroll = 0; S.bq.choisir = choisir; S.bq.seule = false;
+  S.bq.detail = null; S.bq.suppr = null; S.bq.ouvert = true; S.bq.choisir = choisir;
   const ec = document.createElement("div");
   ec.id = "bq-ecran"; ec.className = "bq-ecran";
   ec.innerHTML = `<div class="bq-in">
@@ -1492,30 +1492,22 @@ function fermerBanque() {
   renderCote();
 }
 // Fiche d'un article qu'on vient d'ajouter. seule = ouverte depuis les Courses : Retour referme tout.
-function ouvrirFicheBanque(cle, seule = false) {
-  if (!S.bq.ouvert) ouvrirBanque();
-  S.bq.seule = seule; S.bq.suppr = null; S.bq.detail = cle;
-  majBanque();
+function ouvrirFicheBanque(cle) {
+  S.bq.suppr = null; S.bq.detail = cle;
+  majFicheIng();
 }
-function retourBanque() {
-  if (S.bq.detail && !S.bq.seule) { S.bq.detail = null; S.bq.suppr = null; return majBanque(); }
-  S.bq.seule = false;
-  fermerBanque(); render();
-}
+function retourBanque() { fermerBanque(); render(); }
 
+// Redessine la liste de la banque (si elle est ouverte) et la fiche ouverte par-dessus
 function majBanque() {
-  const ec = $("#bq-ecran"); if (!ec) return;
-  const corps = $("#bq-corps"), tous = banque();
-  const e = S.bq.detail ? tous.find(x => x.cle === S.bq.detail) : null;
-  if (S.bq.detail && !e) { S.bq.detail = null; S.bq.suppr = null; }
-  const actif = document.activeElement;
-  if (e && actif && actif.id === "bq-nom") return;   // on ne redessine pas pendant qu'on écrit le nom
-  const mode = e ? "d" + e.cle : "liste", memeMode = ec.dataset.mode === mode, haut = corps.scrollTop;
-  ec.dataset.mode = mode;
-  $("#bq-barre").hidden = !!e;
-  $("#bq-titre").textContent = e ? e.court : S.bq.choisir ? "Ajouter à la liste" : "Banque d'ingrédients";
-  corps.innerHTML = e ? htmlFicheIngredient(e) : htmlListeBanque(tous);
-  corps.scrollTop = memeMode ? haut : e ? 0 : S.bq.scroll;
+  const ec = $("#bq-ecran");
+  if (ec) {
+    const corps = $("#bq-corps"), haut = corps.scrollTop;
+    $("#bq-titre").textContent = S.bq.choisir ? "Ajouter à la liste" : "Banque d'ingrédients";
+    corps.innerHTML = htmlListeBanque(banque());
+    corps.scrollTop = haut;
+  }
+  if (S.bq.detail) majFicheIng();
 }
 
 function htmlListeBanque(tous) {
@@ -1538,26 +1530,48 @@ function htmlListeBanque(tous) {
   return html;
 }
 
-function htmlFicheIngredient(e) {
-  const rayons = rayonsDe(e.menage).map(r => `<button type="button" class="chip ${r === e.rayon ? "on" : ""}" data-bq-rayon="${r}">${esc(libelleRayon(r))}</button>`).join("");
-  // Style Minecraft : on choisit parmi les textures importées (champ « mc », indépendant de l'icône Foodix)
-  const icones = mcActif() ? htmlChoixTex("bq-mc", e.mc, ingImg(e.court, 24, e.icone, "", e.menage))
-    : `<button type="button" class="bq-ic auto ${e.icone ? "" : "on"}" data-bq-icone="" aria-label="Automatique">${ingImg(e.court, 24)}<small>Auto</small></button>`
-    + Object.keys(ICONES).map(k => `<button type="button" class="bq-ic ${e.icone === k ? "on" : ""}" data-bq-icone="${k}" aria-label="${ICONES[k]}">${ingImg(e.court, 24, k)}</button>`).join("");
-  const recettes = e.recettes.map(r => `<button class="ligne" data-fiche="${esc(r.id)}">${dishImg(r, 28)}<span class="nm">${esc(r.nom)}</span><span class="chev">${icone("right")}</span></button>`).join("");
-  const confirme = S.bq.suppr === e.cle;
-  const n = e.recettes.length;
-  return `<div class="bq-fiche">
-    <div class="champ"><label for="bq-nom">Nom</label><input class="saisie" id="bq-nom" value="${esc(e.nom)}" autocomplete="off" enterkeyhint="done"></div>
-    <div class="champ"><span class="lbl">Rayon</span><div class="pastilles">${rayons}</div></div>
-    <div class="champ"><span class="lbl">Icône</span>${mcActif() ? icones : `<div class="bq-icones">${icones}</div>`}</div>
-    <button type="button" class="btn ${e.rec ? "pri" : ""}" data-act="bq-rec-fiche" style="justify-content:flex-start">${icone("refresh")}${e.rec ? "Récurrent : proposé à chaque nouvelle liste" : "Proposer à chaque nouvelle liste"}</button>
-    ${n ? "" : `<button type="button" class="btn ${e.menage ? "pri" : ""}" data-act="bq-menage-fiche" style="justify-content:flex-start">${icone("drop")}${e.menage ? "Produit ménager" : "Produit ménager ?"}</button>`}
-    <button type="button" class="btn ${e.placard ? "pri" : ""}" data-act="bq-placard-fiche" style="justify-content:flex-start">${icone("box")}${e.placard ? "Souvent au placard : à vérifier à chaque liste" : "Souvent au placard ?"}</button>
-    ${n ? `<div class="champ"><span class="lbl">Recettes</span><div>${recettes}</div></div>` : ""}
-    <button type="button" class="btn danger-btn" data-act="bq-suppr">${icone("trash")}${confirme ? (n ? `Confirmer : retirer de ${n} recette${n > 1 ? "s" : ""}` : "Confirmer la suppression") : "Supprimer"}</button>
-  </div>`;
+// Fiche d'un ingrédient : pop-up (au-dessus de la banque, ou des Courses). Même allure que le formulaire recette :
+// nom modifiable en haut, rayon en liste de l'appli, étiquettes Récurrent / Placard / Ménager, Supprimer dans « ⋯ ».
+const dansLaListe = cle => { const m = menuEnCours(); return !!m && (m.ajouts || []).some(a => cleBanque(a) === cle); };
+function majFicheIng() {
+  const e = S.bq.detail && banque().find(x => x.cle === S.bq.detail);
+  if (!e) { if (S.bq.detail) fermer(); return; }
+  const actif = document.activeElement;
+  if (actif && actif.id === "bq-nom" && $("#modal .bqf")) return;   // on ne redessine pas pendant qu'on écrit le nom
+  const n = e.recettes.length, confirme = S.bq.suppr === e.cle, liste = dansLaListe(e.cle);
+  const tags = [["bq-rec-fiche", "refresh", "Récurrent", e.rec, "rec"], e.menage ? null : ["bq-placard-fiche", "box", "Placard", e.placard, "placard"], n ? null : ["bq-menage-fiche", "drop", "Ménager", e.menage, "menage"]].filter(Boolean);
+  const recettes = e.recettes.map(r => `<button class="ligne" data-fiche="${esc(r.id)}">${dishImg(r, 24)}<span class="nm">${esc(r.nom)}</span><span class="chev">${icone("right")}</span></button>`).join("");
+  const md = $("#modal"), haut = md.querySelector(".fiche") ? md.querySelector(".fiche").scrollTop : 0;
+  ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete md.dataset[k]);
+  md.innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche bqf" role="dialog" aria-label="${esc(e.court)}">
+    <div class="bqf-hd"><button type="button" class="bqf-ic" data-act="bq-icones" aria-label="Changer l'icône">${ingImg(e.nom, 30, e.icone, e.mc, e.menage)}<span class="crayon">${icone("pen")}</span></button>
+      <input id="bq-nom" value="${esc(e.nom)}" autocomplete="off" enterkeyhint="done" aria-label="Nom">
+      <button type="button" class="ib" data-act="menu3" aria-label="Plus d'actions">${icone("more")}</button>
+      <button type="button" class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="menu3" id="menu3" ${confirme ? "" : "hidden"}><button class="danger" data-act="bq-suppr">${icone("trash")}${confirme ? (n ? `Confirmer : retirer de ${n} recette${n > 1 ? "s" : ""}` : "Confirmer") : "Supprimer"}</button></div>
+    ${ld("bq-rayon", { lib: "Rayon", teinte: "neutre", val: () => e.rayon, affiche: libelleRayon,
+      items: () => rayonsDe(e.menage).map(r => ({ v: r, t: libelleRayon(r) })),
+      choisir: v => { majEntree(e.cle, { rayon: v }); majBanque(); } })}
+    <div class="fo-bsc">${tags.map(([act, ic, t, on, k]) => `<button type="button" class="bsc ${on ? "on" : ""}" data-act="${act}" data-teinte="${k}">${icone(ic)}${t}</button>`).join("")}</div>
+    ${n ? `<div class="champ"><span class="lbl">Recettes</span><div class="bqf-rec">${recettes}</div></div>` : ""}
+    <button type="button" class="btn ${liste ? "" : "pri"} bqf-liste" data-act="bq-liste">${icone(liste ? "x" : "cart")}${liste ? "Retirer de la liste" : "À la liste"}</button>
+  </div></div>`;
+  md.querySelector(".fiche").scrollTop = haut;
 }
+// Choix de l'icône : petite fenêtre par-dessus la fiche ; choisir la referme
+function ouvrirIconesIng() {
+  const e = banque().find(x => x.cle === S.bq.detail); if (!e) return;
+  fermerIconesIng();
+  // Style Minecraft : textures importées (champ « mc », indépendant de l'icône Foodix)
+  const icones = mcActif() ? htmlChoixTex("bq-mc", e.mc, ingImg(e.court, 24, e.icone, "", e.menage))
+    : `<div class="bq-icones"><button type="button" class="bq-ic auto ${e.icone ? "" : "on"}" data-bq-icone="" aria-label="Automatique">${ingImg(e.court, 24)}<small>Auto</small></button>`
+      + Object.keys(ICONES).map(k => `<button type="button" class="bq-ic ${e.icone === k ? "on" : ""}" data-bq-icone="${k}" aria-label="${ICONES[k]}">${ingImg(e.court, 24, k)}</button>`).join("") + `</div>`;
+  const p = document.createElement("div");
+  p.id = "ic-pop"; p.className = "voile ic-pop";
+  p.innerHTML = `<div class="fiche" role="dialog" aria-label="Icône"><div class="fi-hd"><h2 class="titre-r" style="flex:1">Icône</h2><button class="ib" data-act="ic-fermer" aria-label="Fermer">${icone("x")}</button></div>${icones}</div>`;
+  document.body.appendChild(p);
+}
+function fermerIconesIng() { const p = $("#ic-pop"); if (p) p.remove(); }
 
 // « + » de la banque (hors Parcourir) : petite fenêtre Nom / Type / Rayon (rayon vide = deviné d'après le nom)
 let bqa = null;
@@ -1588,12 +1602,19 @@ function validerAjoutBanque() {
   toast("Ajouté dans « " + libelleRayon(e.rayon) + " »");
 }
 // Appui long sur un article de la banque : il va dans la liste de courses en cours
+// (déjà dans la liste : l'appui long l'en retire, avec « Annuler »)
 function commanderBanque(el) {
-  const e = banque().find(x => x.cle === el.dataset.bqOuvrir); if (!e) return;
-  const m = listeEnCours();
-  if ((m.ajouts || []).some(a => cleBanque(a) === e.cle)) return toast("Déjà dans la liste");
+  const e = banque().find(x => x.cle === el.dataset.bqOuvrir); if (e) basculerListe(e);
+}
+function basculerListe(e) {
+  const m = listeEnCours(); m.ajouts = m.ajouts || [];
+  const i = m.ajouts.findIndex(a => cleBanque(a) === e.cle);
+  if (i >= 0) {
+    const a = m.ajouts.splice(i, 1)[0]; ecrireMenu(m); majBanque(); vibrer("decoche");
+    return toast("« " + e.court + " » retiré de la liste", () => { const l = listeEnCours(); (l.ajouts = l.ajouts || []).push(a); ecrireMenu(l); majBanque(); });
+  }
   ajouterALaListe(e.nom, e.menage); majBanque(); vibrer("ajout");
-  toast("« " + e.court + " » dans la liste", () => { const l = listeEnCours(), i = l.ajouts.findIndex(a => cleBanque(a) === e.cle); if (i >= 0) { l.ajouts.splice(i, 1); ecrireMenu(l); } majBanque(); });
+  toast("« " + e.court + " » dans la liste", () => { const l = listeEnCours(), j = l.ajouts.findIndex(a => cleBanque(a) === e.cle); if (j >= 0) { l.ajouts.splice(j, 1); ecrireMenu(l); } majBanque(); });
 }
 
 // Parcourir : « + » (ou Entrée) ajoute ce qui est tapé, sauf si l'article existe déjà : on le montre alors
@@ -1761,9 +1782,9 @@ function majListe() {
   // recherche sans résultat : le + devient « + Tajine » et ouvre le formulaire avec ce nom
   const fab = $("#fab-r"), q = S.f.q.trim();
   if (fab && !estPC()) {
-    // Recherche vide : le + est grisé et met dans la recherche (on y tape le nom de la nouvelle recette)
+    // + : formulaire vide, ou déjà rempli avec ce qui est tapé dans la recherche
     const cree = !l.length && q;
-    fab.classList.toggle("large", !!cree); fab.classList.toggle("eteint", !q); fab.dataset.act = q ? "nouvelle-q" : "focus-q";
+    fab.classList.toggle("large", !!cree); fab.dataset.act = q ? "nouvelle-q" : "nouvelle";
     fab.innerHTML = icone("plus") + (cree ? `<span>${esc(q.replace(/^./, c => c.toUpperCase()))}</span>` : "");
   }
   majCadre();
@@ -1886,6 +1907,13 @@ function basculerFavori() {
 function fermer() {
   $("#modal").innerHTML = "";
   ["recette", "form", "rep", "src", "choix", "archive", "filtres", "asm", "art", "vc"].forEach(k => delete $("#modal").dataset[k]);
+  finFicheIng();
+}
+// Fiche ingrédient refermée : la liste dessous reprend ses changements (panier, nom, icône…)
+function finFicheIng() {
+  if (!S.bq.detail) return;
+  S.bq.detail = null; S.bq.suppr = null; fermerIconesIng();
+  if (S.bq.ouvert) majBanque(); else render();
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
@@ -2920,6 +2948,7 @@ function fermerDoux() {
   if (!fiche || !animOK() || $("#modal").dataset.form || $("#modal").classList.contains("lateral")) return fermer();
   const contenu = $("#modal").firstElementChild;
   ["recette", "form", "rep", "src", "choix", "archive"].forEach(k => delete $("#modal").dataset[k]);
+  finFicheIng();
   voile.style.pointerEvents = "none";
   voile.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-in", fill: "forwards" });
   fiche.animate([{ transform: "none" }, { transform: "translateY(60%)" }], { duration: 180, easing: "ease-in", fill: "forwards" })
@@ -3125,6 +3154,7 @@ document.addEventListener("click", e => {
   // après un appui long, le clic qui suit ne compte pas
   const lg = t.closest && t.closest("[data-long]");
   if (lg) { delete lg.dataset.long; e.preventDefault(); return; }
+  if (t.id === "ic-pop") return fermerIconesIng();   // toucher le fond grisé de la fenêtre des icônes
   if ($("#menu-tri") && !t.closest("#menu-tri") && !t.closest("[data-act='trier']")) fermerTri();
   // le petit menu de l'appui long se ferme au clic suivant (après avoir fait ce qu'on a touché dedans)
   const ml = $("#menu-long"); if (ml) setTimeout(() => ml.remove(), 0);
@@ -3163,6 +3193,7 @@ document.addEventListener("click", e => {
   if (famL) return ouvrirChoixVariante(famL.dataset.famille);
   const ligne = t.closest("[data-fiche]");
   if (ligne) {
+    S.bq.detail = null; S.bq.suppr = null;   // depuis la fiche d'un ingrédient : la recette la remplace
     const garder = ligne.hasAttribute("data-variante"), fi = $("#modal .fiche");
     if (garder) vibrer("pas");
     ouvrirFiche(ligne.dataset.fiche);
@@ -3207,7 +3238,7 @@ document.addEventListener("click", e => {
   const artR = t.closest("[data-art-rayon]");
   if (artR) return rangerArt(artR.dataset.artRayon);
   const artB = t.closest("[data-art-banque]");
-  if (artB) { const cle = versLaBanque(artB.dataset.artBanque); fermer(); renderCourses(); return ouvrirFicheBanque(cle, true); }
+  if (artB) { const cle = versLaBanque(artB.dataset.artBanque); fermer(); renderCourses(); return ouvrirFicheBanque(cle); }
   if (sugg) { const e = banque().find(x => x.cle === sugg.dataset.sugg); if (e) { ajouterALaListe(e.nom, e.menage); vibrer("ajout"); flip(zid() + " .it", renderCourses); $("#ajout-art").focus(); } return; }
   const sb = t.closest("[data-sugg-base]");
   if (sb) {
@@ -3221,7 +3252,7 @@ document.addEventListener("click", e => {
   const rc = t.closest("[data-rc]");
   if (rc) { vibrer(rc.classList.toggle("on") ? "pas" : "decoche"); return; }
   const bqOuvrir = t.closest("[data-bq-ouvrir]");
-  if (bqOuvrir) { S.bq.scroll = $("#bq-corps").scrollTop; S.bq.detail = bqOuvrir.dataset.bqOuvrir; S.bq.suppr = null; return majBanque(); }
+  if (bqOuvrir) return ouvrirFicheBanque(bqOuvrir.dataset.bqOuvrir);
   const aong = t.closest("[data-asm-ong]");
   if (aong) { S.asm.onglet = aong.dataset.asmOng; vibrer("pas"); majAssembler(); $("#modal .as-corps").scrollTop = 0; return; }
   const asel = t.closest("[data-asm-sel]");
@@ -3236,10 +3267,8 @@ document.addEventListener("click", e => {
   }
   const vp = t.closest("[data-var-propo]");
   if (vp) { const x = S.propo.repas[+vp.dataset.varPropo], r = recette(vp.dataset.v); if (x && r) { x.id = r.id; if (!veutAccomp(r)) x.side = null; else if (!x.side) x.side = tirerAccomp(accompsPris()); sauverPropo(); vibrer("pas"); renderMenu(); } return; }
-  const bqRayon = t.closest("[data-bq-rayon]");
-  if (bqRayon) { majEntree(S.bq.detail, { rayon: bqRayon.dataset.bqRayon }); return majBanque(); }
   const bqIcone = t.closest("[data-bq-icone]");
-  if (bqIcone) { majEntree(S.bq.detail, { icone: bqIcone.dataset.bqIcone }); return majBanque(); }
+  if (bqIcone) { majEntree(S.bq.detail, { icone: bqIcone.dataset.bqIcone }); fermerIconesIng(); return majBanque(); }
   const recMc = t.closest("[data-rec-mc]");
   if (recMc) {
     const id = $("#modal").dataset.texrec, r = S.recettes.find(x => x.id === id); if (!r) return;
@@ -3247,7 +3276,7 @@ document.addEventListener("click", e => {
     ecrireRecette(r); delete $("#modal").dataset.texrec; render(); return ouvrirFiche(id);
   }
   const bqMc = t.closest("[data-bq-mc]");
-  if (bqMc) { majEntree(S.bq.detail, { mc: bqMc.dataset.bqMc }); return majBanque(); }
+  if (bqMc) { majEntree(S.bq.detail, { mc: bqMc.dataset.bqMc }); fermerIconesIng(); return majBanque(); }
   const retArt = t.closest("[data-retirer-art]");
   if (retArt) return retirerArticle(retArt.dataset.retirerArt);
   const msq = t.closest("[data-masquer]");  // croix au survol de la souris (PC) : comme glisser au doigt
@@ -3302,6 +3331,9 @@ document.addEventListener("click", e => {
     case "compact": S.compact = !S.compact; ecrireLocal("fx-compact", S.compact ? "1" : ""); vibrer("pas"); renderCourses(); break;
     case "bq-retour": retourBanque(); break;
     case "bq-rec-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { rec: !e.rec }); majBanque(); } break; }
+    case "bq-icones": ouvrirIconesIng(); break;
+    case "ic-fermer": fermerIconesIng(); break;
+    case "bq-liste": { const e = banque().find(x => x.cle === S.bq.detail); if (e) basculerListe(e); break; }
     case "bq-suppr":
       if (S.bq.suppr === S.bq.detail) supprimerIngredient(S.bq.detail);
       else { S.bq.suppr = S.bq.detail; majBanque(); }
@@ -3371,7 +3403,6 @@ document.addEventListener("click", e => {
     case "ordre-cats": ouvrirOrdreCats(); break;
     case "ordre-defaut": delete S.prefs.ordreCats; sauverPrefs(); vibrer("pas"); ouvrirOrdreCats(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
-    case "focus-q": { const q = $("#q"); if (q) q.focus(); break; }
     case "fermer": if (formModifie() && !el.dataset.force) { demanderAbandon(); break; }
       if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste [data-k]", renderRecettes); } fermerDoux(); break;
     case "fermer-fond": if (t === el) { delete $("#modal").dataset.filtres; fermerDoux(); } break; // toucher le fond grisé ferme, pas la fiche elle-même
@@ -3493,7 +3524,7 @@ document.addEventListener("keydown", e => {
 // D'où une réserve de pages, posée seulement juste après un toucher (userActivation).
 const RESERVE = 3;
 let pile = (history.state && history.state.fx) || 0, ignorerPop = false, retourFormT = 0;
-const quelqueChoseOuvert = () => !!($("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran") || $(".ni-ecran") || $("#menu-tri") || $("#menu-long"));
+const quelqueChoseOuvert = () => !!($("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran") || $(".ni-ecran") || $("#menu-tri") || $("#menu-long") || $("#ic-pop"));
 function majGardeRetour() {
   if (ignorerPop) return;
   const ouvert = quelqueChoseOuvert(), touche = !navigator.userActivation || navigator.userActivation.isActive;
@@ -3502,6 +3533,7 @@ function majGardeRetour() {
 }
 function fermerDessus() {
   // petits menus d'abord (tri, appui long, ⋯, variantes, listes du formulaire)
+  if ($("#ic-pop")) return fermerIconesIng();
   if ($("#menu-tri")) return fermerTri();
   if ($("#menu-long")) return $("#menu-long").remove();
   const petit = ["#menu3", "#var-menu"].map(s => $(s)).find(m => m && !m.hidden);

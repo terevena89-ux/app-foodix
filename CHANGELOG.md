@@ -1,5 +1,10 @@
 # Foodix — journal des nouveautés
 
+## 1.0.2 — 2026-11-25
+- Banque : toucher un article ouvre sa fiche en pop-up. Nom modifiable en haut ; toucher l'icône (petit crayon) ouvre le choix des icônes dans une petite fenêtre ; rayon dans une liste déroulante ; Récurrent / Placard / Ménager en étiquettes comme dans le formulaire recette ; recettes qui l'utilisent ; bouton « À la liste » (ou « Retirer de la liste ») ; Supprimer dans le menu « ⋯ ».
+- Banque : appui long sur un article déjà dans la liste = il en est retiré (avec « Annuler »).
+- Recettes : le « + » ouvre à nouveau le formulaire de nouvelle recette même si la recherche est vide (rempli avec ce qui est tapé, sinon vide).
+
 ## 1.0.1 — 2026-11-25
 - Formulaire : Annuler / Enregistrer reviennent quand on ferme le clavier (ils restaient cachés après avoir tapé dans les notes).
 - Plat assemblé : ses ingrédients au choix et optionnels sont demandés aussi avant la liste de courses.
