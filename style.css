@@ -1095,3 +1095,70 @@ body.pc .fo .bsc, body.pc .fo .ld-b { height: 32px; }
 .bqf-rec .ligne { min-height: 38px; }
 .bqf-liste { height: 46px; font-size: 15px; justify-content: center; }
 .ic-pop { z-index: 8; }
+
+/* ---------- Atelier d'icônes (atelier.js) ---------- */
+.fi-ic { width: auto; height: auto; background: none; }
+.px.lisse { image-rendering: auto; }
+.atelier { position: fixed; inset: 0; z-index: 8; background: var(--fond); color: var(--encre); overflow-y: auto; overscroll-behavior: contain; }
+.at-in { max-width: 520px; margin: 0 auto; padding: env(safe-area-inset-top, 0px) 8px calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
+.at-hd { display: flex; align-items: center; gap: 4px; height: 44px; }
+.at-hd h2 { font: 700 17px var(--titres); margin: 0; }
+.at-titre { flex: 1; min-width: 0; color: var(--discret); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.at-lien { border: 0; background: none; color: var(--accent); font-weight: 700; font-size: 13px; padding: 4px 6px; align-self: flex-end; }
+.at-hd .at-lien { align-self: center; }
+.at-ap { display: flex; gap: 10px; background: var(--carte); border: 1px solid var(--trait); border-radius: 12px; padding: 8px; }
+.at-grand { width: 112px; height: 112px; flex: none; border-radius: 10px; background: var(--creux); display: grid; place-items: center; }
+.at-grand canvas { width: 96px; height: 96px; image-rendering: pixelated; }
+.at-ap-d { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.at-seg button { flex: 1; }
+.at-minis { display: flex; gap: 6px; }
+.at-mini { flex: 1; display: flex; align-items: center; gap: 5px; border-radius: 8px; padding: 4px 6px; font-size: 12px; min-width: 0; }
+.at-mini span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.at-mini.clair { background: #FFFFFF; color: #1F2420; border: 1px solid #E4E6DF; }
+.at-mini.sombre { background: #1F2531; color: #DFE4EC; }
+.at-mini img { width: 24px; height: 24px; }
+.at-rang { display: flex; gap: 6px; align-items: center; }
+.at-rang .btn, .at-pan > .btn { flex: 1; height: 34px; font-size: 13px; padding: 0 8px; }
+.at-rang .saisie { height: 34px; font-size: 14px; flex: 1; }
+.at-modes { display: flex; gap: 4px; }
+.at-modes button { flex: 1; height: 34px; border-radius: 8px; font-size: 12.5px; font-weight: 700; white-space: nowrap; border: 1px solid var(--trait); background: var(--carte); color: var(--discret); padding: 0; }
+.at-modes button.on { background: var(--accent-doux); border-color: var(--accent); color: var(--accent); }
+.at-pan { display: flex; flex-direction: column; gap: 6px; }
+.at-defile { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.at-defile::-webkit-scrollbar { display: none; }
+.at-chip { flex: none; height: 32px; padding: 0 10px; border-radius: 16px; border: 1px solid var(--trait); background: var(--carte); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.at-chip.on { border-color: var(--accent); background: var(--accent-doux); color: var(--accent); }
+.at-chip img { width: 24px; height: 24px; margin-left: -6px; }
+.at-slots { display: flex; gap: 6px; }
+.at-slot { flex: 1; min-width: 0; height: 54px; border-radius: 10px; border: 1.5px dashed var(--trait); background: var(--carte); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; position: relative; font-size: 11px; color: var(--discret); padding: 0; }
+.at-slot.on { border: 1.5px solid var(--accent); color: var(--accent); }
+.at-slot img { width: 28px; height: 28px; }
+.at-x { position: absolute; top: 1px; right: 1px; width: 20px; height: 20px; display: grid; place-items: center; color: var(--discret); }
+.at-x .ic { width: 12px; height: 12px; }
+.at-bascule { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.at-bascule input { width: 18px; height: 18px; accent-color: var(--accent); }
+.at-banque { background: var(--carte); border: 1px solid var(--trait); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.at-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 2px; max-height: 236px; overflow-y: auto; }
+.at-tile { height: 40px; border: 0; background: none; border-radius: 6px; display: grid; place-items: center; padding: 0; }
+.at-tile:active { background: var(--creux); }
+.at-tile img { width: 28px; height: 28px; }
+.at-vide { grid-column: 1 / -1; flex: 1; color: var(--discret); font-size: 12px; padding: 10px; text-align: center; }
+.at-coul { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 6px; align-items: center; font-size: 12px; color: var(--discret); }
+.at-couches { background: var(--carte); border: 1px solid var(--trait); border-radius: 12px; padding: 4px 6px; }
+.at-couche { display: grid; grid-template-columns: 22px 66px 1fr 1fr 1fr; align-items: center; gap: 5px; height: 34px; }
+.at-couche.tete { height: 18px; font-size: 10.5px; color: var(--discret); }
+.at-couche.tete span:nth-child(n+3) { text-align: center; }
+.at-couche.off .at-nm, .at-couche.off input { opacity: .35; }
+.at-ck { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--trait); background: none; display: grid; place-items: center; padding: 0; }
+.at-ck .ic { width: 13px; height: 13px; stroke-width: 2.6; }
+.at-ck.on { background: var(--pt); border-color: rgb(0 0 0 / .25); }
+.at-ck.on .ic { stroke: #fff; filter: drop-shadow(0 0 1px rgb(0 0 0 / .6)); }
+.at-ck:not(.on) .ic { visibility: hidden; }
+.at-nm { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.atelier input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; min-width: 0; height: 12px; border-radius: 6px; background: var(--g); margin: 0; border: 1px solid rgb(0 0 0 / .12); }
+.atelier input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 22px; border-radius: 5px; background: #fff; border: 1.5px solid #1F2420; box-shadow: 0 1px 2px rgb(0 0 0 / .3); }
+.atelier input[type=range]::-moz-range-thumb { width: 14px; height: 20px; border-radius: 5px; background: #fff; border: 1.5px solid #1F2420; }
+.at-google { height: 38px !important; text-decoration: none; }
+.at-web { display: flex; gap: 8px; align-items: center; background: var(--carte); border: 1px solid var(--trait); border-radius: 12px; padding: 6px; }
+.at-web img { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 12px 12px; }
+.at-web-r { flex: 1; display: flex; flex-direction: column; gap: 8px; }

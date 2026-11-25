@@ -1,5 +1,14 @@
 # Foodix — journal des nouveautés
 
+## 1.1.0 — 2026-11-25
+- Atelier d'icônes : toucher l'icône d'une recette (ou « ⋯ › Icône ») pour fabriquer la sienne. Pour un ingrédient : son icône › « Atelier ».
+  - Icône + mini : une grande icône et jusqu'à 2 petites dans les coins du bas (pastille claire au choix).
+  - Assiette : assiette, poêle, casserole, bol, planche ou plat au four (couleur réglable), avec jusqu'à 4 ingrédients dedans.
+  - Modèle : burger, sandwich, croque, pizza, tarte, wrap, tacos, bol / soupe, pâtes, curry ; chaque couche a sa couleur (teinte, vif, clair) et peut être retirée.
+  - Internet : recherche Google Images « nom + icône pixel art », puis Coller l'image, Fichier ou adresse ; image réduite, fond retiré, zoom. Les images prises vont dans « Mes images ».
+  - Rendu Pixel (32×32 avec contour) ou Normal (lisse), aperçu sur fond clair et sombre, « Auto » d'après les ingrédients, « Par défaut » pour revenir à l'icône automatique.
+- Icônes synchronisées entre le téléphone et le PC ; elles remplacent l'ancien choix de texture Minecraft d'une recette.
+
 ## 1.0.2 — 2026-11-25
 - Banque : toucher un article ouvre sa fiche en pop-up. Nom modifiable en haut ; toucher l'icône (petit crayon) ouvre le choix des icônes dans une petite fenêtre ; rayon dans une liste déroulante ; Récurrent / Placard / Ménager en étiquettes comme dans le formulaire recette ; recettes qui l'utilisent ; bouton « À la liste » (ou « Retirer de la liste ») ; Supprimer dans le menu « ⋯ ».
 - Banque : appui long sur un article déjà dans la liste = il en est retiré (avec « Annuler »).

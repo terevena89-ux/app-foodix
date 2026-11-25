@@ -19,11 +19,12 @@ let initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedir
   collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch;
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
-import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, MC, mcCherche } from "./pixel.js";
+import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, MC, mcCherche, PERSO, brut } from "./pixel.js";
+import { ouvrirAtelier, fermerAtelier, atelierOuvert } from "./atelier.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.0.2";
+const VERSION = "1.1.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -135,6 +136,30 @@ function sauverTextures() {
 }
 const lirePropo = p => ({ repas: p && Array.isArray(p.repas) ? p.repas : [] });
 
+// Icônes faites dans l'atelier : un document par icône (donnees/icones/{clé}), à part car une image
+// d'internet peut peser quelques dizaines de Ko. Clé « r:<id recette> » ou « i:<clé ingrédient> » (voir PERSO dans pixel.js).
+const collIcones = () => collection(db, "users", uid, NOM_APPLI, "donnees", "icones");
+const idIcone = cle => cle.replace(/\//g, "_");
+function sauverDemoIcones() { try { localStorage.setItem("fx-demo-icones", JSON.stringify(PERSO)); } catch (e) { toast("Stockage plein"); } }
+function sauverIcone(cle, ico) {
+  PERSO[cle] = Object.assign({ cle, maj: Date.now() }, ico);
+  if (MODE_DEMO) return sauverDemoIcones();
+  setDoc(doc(collIcones(), idIcone(cle)), PERSO[cle]).catch(erreurEcriture);
+}
+function effacerIcone(cle) {
+  delete PERSO[cle];
+  if (MODE_DEMO) return sauverDemoIcones();
+  deleteDoc(doc(collIcones(), idIcone(cle))).catch(erreurEcriture);
+}
+// Ouvre l'atelier pour une recette (r) ou un ingrédient de la banque (e) ; « apres » redessine l'écran d'où l'on vient
+function atelierPour(cle, nom, r, apres) {
+  const avant = PERSO[cle] || null;
+  const mes = [...new Set(Object.values(PERSO).map(x => x.p && x.p.web && x.p.web.src).filter(Boolean))];
+  ouvrirAtelier({ nom, recette: r, actuel: avant, mes, toast,
+    garder: ico => { sauverIcone(cle, ico); render(); apres(); toast("Icône enregistrée", () => { avant ? sauverIcone(cle, avant) : effacerIcone(cle); render(); apres(); }); },
+    effacer: () => { effacerIcone(cle); render(); apres(); toast("Icône par défaut", () => { sauverIcone(cle, avant); render(); apres(); }); } });
+}
+
 function erreurEcriture(err) { console.error(err); toast("Échec de l’enregistrement"); }
 
 // Enregistre une recette. On n'attend pas la réponse du serveur : hors ligne,
@@ -176,6 +201,7 @@ function demarrerDemo() {
   migrerTags();
   S.idees = d.idees || "";
   try { MC.tex = JSON.parse(localStorage.getItem("fx-demo-tex")) || {}; } catch (e) { MC.tex = {}; }
+  try { Object.assign(PERSO, JSON.parse(localStorage.getItem("fx-demo-icones")) || {}); } catch (e) { /* rien de gardé */ }
   appliquerIcones();
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
@@ -226,6 +252,11 @@ function ecouter() {
     snap.docs.forEach(d => Object.assign(tex, d.data().tex || {}));
     nbMorceaux = Math.max(nbMorceaux, snap.docs.length);
     if (JSON.stringify(tex) !== JSON.stringify(MC.tex)) { MC.tex = tex; appliquerIcones(); rerendre(); }
+  }, err => console.error(err)));
+  arrets.push(onSnapshot(collIcones(), snap => {
+    const recu = {};
+    snap.docs.forEach(d => { const x = d.data(); if (x.cle && x.src) recu[x.cle] = x; });
+    if (JSON.stringify(recu) !== JSON.stringify(PERSO)) { Object.keys(PERSO).forEach(k => delete PERSO[k]); Object.assign(PERSO, recu); rerendre(); }
   }, err => console.error(err)));
 }
 
@@ -1563,12 +1594,12 @@ function ouvrirIconesIng() {
   const e = banque().find(x => x.cle === S.bq.detail); if (!e) return;
   fermerIconesIng();
   // Style Minecraft : textures importées (champ « mc », indépendant de l'icône Foodix)
-  const icones = mcActif() ? htmlChoixTex("bq-mc", e.mc, ingImg(e.court, 24, e.icone, "", e.menage))
+  const icones = brut(() => mcActif() ? htmlChoixTex("bq-mc", e.mc, ingImg(e.court, 24, e.icone, "", e.menage))
     : `<div class="bq-icones"><button type="button" class="bq-ic auto ${e.icone ? "" : "on"}" data-bq-icone="" aria-label="Automatique">${ingImg(e.court, 24)}<small>Auto</small></button>`
-      + Object.keys(ICONES).map(k => `<button type="button" class="bq-ic ${e.icone === k ? "on" : ""}" data-bq-icone="${k}" aria-label="${ICONES[k]}">${ingImg(e.court, 24, k)}</button>`).join("") + `</div>`;
+      + Object.keys(ICONES).map(k => `<button type="button" class="bq-ic ${e.icone === k ? "on" : ""}" data-bq-icone="${k}" aria-label="${ICONES[k]}">${ingImg(e.court, 24, k)}</button>`).join("") + `</div>`);
   const p = document.createElement("div");
   p.id = "ic-pop"; p.className = "voile ic-pop";
-  p.innerHTML = `<div class="fiche" role="dialog" aria-label="Icône"><div class="fi-hd"><h2 class="titre-r" style="flex:1">Icône</h2><button class="ib" data-act="ic-fermer" aria-label="Fermer">${icone("x")}</button></div>${icones}</div>`;
+  p.innerHTML = `<div class="fiche" role="dialog" aria-label="Icône"><div class="fi-hd"><h2 class="titre-r" style="flex:1">Icône</h2><button class="btn" data-act="ing-atelier">${icone("sliders")}Atelier</button><button class="ib" data-act="ic-fermer" aria-label="Fermer">${icone("x")}</button></div>${icones}</div>`;
   document.body.appendChild(p);
 }
 function fermerIconesIng() { const p = $("#ic-pop"); if (p) p.remove(); }
@@ -1865,7 +1896,7 @@ function ouvrirFiche(id) {
   ["form", "rep", "choix", "filtres", "vc", "asm"].forEach(k => delete $("#modal").dataset[k]);
   $("#modal").dataset.recette = id;
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche fr" role="dialog" aria-label="${esc(r.nom)}">
-    <div class="fi-hd">${dishImg(r, 44)}<div class="txt"><h2>${esc(r.nom)}</h2>
+    <div class="fi-hd"><button type="button" class="bqf-ic fi-ic" data-act="rec-icone" aria-label="Changer l'icône">${dishImg(r, 44)}<span class="crayon">${icone("pen")}</span></button><div class="txt"><h2>${esc(r.nom)}</h2>
       ${fam.length > 1 ? `<button class="fi-var" data-act="var-menu" aria-label="Variante : changer">${icone("branche")}<span class="fv-t"><b>${esc(r.famille)}</b> ·</span><b class="v">${esc(r.variante || r.nom)}${icone("down")}</b></button>` : ""}</div>
       <button class="ib fi-etoile ${r.favori ? "on" : ""}" data-act="favori" aria-label="${r.favori ? "Retirer des favoris" : "Mettre en favori"}">${icone("star")}</button>
       <button class="ib" data-act="menu3" aria-label="Plus d'actions">${icone("more")}</button>
@@ -1873,7 +1904,7 @@ function ouvrirFiche(id) {
     <div class="menu3" id="menu3" hidden>
       <button data-act="modifier">${icone("pen")}Modifier</button>
       <button data-act="dupliquer">${icone("copy")}Dupliquer</button>
-      ${mcActif() ? `<button data-act="rec-icone">${icone("grid")}Icône</button>` : ""}
+      <button data-act="rec-icone">${icone("grid")}Icône</button>
       ${estBase(r) ? "" : `<button data-act="variante">${icone("plus")}Nouvelle variante</button>`}
       <button class="danger" data-act="supprimer">${icone("trash")}Supprimer</button></div>
     ${fam.length > 1 ? `<div class="menu3 var-menu" id="var-menu" hidden>${fam.map(x => `<button class="${x.id === r.id ? "on" : ""}" data-fiche="${esc(x.id)}" data-variante>${x.vege ? icone("leaf") : icone("branche")}${esc(x.variante || x.nom)}</button>`).join("")}</div>` : ""}
@@ -2440,17 +2471,6 @@ function htmlChoixTex(attr, actuel, auto) {
   texCtx = { attr, actuel: actuel || "", auto };
   return `<input class="saisie tex-q" id="tex-q" placeholder="Chercher… (fromage, curry…)" value="${esc(texQ)}" autocomplete="off" enterkeyhint="search">
     <div class="bq-icones tex-grille" id="tex-grille">${grilleTex()}</div>`;
-}
-// Recette : écran à part, ouvert depuis le menu ⋯ de la fiche
-function ouvrirTexRecette(id) {
-  const r = S.recettes.find(x => x.id === id); if (!r) return;
-  delete $("#modal").dataset.recette;  // sinon une synchro rouvrirait la fiche par-dessus
-  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Icône">
-    <button class="retour" data-fiche="${esc(id)}">‹ ${esc(r.nom)}</button>
-    <h2 class="titre-r">Icône</h2>
-    ${htmlChoixTex("rec-mc", r.mc, dishImg(Object.assign({}, r, { mc: "" }), 24))}
-  </div></div>`;
-  $("#modal").dataset.texrec = id;
 }
 
 // Import : un paquet .json ({ textures: { nom: "data:image/png;base64,…" } }) et/ou des .png (nom du fichier = nom de la texture)
@@ -3269,12 +3289,6 @@ document.addEventListener("click", e => {
   if (vp) { const x = S.propo.repas[+vp.dataset.varPropo], r = recette(vp.dataset.v); if (x && r) { x.id = r.id; if (!veutAccomp(r)) x.side = null; else if (!x.side) x.side = tirerAccomp(accompsPris()); sauverPropo(); vibrer("pas"); renderMenu(); } return; }
   const bqIcone = t.closest("[data-bq-icone]");
   if (bqIcone) { majEntree(S.bq.detail, { icone: bqIcone.dataset.bqIcone }); fermerIconesIng(); return majBanque(); }
-  const recMc = t.closest("[data-rec-mc]");
-  if (recMc) {
-    const id = $("#modal").dataset.texrec, r = S.recettes.find(x => x.id === id); if (!r) return;
-    if (recMc.dataset.recMc) r.mc = recMc.dataset.recMc; else delete r.mc;
-    ecrireRecette(r); delete $("#modal").dataset.texrec; render(); return ouvrirFiche(id);
-  }
   const bqMc = t.closest("[data-bq-mc]");
   if (bqMc) { majEntree(S.bq.detail, { mc: bqMc.dataset.bqMc }); fermerIconesIng(); return majBanque(); }
   const retArt = t.closest("[data-retirer-art]");
@@ -3350,7 +3364,8 @@ document.addEventListener("click", e => {
     case "nouvelle": nouvelle(); break;
     case "menu3": $("#menu3").hidden = !$("#menu3").hidden; break;
     case "modifier": modifier(); break;
-    case "rec-icone": ouvrirTexRecette($("#modal").dataset.recette); break;
+    case "rec-icone": { const id = $("#modal").dataset.recette, r = S.recettes.find(x => x.id === id); if (r) atelierPour("r:" + id, r.nom, r, () => ouvrirFiche(id)); break; }
+    case "ing-atelier": { const e = banque().find(x => x.cle === S.bq.detail); fermerIconesIng(); if (e) atelierPour("i:" + e.cle, e.court || e.nom, null, majBanque); break; }
     case "dupliquer": dupliquer(); break;
     case "variante": nouvelleVariante(); break;
     case "assembler": ouvrirAssembler($("#modal").dataset.recette); break;
@@ -3524,7 +3539,7 @@ document.addEventListener("keydown", e => {
 // D'où une réserve de pages, posée seulement juste après un toucher (userActivation).
 const RESERVE = 3;
 let pile = (history.state && history.state.fx) || 0, ignorerPop = false, retourFormT = 0;
-const quelqueChoseOuvert = () => !!($("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran") || $(".ni-ecran") || $("#menu-tri") || $("#menu-long") || $("#ic-pop"));
+const quelqueChoseOuvert = () => !!($("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran") || $(".ni-ecran") || $("#menu-tri") || $("#menu-long") || $("#ic-pop") || atelierOuvert());
 function majGardeRetour() {
   if (ignorerPop) return;
   const ouvert = quelqueChoseOuvert(), touche = !navigator.userActivation || navigator.userActivation.isActive;
@@ -3533,6 +3548,7 @@ function majGardeRetour() {
 }
 function fermerDessus() {
   // petits menus d'abord (tri, appui long, ⋯, variantes, listes du formulaire)
+  if (atelierOuvert()) return fermerAtelier();
   if ($("#ic-pop")) return fermerIconesIng();
   if ($("#menu-tri")) return fermerTri();
   if ($("#menu-long")) return $("#menu-long").remove();

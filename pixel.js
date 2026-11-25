@@ -319,7 +319,14 @@ function mcIng(name, icone, mc, menage){
 }
 const mcBalise = (t, px, cls) => `<img class="${cls} mc" src="${MC.tex[t]}" width="${px}" height="${px}" alt="">`;
 
+// Icônes faites dans l'atelier (atelier.js) : clé « r:<id recette> » ou « i:<clé ingrédient> ». Rempli par app.js.
+// brut() les ignore le temps d'un appel (l'atelier a besoin de l'icône automatique).
+const PERSO={}; let persoOff=false;
+const brut=f=>{ persoOff=true; try{ return f(); } finally{ persoOff=false; } };
+const persoBalise=(p,px,cls)=>`<img class="px ${p.pixel?"":"lisse "}${cls}" src="${p.src}" width="${px}" height="${px}" alt="">`;
+
 function ingImg(name, px=22, icone, mc, menage){
+  const pe=!persoOff && PERSO["i:"+(parseItem(name)?.key||norm(name))]; if(pe) return persoBalise(pe, px, "");
   const t=mcIng(name, icone, mc, menage); if(t) return mcBalise(t, px, "px");
   const s=(icone && SPR[icone]) ? {name:icone,map:{}} : ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
   if(!spriteCache.has(key)) spriteCache.set(key, drawGrid(SPR[s.name],12,s.map));
@@ -344,6 +351,7 @@ function dishType(r){
 // Dessin d'une recette : un gabarit (bol, poêle…) rempli avec la couleur
 // des 3 premiers ingrédients qui ne viennent pas du placard.
 function dishImg(r, px = 40) {
+  const pe = !persoOff && PERSO["r:" + r.id]; if (pe) return persoBalise(pe, px, "dish");
   if (MC.actif) {
     const n = norm(r.nom || r.id.replace(/-/g, " ")), m = MC_PLAT.find(([re]) => re.test(n));
     const t = r.mc && MC.tex[r.mc] ? r.mc : m && MC.tex[m[1]] ? m[1] : MC_TYPE[dishType(r)];
@@ -367,4 +375,4 @@ function dishImg(r, px = 40) {
   return `<img class="px dish" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
 
-export { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType, MC, mcIng, mcCherche };
+export { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, dishType, MC, mcIng, mcCherche, PERSO, brut };
