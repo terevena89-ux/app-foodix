@@ -1,5 +1,8 @@
 # Foodix — journal des nouveautés
 
+
+## 1.0.0 — 2026-11-25
+- Première version définitive (même contenu que la 0.21.0).
 ## 0.21.0 — 2026-11-23
 - Ingrédients au choix : « 4 chipolatas ou merguez ». L'icône est celle du premier. En ajoutant le plat à la liste depuis sa fiche, la fenêtre « Avant la liste de courses » demande lequel (le premier est choisi d'office). Un menu tiré au sort prend le premier ; on change dans le Menu, en touchant le plat (« Pour ce repas »). La liste de courses n'a que l'ingrédient choisi.
 - Ingrédients optionnels : écrire « (optionnel) », « option », « opt », « fac » ou « facultatif » au bout de la ligne. Petite étiquette « opt. » dans le formulaire, italique sur la fiche. Pris d'office ; « Pas cette fois » dans la question avant la liste ou dans « Pour ce repas » le retire de la liste.

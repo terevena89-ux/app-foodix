@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "0.21.0";
+const VERSION = "1.0.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
