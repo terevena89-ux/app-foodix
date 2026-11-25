@@ -1,6 +1,6 @@
 # Foodix — journal des nouveautés
 
-## 1.2.0 — 2026-11-25
+## 1.1.1 — 2026-11-25
 - Réglages › Icônes : « Foodix » (dessins de base) ou « Perso » (mes icônes d'atelier, sinon les textures Minecraft, sinon le dessin Foodix). Perso marche aussi sans textures importées. L'ancien choix « Minecraft » devient « Perso ».
 - Formulaire recette : toucher l'icône en haut ouvre l'atelier ; l'icône est enregistrée avec la recette (aussi pour une nouvelle recette).
 - Garder une icône d'atelier passe l'appareil en style Perso, pour la voir tout de suite.
