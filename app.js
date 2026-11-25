@@ -23,7 +23,7 @@ import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, a
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -525,7 +525,9 @@ const estOptionnel = t => !!t && !estSection(t) && RE_OPT.test(t);
 const sansOpt = t => (t || "").replace(RE_OPT, "").trim();
 // Ingrédient au choix : « 4 chipolatas ou merguez » (deux choix). La quantité du premier vaut pour le second s'il n'en a pas.
 function alternatives(t) {
-  const s = sansOpt(t), m = s.split(/\s+ou\s+/i);
+  const s = sansOpt(t);
+  if (nomCrochets(s)) return null;   // [Aubergine poêlée ou à la provençale] : un nom de plat, pas un choix
+  const m = s.split(/\s+ou\s+/i);
   if (m.length !== 2 || !m[0].trim() || !m[1].trim()) return null;
   const a = m[0].trim(), b = m[1].trim(), ia = parseItem(a), ib = parseItem(b);
   const prefixe = ia && ia.name ? a.slice(0, a.length - ia.name.length) : "";
@@ -542,7 +544,16 @@ function ingChoisi(t, choix) {
 const maj1 = v => String(v || "").charAt(0).toUpperCase() + String(v || "").slice(1);
 const ingPourIcone = t => { const a = alternatives(t); return a ? a[0] : sansOpt(t); };
 // Les questions d'un plat : ses lignes « ou » et optionnelles (et celles de ses accompagnements)
-const lignesAuChoix = r => ingsSeuls(r).filter(t => alternatives(t) || estOptionnel(t));
+// Plat assemblé ([Saumon]; [Riz]) : on descend dans ses plats et ses bases, comme articles() le fait pour la liste.
+const lignesAuChoix = (r, niveau = 0) => {
+  const out = [];
+  ingsSeuls(r).forEach(t => {
+    const b = niveau < 2 && sousRecette(t);
+    if (b && b !== r) out.push(...lignesAuChoix(b, estBase(b) ? 2 : niveau + 1));
+    else if (alternatives(t) || estOptionnel(t)) out.push(t);
+  });
+  return [...new Set(out)];
+};
 const nomCrochets = txt => { const m = /^\s*\[(.+)\]\s*$/.exec(txt || ""); return m ? m[1].trim() : null; };
 const recetteParNom = nom => S.recettes.find(r => norm(r.nom) === norm(nom));
 const sousRecette = txt => { const n = nomCrochets(txt); const r = n && recetteParNom(n); return r && r.ingredients ? r : null; };
@@ -1023,10 +1034,9 @@ function renderCourses() {
   const champ = $("#ajout-art"), tape = champ ? champ.value : "", avaitFocus = !!champ && document.activeElement === champ;
   const ajout = `<div class="ajout-art"><div class="srow"><label class="cherche">${icone("plus")}<input id="ajout-art" placeholder="Ajouter un article" autocomplete="off" enterkeyhint="done"></label>
     <button class="fab" data-act="ajouter-art" aria-label="Ajouter">${icone("check")}</button>
-    <button class="ib compact-b ${S.compact ? "on" : ""}" data-act="compact" aria-label="Liste compacte" aria-pressed="${!!S.compact}">${icone("rows")}</button></div><div class="deroul" id="sugg-art"></div></div>
-    <div class="outils3"><button class="btn" data-act="parcourir">${icone("grid")}Parcourir</button>
-      <button class="btn" data-act="nouvelle-liste">${icone("file-plus")}Nouvelle liste</button>
-      <button class="btn ${listeArchive() ? "" : "inactif"}" data-act="archive" aria-label="Liste précédente">${icone("history")}Précédente</button></div>`;  const finir = () => { // remet le champ comme il était
+    <button class="ib compact-b ${S.compact ? "on" : ""}" data-act="compact" aria-label="Liste compacte" aria-pressed="${!!S.compact}">${icone("rows")}</button>
+    <button class="ib compact-b" data-act="courses-plus" aria-label="Plus d'actions">${icone("more")}</button></div><div class="deroul" id="sugg-art"></div></div>`;
+  const finir = () => { // remet le champ comme il était
     const c = $("#ajout-art"); if (!c || !tape) return;
     c.value = tape; majSuggArt(); if (avaitFocus) c.focus();
   };
@@ -1060,10 +1070,10 @@ function renderCourses() {
       ${e.ajout ? `<button class="ib" data-retirer-art="${esc(e.nom)}" aria-label="Retirer">${icone("x")}</button>` : ""}
       ${!e.ajout ? `<button class="ib souris" data-masquer="${esc(e.cle)}" aria-label="Retirer de cette liste">${icone("x")}</button>` : ""}
       ${e.placard && !e.ajout ? `<button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui" aria-label="Finalement je l'ai (remettre au placard)">${icone("box")}</button>` : ""}</div>`;
-  const lignePlacard = e => `<div class="pl ${dispo[e.cle] === "oui" ? "fait" : ""}">
-      <div class="pl-h">${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length && !S.compact ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span></div>
-      <div class="pl-b"><button class="chip ${dispo[e.cle] === "oui" ? "on" : ""}" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui">${icone("check")}Je l'ai</button>
-        <button class="chip" data-act="dispo" data-cle="${esc(e.cle)}" data-v="non">${icone("cart")}Il me faut</button></div></div>`;
+  // Une ligne : coche = je l'ai (la ligne disparaît), panier = il me faut (rejoint son rayon)
+  const lignePlacard = e => `<div class="pl" data-k="${esc(e.cle)}">${imgIng(e.nom, 18)}<span class="w"><span class="nm">${esc(e.nom)}</span>${e.recettes.length && !S.compact ? `<span class="for">${esc(e.recettes.join(" · "))}</span>` : ""}</span><span class="q num">${esc(fmtQty(e.qte, e.unite))}</span>
+      <button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="oui" aria-label="Je l'ai">${icone("check")}</button>
+      <button class="ib" data-act="dispo" data-cle="${esc(e.cle)}" data-v="non" aria-label="Il me faut">${icone("cart")}</button></div>`;
   const tri = l => l.sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
   const cp = S.compact ? " compact" : "";
   let html = "";
@@ -1071,10 +1081,9 @@ function renderCourses() {
     html += `<div class="rayon${cp}"><h3>${aisleLabel(a)}</h3>${tri(groupes[a]).map(ligne).join("")}</div>`;
   });
   // Ce que j'ai peut-être déjà : replié en bas. Pour chacun : « je l'ai » ou « il me faut ».
-  if (placard.length) {
-    const aVerifier = placard.filter(e => !dispo[e.cle]).length;
-    html += `<details class="rayon placard${cp}" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier ? aVerifier + " à vérifier" : placard.length})</summary>${tri(placard).map(lignePlacard).join("")}</details>`;
-  }
+  const aVerifier = placard.filter(e => !dispo[e.cle]), dejaLa = placard.length - aVerifier.length;
+  if (aVerifier.length) html += `<details class="rayon placard${cp}" ${S.placardOuvert ? "open" : ""}><summary>${icone("right")}Peut-être au placard (${aVerifier.length})</summary>${tri(aVerifier).map(lignePlacard).join("")}</details>`;
+  if (dejaLa) html += `<button class="lien-btn remettre" data-act="placard-remettre">${icone("refresh")}${dejaLa} déjà au placard · remettre</button>`;
   if (panier.length) html += `<details class="rayon placard panier${cp}" ${S.panierOuvert ? "open" : ""}><summary>${icone("right")}Dans le panier (${panier.length})</summary>${tri(panier).map(ligne).join("")}</details>`;
   if (nbMasques) html += `<button class="lien-btn remettre" data-act="remettre-masques">${icone("refresh")}${nbMasques} ingrédient${nbMasques > 1 ? "s" : ""} retiré${nbMasques > 1 ? "s" : ""} · remettre</button>`;
   zl().innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
@@ -1086,8 +1095,21 @@ function renderCourses() {
 function definirDispo(cle, v) {
   const m = menuEnCours(); if (!m) return;
   m.dispo = m.dispo || {};
-  if (m.dispo[cle] === v) delete m.dispo[cle]; else m.dispo[cle] = v;
+  const avant = m.dispo[cle];
+  if (avant === v) delete m.dispo[cle]; else m.dispo[cle] = v;
   ecrireMenu(m); renderCourses();
+  if (m.dispo[cle] === "oui") { toast("Au placard", () => { if (avant) m.dispo[cle] = avant; else delete m.dispo[cle]; ecrireMenu(m); renderCourses(); }); }
+}
+// Menu « ⋯ » des Courses : Parcourir, Nouvelle liste, Précédente
+function menuCourses(btn) {
+  if ($("#menu-long")) return;   // déjà ouvert : ce clic le referme
+  const b = btn.getBoundingClientRect(), m = document.createElement("div");
+  m.id = "menu-long"; m.className = "menu-tri menu-long";
+  m.innerHTML = `<button data-act="parcourir">${icone("grid")}<span>Parcourir</span></button><button data-act="nouvelle-liste">${icone("file-plus")}<span>Nouvelle liste</span></button>`
+    + (listeArchive() ? `<button data-act="archive">${icone("history")}<span>Liste précédente</span></button>` : "");
+  document.body.appendChild(m);
+  m.style.left = Math.max(8, b.right - m.offsetWidth) + "px"; m.style.top = (b.bottom + 6) + "px";
+  vibrer("pas");
 }
 
 // Sous le champ d'ajout : les articles de la banque qui correspondent à ce qu'on tape.
@@ -1456,7 +1478,7 @@ function ouvrirBanque(choisir = false) {
     <div class="bq-hd"><button class="ib" data-act="bq-retour" aria-label="Retour">${icone("left")}</button><h2 id="bq-titre">Banque d'ingrédients</h2>
       ${choisir ? `<span class="spacer"></span><button class="btn pri" data-act="bq-retour">${icone("check")}OK</button>` : ""}</div>
     <div class="bq-barre" id="bq-barre">
-      <div class="srow" style="margin:0"><label class="cherche">${icone("search")}<input id="q-bq" placeholder="Chercher ou ajouter…" autocomplete="off" enterkeyhint="done"></label>
+      <div class="srow" style="margin:0"><label class="cherche">${icone("search")}<input id="q-bq" placeholder="${choisir ? "Chercher ou ajouter…" : "Chercher…"}" autocomplete="off" enterkeyhint="done"></label>
         <button class="fab" data-act="ajouter-banque" aria-label="Ajouter à la banque">${icone("plus")}</button></div>
       <div id="bq-onglets"></div></div>
     <div class="bq-corps" id="bq-corps"></div></div>`;
@@ -1510,7 +1532,7 @@ function htmlListeBanque(tous) {
     const l = liste.filter(e => e.rayon === r); if (!l.length) return;
     html += `<div class="rayon"><h3>${esc(libelleRayon(r))}</h3><div class="bq-grid">${l.map(e => S.bq.choisir
       ? `<button class="bq-t pick ${dansListe.has(e.cle) ? "on" : ""}" data-bq-pick="${esc(e.cle)}" aria-pressed="${dansListe.has(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc, e.menage)}<span class="nm">${esc(e.nom)}</span><span class="cb">${icone("check")}</span></button>`
-      : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc, e.menage)}<span class="nm">${esc(e.nom)}</span>${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
+      : `<button class="bq-t" data-bq-ouvrir="${esc(e.cle)}">${ingImg(e.nom, 18, e.icone, e.mc, e.menage)}<span class="nm">${esc(e.nom)}</span>${dansListe.has(e.cle) ? icone("cart", "rec") : ""}${e.placard ? icone("box", "rec") : ""}${e.rec ? icone("refresh", "rec") : ""}</button>`).join("")}</div></div>`;
   });
   if (!html) html = `<div class="vide" style="padding:28px 8px">${q ? "Rien ne correspond. Touche + pour l'ajouter." : S.bq.rec ? "Aucun article récurrent." : S.bq.placard ? "Rien au placard." : "Rien ici pour l'instant."}</div>`;
   return html;
@@ -1537,8 +1559,46 @@ function htmlFicheIngredient(e) {
   </div>`;
 }
 
-// « + » (ou Entrée) : ajoute ce qui est tapé, sauf si l'article existe déjà : on le montre alors
+// « + » de la banque (hors Parcourir) : petite fenêtre Nom / Type / Rayon (rayon vide = deviné d'après le nom)
+let bqa = null;
+function ouvrirAjoutBanque() {
+  bqa = { menage: S.bq.onglet === "menage", rayon: "" };
+  $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Nouvel article">
+    <div class="fi-hd"><h2 class="titre-r" style="flex:1">Nouvel article</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
+    <div class="champ"><label for="bqa-nom">Nom</label><input class="saisie" id="bqa-nom" value="${esc(($("#q-bq") || {}).value || "")}" autocomplete="off" enterkeyhint="done"></div>
+    <div id="bqa-corps" style="display:flex;flex-direction:column;gap:12px"></div>
+    <div class="pied2"><button class="btn" data-act="fermer">Annuler</button><button class="btn pri" data-act="bqa-ok">${icone("plus")}Ajouter</button></div></div></div>`;
+  majAjoutBanque();
+  const c = $("#bqa-nom"); c.focus(); c.setSelectionRange(c.value.length, c.value.length);
+}
+function majAjoutBanque() {
+  $("#bqa-corps").innerHTML = `<div class="seg bq-seg"><button class="${bqa.menage ? "" : "on"}" data-act="bqa-type" data-v="">Ingrédient</button><button class="${bqa.menage ? "on" : ""}" data-act="bqa-type" data-v="1">Produit ménager</button></div>
+    <div class="champ"><span class="lbl">Rayon</span><div class="pastilles"><button type="button" class="chip ${bqa.rayon ? "" : "on"}" data-act="bqa-rayon" data-v="">Auto</button>${rayonsDe(bqa.menage).map(r => `<button type="button" class="chip ${r === bqa.rayon ? "on" : ""}" data-act="bqa-rayon" data-v="${r}">${esc(libelleRayon(r))}</button>`).join("")}</div></div>`;
+}
+function validerAjoutBanque() {
+  const v = $("#bqa-nom").value.trim();
+  if (!v) return $("#bqa-nom").focus();
+  const ex = banque().find(e => e.cle === cleBanque(v));
+  fermer();
+  if (ex) { S.bq.onglet = ex.menage ? "menage" : "ing"; return ouvrirFicheBanque(ex.cle), toast("Déjà dans la banque"); }
+  const e = ajouterBanque(v, bqa.menage, bqa.rayon);
+  S.bq.onglet = e.menage ? "menage" : "ing";
+  const q = $("#q-bq"); if (q) q.value = "";
+  majBanque(); vibrer("ajout");
+  toast("Ajouté dans « " + libelleRayon(e.rayon) + " »");
+}
+// Appui long sur un article de la banque : il va dans la liste de courses en cours
+function commanderBanque(el) {
+  const e = banque().find(x => x.cle === el.dataset.bqOuvrir); if (!e) return;
+  const m = listeEnCours();
+  if ((m.ajouts || []).some(a => cleBanque(a) === e.cle)) return toast("Déjà dans la liste");
+  ajouterALaListe(e.nom, e.menage); majBanque(); vibrer("ajout");
+  toast("« " + e.court + " » dans la liste", () => { const l = listeEnCours(), i = l.ajouts.findIndex(a => cleBanque(a) === e.cle); if (i >= 0) { l.ajouts.splice(i, 1); ecrireMenu(l); } majBanque(); });
+}
+
+// Parcourir : « + » (ou Entrée) ajoute ce qui est tapé, sauf si l'article existe déjà : on le montre alors
 function ajouterDepuisBanque() {
+  if (!S.bq.choisir) return ouvrirAjoutBanque();
   const champ = $("#q-bq"), v = champ.value.trim();
   if (!v) return champ.focus();
   const ex = banque().find(e => e.cle === cleBanque(v));
@@ -1701,8 +1761,9 @@ function majListe() {
   // recherche sans résultat : le + devient « + Tajine » et ouvre le formulaire avec ce nom
   const fab = $("#fab-r"), q = S.f.q.trim();
   if (fab && !estPC()) {
+    // Recherche vide : le + est grisé et met dans la recherche (on y tape le nom de la nouvelle recette)
     const cree = !l.length && q;
-    fab.classList.toggle("large", !!cree); fab.dataset.act = cree ? "nouvelle-q" : "nouvelle";
+    fab.classList.toggle("large", !!cree); fab.classList.toggle("eteint", !q); fab.dataset.act = q ? "nouvelle-q" : "focus-q";
     fab.innerHTML = icone("plus") + (cree ? `<span>${esc(q.replace(/^./, c => c.toUpperCase()))}</span>` : "");
   }
   majCadre();
@@ -2802,9 +2863,7 @@ function changerOnglet(tab, depuisX = 0) {
   };
 }
 
-// Un seul doigt qui glisse à l'horizontale :
-//  - sur un article de la liste, vers la gauche : il suit le doigt, et passé un tiers de l'écran il est retiré ;
-//  - ailleurs : la page suit le doigt, et passé un quart de l'écran (ou d'un coup sec) on change d'onglet.
+// Un doigt qui glisse vers la gauche sur un article de la liste : il suit le doigt, et passé un tiers de l'écran il est retiré.
 // On ne touche à rien dans les champs, les rangées de pastilles qui défilent, les fenêtres et la banque.
 let geste = null;
 document.addEventListener("touchstart", e => {
@@ -2812,8 +2871,9 @@ document.addEventListener("touchstart", e => {
   if (e.touches.length !== 1 || !S.pret || $("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran")) return;
   const t = e.target;
   if (t.closest("header, #tabs, .toast, #modal, input, textarea, select, .defile, .pastilles, .sugg, .deroul, .poignee")) return;
-  const p = e.touches[0];
-  geste = { x0: p.clientX, y0: p.clientY, dx: 0, t0: Date.now(), mode: null, it: t.closest(".it"), seuil: false };
+  const p = e.touches[0], it = t.closest(".it");
+  if (!it) return;   // plus de glisser pour changer d'onglet (1.0.1) : seulement retirer un article
+  geste = { x0: p.clientX, y0: p.clientY, dx: 0, t0: Date.now(), mode: null, it, seuil: false };
 }, { passive: true });
 document.addEventListener("touchmove", e => {
   if (!geste) return;
@@ -2821,51 +2881,35 @@ document.addEventListener("touchmove", e => {
   if (!geste.mode) {
     if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { geste = null; return; }   // on fait défiler : pas un glissement
     if (Math.abs(dx) < 12) return;
-    geste.mode = geste.it && dx < 0 ? "article" : "page";
-    if (geste.mode === "article") geste.it.classList.add("glisse-g");
+    if (dx > 0) { geste = null; return; }
+    geste.mode = "article";
+    geste.it.classList.add("glisse-g");
   }
   e.preventDefault();
   geste.dx = dx;
   const w = innerWidth;
-  if (geste.mode === "article") {
-    const x = Math.min(0, dx);
-    geste.it.style.transform = `translateX(${x}px)`;
-    geste.it.style.setProperty("--g", Math.min(1, -x / (w * .33)));
-    const passe = -x > w * .33;
-    if (passe !== geste.seuil) { geste.seuil = passe; if (passe) vibrer("seuil"); geste.it.classList.toggle("pret", passe); }
-  } else {
-    const i = ORDRE_ONGLETS.indexOf(S.onglet), voisin = ORDRE_ONGLETS[i + (dx < 0 ? 1 : -1)];
-    const x = voisin ? dx : dx / 4;   // pas d'onglet de ce côté : ça résiste
-    $("#main").style.transform = `translateX(${x}px)`;
-    $("#main").style.opacity = 1 - Math.min(.5, Math.abs(x) / w);
-    const passe = !!voisin && Math.abs(dx) > w * .25;
-    if (passe !== geste.seuil) { geste.seuil = passe; if (passe) vibrer("seuil"); }
-  }
+  const x = Math.min(0, dx);
+  geste.it.style.transform = `translateX(${x}px)`;
+  geste.it.style.setProperty("--g", Math.min(1, -x / (w * .33)));
+  const passe = -x > w * .33;
+  if (passe !== geste.seuil) { geste.seuil = passe; if (passe) vibrer("seuil"); geste.it.classList.toggle("pret", passe); }
 }, { passive: false });
 function finGeste() {
   const g = geste; geste = null;
   if (!g || !g.mode) return;
   const w = innerWidth, rapide = Math.abs(g.dx) > 60 && Date.now() - g.t0 < 250;
-  if (g.mode === "article") {
-    const el = g.it;
-    if (-g.dx > w * .33 || (rapide && g.dx < 0)) {
-      const fin = () => { const a = el.dataset.ajout; a ? retirerArticle(a) : masquer(el.dataset.k); };
-      if (!animOK()) return fin();
-      el.animate([{ transform: el.style.transform }, { transform: `translateX(${-w}px)` }], { duration: 160, easing: "ease-in", fill: "forwards" }).onfinish = () => {
-        el.animate([{ height: el.offsetHeight + "px" }, { height: "0px", minHeight: "0px", paddingTop: 0, paddingBottom: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" }).onfinish = fin;
-      };
-    } else {
-      el.classList.remove("pret");
-      el.animate([{ transform: el.style.transform }, { transform: "none" }], { duration: 220, easing: RESSORT }).onfinish = () => { el.style.transform = ""; el.classList.remove("glisse-g"); };
-      el.style.transform = "";
-    }
-    return;
+  const el = g.it;
+  if (-g.dx > w * .33 || (rapide && g.dx < 0)) {
+    const fin = () => { const a = el.dataset.ajout; a ? retirerArticle(a) : masquer(el.dataset.k); };
+    if (!animOK()) return fin();
+    el.animate([{ transform: el.style.transform }, { transform: `translateX(${-w}px)` }], { duration: 160, easing: "ease-in", fill: "forwards" }).onfinish = () => {
+      el.animate([{ height: el.offsetHeight + "px" }, { height: "0px", minHeight: "0px", paddingTop: 0, paddingBottom: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" }).onfinish = fin;
+    };
+  } else {
+    el.classList.remove("pret");
+    el.animate([{ transform: el.style.transform }, { transform: "none" }], { duration: 220, easing: RESSORT }).onfinish = () => { el.style.transform = ""; el.classList.remove("glisse-g"); };
+    el.style.transform = "";
   }
-  const main = $("#main"), i = ORDRE_ONGLETS.indexOf(S.onglet), voisin = ORDRE_ONGLETS[i + (g.dx < 0 ? 1 : -1)];
-  main.style.opacity = "";
-  if (voisin && (Math.abs(g.dx) > w * .25 || rapide)) return changerOnglet(voisin, g.dx);
-  const x = main.style.transform; main.style.transform = "";
-  if (animOK()) main.animate([{ transform: x }, { transform: "none" }], { duration: 260, easing: RESSORT });
 }
 document.addEventListener("touchend", finGeste);
 document.addEventListener("touchcancel", finGeste);
@@ -3244,12 +3288,17 @@ document.addEventListener("click", e => {
     case "banque": ouvrirBanque(); break;
     case "completer": ouvrirCompleter(); break;
     case "ajouter-banque": ajouterDepuisBanque(); break;
+    case "bqa-type": bqa.menage = !!el.dataset.v; bqa.rayon = ""; majAjoutBanque(); break;
+    case "bqa-rayon": bqa.rayon = el.dataset.v; majAjoutBanque(); break;
+    case "bqa-ok": validerAjoutBanque(); break;
     case "bq-onglet": S.bq.onglet = el.dataset.v; majBanque(); break;
     case "bq-rec": S.bq.rec = !S.bq.rec; majBanque(); break;
     case "bq-placard": S.bq.placard = !S.bq.placard; majBanque(); break;
     case "bq-placard-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { placard: !e.placard }); majBanque(); } break; }
     case "dispo": vibrer(el.dataset.v === "oui" ? "coche" : "pas"); definirDispo(el.dataset.cle, el.dataset.v); break;
     case "remettre-masques": remettreMasques(); break;
+    case "courses-plus": menuCourses(el); break;
+    case "placard-remettre": { const m = menuEnCours(); if (m && m.dispo) { for (const k in m.dispo) if (m.dispo[k] === "oui") delete m.dispo[k]; ecrireMenu(m); renderCourses(); } break; }
     case "compact": S.compact = !S.compact; ecrireLocal("fx-compact", S.compact ? "1" : ""); vibrer("pas"); renderCourses(); break;
     case "bq-retour": retourBanque(); break;
     case "bq-rec-fiche": { const e = banque().find(x => x.cle === S.bq.detail); if (e) { majEntree(e.cle, { rec: !e.rec }); majBanque(); } break; }
@@ -3322,6 +3371,7 @@ document.addEventListener("click", e => {
     case "ordre-cats": ouvrirOrdreCats(); break;
     case "ordre-defaut": delete S.prefs.ordreCats; sauverPrefs(); vibrer("pas"); ouvrirOrdreCats(); break;
     case "effacer-q": S.f.q = ""; renderRecettes(); break;
+    case "focus-q": { const q = $("#q"); if (q) q.focus(); break; }
     case "fermer": if (formModifie() && !el.dataset.force) { demanderAbandon(); break; }
       if ($("#modal").dataset.filtres) { delete $("#modal").dataset.filtres; flip("#liste [data-k]", renderRecettes); } fermerDoux(); break;
     case "fermer-fond": if (t === el) { delete $("#modal").dataset.filtres; fermerDoux(); } break; // toucher le fond grisé ferme, pas la fiche elle-même
@@ -3386,6 +3436,7 @@ appuiLong(".barre-r [data-bascule]", el => {
   bu.querySelector("i").style.left = (cx - gauche - 5) + "px";
   setTimeout(() => bu.remove(), 1800);
 });
+appuiLong(".bq-t[data-bq-ouvrir]", commanderBanque);
 // Appui long sur l'onglet Recettes : Ingrédients (la banque) et Nouvelle recette
 appuiLong('#tabs button[data-tab="recettes"]', el => {
   const b = el.getBoundingClientRect(), m = document.createElement("div");
@@ -3400,6 +3451,17 @@ const tactile = matchMedia("(pointer: coarse)");
 const champFo = el => el && el.matches && el.matches(".fo-corps input, .fo-corps textarea");
 document.addEventListener("focusin", e => { if (tactile.matches && champFo(e.target) && $(".fo") && !$(".fo-abandon")) $(".fo").classList.add("clavier"); });
 document.addEventListener("focusout", () => setTimeout(() => { const f = $(".fo"); if (f && !champFo(document.activeElement)) f.classList.remove("clavier"); }, 60));
+// Android : fermer le clavier (flèche du bas) ne fait pas perdre le champ (pas de focusout), le pied restait caché.
+// On repère le clavier à la hauteur de la fenêtre (interactive-widget=resizes-content) : revenue à sa taille = clavier fermé.
+let hautMax = innerHeight, clavierVu = false;
+addEventListener("resize", () => {
+  hautMax = Math.max(hautMax, innerHeight);
+  const f = $(".fo"); if (!f || !f.classList.contains("clavier")) { clavierVu = false; return; }
+  if (innerHeight < hautMax * .8) { clavierVu = true; return; }
+  if (!clavierVu) return;
+  clavierVu = false; f.classList.remove("clavier");
+  if (champFo(document.activeElement)) document.activeElement.blur();
+});
 // Toucher une suggestion ne doit pas faire perdre le champ en cours (le clavier reste ouvert)
 document.addEventListener("mousedown", e => { if (e.target.closest && e.target.closest(".sugg-ing, #sugg-art")) e.preventDefault(); });
 document.addEventListener("keydown", e => {
@@ -3415,6 +3477,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.id === "cp-ing") { e.preventDefault(); cpIngredient(e.target.value); return; }
   if (e.key === "Escape" && $("#cp-ecran")) { fermerCompleter(); return; }
   if (e.key === "Enter" && e.target.id === "bq-nom") { e.preventDefault(); e.target.blur(); return; }
+  if (e.key === "Enter" && e.target.id === "bqa-nom") { e.preventDefault(); validerAjoutBanque(); return; }
   // Échap ferme une fiche, mais pas le formulaire (pour ne pas perdre une saisie)
   if (e.key === "Escape" && $("#modal").innerHTML && !$("#modal").dataset.form) fermer();
   else if (e.key === "Escape" && S.bq.ouvert && !$("#modal").innerHTML) retourBanque();
@@ -3422,17 +3485,28 @@ document.addEventListener("keydown", e => {
 
 /* ---------- Bouton Retour d'Android ---------- */
 // Le navigateur a un « historique » (la pile des pages visitées). Retour = dépiler une page.
-// Dès qu'une fenêtre ou un écran s'ouvre, on empile une fausse page : Retour la dépile
-// et on ferme la fenêtre du dessus, au lieu de quitter l'appli. Rien d'ouvert : Retour quitte, comme d'habitude.
+// Dès qu'une fenêtre ou un écran s'ouvre, on empile des fausses pages : chaque Retour en dépile une
+// et ferme la fenêtre du dessus, au lieu de quitter l'appli. Rien d'ouvert : Retour quitte, comme d'habitude.
 // (Un « observateur » regarde la page changer, ce qui évite de toucher à chaque fonction qui ouvre quelque chose.)
-let gardeRetour = false, ignorerPop = false, retourFormT = 0;
-const quelqueChoseOuvert = () => !!($("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran") || $(".ni-ecran"));
+// Piège (1.0.1) : Chrome saute au Retour une page ajoutée sans toucher l'écran. Re-empiler après un Retour
+// (formulaire « Encore Retour », sous-écran) faisait donc quitter l'appli au Retour suivant.
+// D'où une réserve de pages, posée seulement juste après un toucher (userActivation).
+const RESERVE = 3;
+let pile = (history.state && history.state.fx) || 0, ignorerPop = false, retourFormT = 0;
+const quelqueChoseOuvert = () => !!($("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran") || $(".ni-ecran") || $("#menu-tri") || $("#menu-long"));
 function majGardeRetour() {
-  const ouvert = quelqueChoseOuvert();
-  if (ouvert && !gardeRetour) { history.pushState({ foodix: 1 }, ""); gardeRetour = true; }
-  else if (!ouvert && gardeRetour) { gardeRetour = false; ignorerPop = true; history.back(); } // fermé par un bouton : on retire la fausse page
+  if (ignorerPop) return;
+  const ouvert = quelqueChoseOuvert(), touche = !navigator.userActivation || navigator.userActivation.isActive;
+  if (ouvert && pile < RESERVE && touche) while (pile < RESERVE) history.pushState({ fx: ++pile }, "");
+  else if (!ouvert && pile > 0) { ignorerPop = true; const n = pile; pile = 0; history.go(-n); } // fermé par un bouton : on retire les fausses pages
 }
 function fermerDessus() {
+  // petits menus d'abord (tri, appui long, ⋯, variantes, listes du formulaire)
+  if ($("#menu-tri")) return fermerTri();
+  if ($("#menu-long")) return $("#menu-long").remove();
+  const petit = ["#menu3", "#var-menu"].map(s => $(s)).find(m => m && !m.hidden);
+  if (petit) { petit.hidden = true; return; }
+  if (ldOuvert) return fermerLd();
   const notes = $(".ni-ecran [data-ni='retour']");
   if (notes) return notes.click();
   const md = $("#modal");
@@ -3451,10 +3525,11 @@ function fermerDessus() {
   if (S.bq.ouvert) return retourBanque();
 }
 window.addEventListener("popstate", () => {
-  if (ignorerPop) { ignorerPop = false; return; }
-  gardeRetour = false;
+  const n = (history.state && history.state.fx) || 0;
+  if (ignorerPop) { ignorerPop = false; pile = n; setTimeout(majGardeRetour, 50); return; }
+  pile = n;
   fermerDessus();
-  setTimeout(majGardeRetour, 50); // encore quelque chose d'ouvert (fenêtre sur la banque…) : on remet une fausse page
+  setTimeout(majGardeRetour, 50); // encore quelque chose d'ouvert : on complète la réserve si on vient de toucher l'écran
 });
 let gardeRetourPrevue = false;
 new MutationObserver(() => {

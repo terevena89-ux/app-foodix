@@ -1,8 +1,17 @@
 # Foodix — journal des nouveautés
 
+## 1.0.1 — 2026-11-25
+- Formulaire : Annuler / Enregistrer reviennent quand on ferme le clavier (ils restaient cachés après avoir tapé dans les notes).
+- Plat assemblé : ses ingrédients au choix et optionnels sont demandés aussi avant la liste de courses.
+- Courses : Parcourir, Nouvelle liste et Précédente rangés dans un menu « ⋯ ». « Peut-être au placard » sur une ligne (coche = je l'ai, panier = il me faut) ; ce qui est déjà au placard disparaît (« Annuler », ou « remettre » en bas).
+- Plus de glisser pour changer d'onglet (le glisser vers la gauche pour retirer un article reste).
+- Recettes : le « + » est grisé tant que la recherche est vide (il met dans la recherche : on y tape le nom).
+- Touche Retour du téléphone : ferme les fenêtres une à une (formulaire, sous-écrans, banque, petits menus) au lieu de quitter l'appli.
+- Banque : appui long sur un article = il va dans la liste de courses (petit panier sur l'article). Le « + » ouvre une petite fenêtre Nom / Type / Rayon.
 
 ## 1.0.0 — 2026-11-25
 - Première version définitive (même contenu que la 0.21.0).
+
 ## 0.21.0 — 2026-11-23
 - Ingrédients au choix : « 4 chipolatas ou merguez ». L'icône est celle du premier. En ajoutant le plat à la liste depuis sa fiche, la fenêtre « Avant la liste de courses » demande lequel (le premier est choisi d'office). Un menu tiré au sort prend le premier ; on change dans le Menu, en touchant le plat (« Pour ce repas »). La liste de courses n'a que l'ingrédient choisi.
 - Ingrédients optionnels : écrire « (optionnel) », « option », « opt », « fac » ou « facultatif » au bout de la ligne. Petite étiquette « opt. » dans le formulaire, italique sur la fiche. Pris d'office ; « Pas cette fois » dans la question avant la liste ou dans « Pour ce repas » le retire de la liste.

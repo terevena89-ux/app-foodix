@@ -297,15 +297,13 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .it.fait img { opacity: .45; }
 .placard summary { list-style: none; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--discret); padding: 6px 0; cursor: pointer; }
 .placard summary::-webkit-details-marker { display: none; }
-.pl { padding: 6px 0; border-bottom: 1px solid var(--trait); display: flex; flex-direction: column; gap: 6px; }
-.pl-h { display: flex; align-items: center; gap: 8px; }
-.pl-h .w { flex: 1; min-width: 0; }
-.pl-h .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-.pl-h .for { font-size: 11.5px; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-.pl-h .q { font-weight: 800; white-space: nowrap; }
-.pl-b { display: flex; gap: 6px; padding-left: 28px; }
-.pl-b .chip { height: 36px; padding: 0 14px; font-size: 13px; }
-.pl.fait .pl-h { opacity: .5; }
+.pl { display: flex; align-items: center; gap: 8px; padding: 2px 0; min-height: 44px; border-bottom: 1px solid var(--trait); }
+.pl:last-child { border-bottom: 0; }
+.pl .w { flex: 1; min-width: 0; }
+.pl .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.pl .for { font-size: 11.5px; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.pl .q { font-weight: 800; white-space: nowrap; }
+.pl .ib { width: 36px; height: 36px; color: var(--discret); }
 .placard summary .ic { width: 15px; height: 15px; transition: transform .15s; }
 .placard[open] summary .ic { transform: rotate(90deg); }
 /* ---------- Banque d'ingrédients et articles récurrents (v0.5.0) ---------- */
@@ -382,8 +380,6 @@ button.dr:active, .dr-l:active, .dr-b:active { background: var(--creux); }
 .act.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-encre); }
 .act.pri .ic { color: inherit; }
 /* Les 3 boutons sous le champ d'ajout de la liste */
-.outils3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 14px; }
-.outils3 .btn { padding: 0 6px; font-size: 13px; gap: 5px; min-width: 0; }
 .btn.inactif { opacity: .5; }
 /* Parcourir la banque : toucher pour ajouter (coche verte = dans la liste) */
 .bq-t.pick .cb { width: 22px; height: 22px; border: 1.8px solid var(--trait); border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; color: var(--accent-encre); }
@@ -637,8 +633,7 @@ body.pc .accepte { height: 30px; }
 .rayon.compact .it .cb { width: 22px; height: 22px; }
 .rayon.compact .it .cb .ic { width: 14px; height: 14px; }
 .rayon.compact .it .ib { width: 34px; height: 34px; }
-.rayon.compact .pl { padding: 3px 0; gap: 3px; }
-.rayon.compact .pl-b .chip { height: 30px; }
+.rayon.compact .pl { min-height: 36px; padding: 1px 0; }
 
 /* ---------- v0.18.0 : listes déroulantes de l'appli ---------- */
 /* Une pastille teintée (couleur du tag) qui déplie un panneau. Vide : « + Origine » sur fond gris léger. */
@@ -894,6 +889,7 @@ body.pc .fo .bsc, body.pc .fo .ld-b { height: 32px; }
 .srow .fab { width: 40px; height: 40px; border-radius: 999px; box-shadow: 0 4px 12px rgb(45 106 76 / .28); }
 .srow .fab.large { width: auto; padding: 0 14px 0 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 800; font-size: 14px; max-width: 45%; }
 .srow .fab.large span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .fab.eteint { opacity: .35; box-shadow: none; }
 .vide .cree-q { margin-top: 12px; border-radius: 999px; height: 42px; padding: 0 16px; }
 /* Rangée sans défilement : tri, entonnoir | 5 icônes */
 .barre-r { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; min-width: 0; }
