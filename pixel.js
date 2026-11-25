@@ -204,7 +204,7 @@ function mainColor(spr){
    Les images ne sont PAS dans le code (dépôt public, textures de Mojang / Farmer's Delight) :
    elles sont importées par l'utilisateur et gardées dans Firebase. app.js remplit MC.tex et MC.actif.
    Ordre : texture choisie dans la banque > nom de l'ingrédient (MC_ING) > famille du dessin Foodix (MC_FAMILLE) > dessin Foodix. */
-const MC={actif:false, tex:{}};
+const MC={actif:false, perso:false, tex:{}};  // perso : icônes de l'atelier affichées (style « Perso » de l'appareil)
 // Noms de textures : Minecraft / Farmer's Delight / Expanded & Ocean's Delight / Pam's HarvestCraft 2 (suffixe -pam en cas de doublon).
 // "" = rien d'adapté : on garde le dessin Foodix (et on bloque les règles plus générales en dessous).
 const MC_ING=[
@@ -326,7 +326,7 @@ const brut=f=>{ persoOff=true; try{ return f(); } finally{ persoOff=false; } };
 const persoBalise=(p,px,cls)=>`<img class="px ${p.pixel?"":"lisse "}${cls}" src="${p.src}" width="${px}" height="${px}" alt="">`;
 
 function ingImg(name, px=22, icone, mc, menage){
-  const pe=!persoOff && PERSO["i:"+(parseItem(name)?.key||norm(name))]; if(pe) return persoBalise(pe, px, "");
+  const pe=MC.perso && !persoOff && PERSO["i:"+(parseItem(name)?.key||norm(name))]; if(pe) return persoBalise(pe, px, "");
   const t=mcIng(name, icone, mc, menage); if(t) return mcBalise(t, px, "px");
   const s=(icone && SPR[icone]) ? {name:icone,map:{}} : ingSprite(name); const key="i|"+s.name+JSON.stringify(s.map);
   if(!spriteCache.has(key)) spriteCache.set(key, drawGrid(SPR[s.name],12,s.map));
@@ -351,7 +351,7 @@ function dishType(r){
 // Dessin d'une recette : un gabarit (bol, poêle…) rempli avec la couleur
 // des 3 premiers ingrédients qui ne viennent pas du placard.
 function dishImg(r, px = 40) {
-  const pe = !persoOff && PERSO["r:" + r.id]; if (pe) return persoBalise(pe, px, "dish");
+  const pe = MC.perso && !persoOff && PERSO["r:" + r.id]; if (pe) return persoBalise(pe, px, "dish");
   if (MC.actif) {
     const n = norm(r.nom || r.id.replace(/-/g, " ")), m = MC_PLAT.find(([re]) => re.test(n));
     const t = r.mc && MC.tex[r.mc] ? r.mc : m && MC.tex[m[1]] ? m[1] : MC_TYPE[dishType(r)];

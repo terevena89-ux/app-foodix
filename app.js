@@ -24,7 +24,7 @@ import { ouvrirAtelier, fermerAtelier, atelierOuvert } from "./atelier.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.1.0";
+const VERSION = "1.1.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -156,7 +156,8 @@ function atelierPour(cle, nom, r, apres) {
   const avant = PERSO[cle] || null;
   const mes = [...new Set(Object.values(PERSO).map(x => x.p && x.p.web && x.p.web.src).filter(Boolean))];
   ouvrirAtelier({ nom, recette: r, actuel: avant, mes, toast,
-    garder: ico => { sauverIcone(cle, ico); render(); apres(); toast("Icône enregistrée", () => { avant ? sauverIcone(cle, avant) : effacerIcone(cle); render(); apres(); }); },
+    garder: ico => { sauverIcone(cle, ico); if (styleIcones() !== "perso") { ecrireLocal("fx-icones", "perso"); appliquerIcones(); }  // sinon on ne verrait pas l'icône faite
+      render(); apres(); toast("Icône enregistrée", () => { avant ? sauverIcone(cle, avant) : effacerIcone(cle); render(); apres(); }); },
     effacer: () => { effacerIcone(cle); render(); apres(); toast("Icône par défaut", () => { sauverIcone(cle, avant); render(); apres(); }); } });
 }
 
@@ -2088,7 +2089,21 @@ function ouvrirVariante() {
 }
 function fermerVariante() { if (ldOuvert === "fo-famille") fermerLd(); const el = $("#fo-var"); if (el) el.remove(); majSousTitre(); }
 
+// Icône choisie dans le formulaire : gardée de côté jusqu'à « Enregistrer » (undefined = pas touchée, null = icône par défaut)
+let iconeForm;
+const imgForm = r => {
+  const ico = iconeForm !== undefined ? iconeForm : r.id && PERSO["r:" + r.id];
+  return ico && styleIcones() === "perso" || iconeForm ? `<img class="px ${ico.pixel ? "" : "lisse "}dish" src="${ico.src}" width="30" height="30" alt="">` : brut(() => dishImg(r, 30));
+};
+function atelierFormulaire() {
+  const r = lireFormulaire(), avant = iconeForm !== undefined ? iconeForm : (r.id && PERSO["r:" + r.id]) || null;
+  const maj = () => { const b = $(".fo-plat"); if (b) b.innerHTML = imgForm(r) + `<span class="crayon">${icone("pen")}</span>`; };
+  ouvrirAtelier({ nom: r.nom || "Nouvelle recette", recette: r, actuel: avant, toast,
+    mes: [...new Set(Object.values(PERSO).map(x => x.p && x.p.web && x.p.web.src).filter(Boolean))],
+    garder: ico => { iconeForm = ico; maj(); }, effacer: () => { iconeForm = null; maj(); } });
+}
 function ouvrirFormulaire(brouillon, titre) {
+  iconeForm = undefined;
   const r = brouillon;
   S.fo = { v: { categorie: r.categorie || "", saison: r.saison || "", origine: r.origine || "", preparation: r.preparation || "" }, famille: r.famille || "", variante: r.variante || "" };
   ldOuvert = null; ldSaisie = false;
@@ -2099,7 +2114,7 @@ function ouvrirFormulaire(brouillon, titre) {
   if (r.id) m.dataset.recette = r.id; else delete m.dataset.recette;
   // En-tête et pied fixes, seul le milieu défile
   m.innerHTML = `<div class="voile"><div class="fiche form fo" role="dialog" aria-label="${titre}">
-    <div class="fo-hd"><span class="fo-plat">${dishImg(r, 30)}</span>
+    <div class="fo-hd"><button type="button" class="fo-plat bqf-ic fi-ic" data-act="form-icone" aria-label="Changer l'icône">${imgForm(r)}<span class="crayon">${icone("pen")}</span></button>
       <div class="fo-titre"><small>${titre}</small><input id="f-nom" value="${esc(r.nom)}" placeholder="Nom de la recette" autocomplete="off" aria-label="Nom"><div id="fo-sous">${htmlSousTitre()}</div></div>
       <button type="button" class="ib fo-etoile ${r.favori ? "on" : ""}" data-case="favori" aria-label="Favori" title="Favori">${icone("star")}</button>
       <button type="button" class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
@@ -2271,6 +2286,9 @@ function enregistrer() {
     delete r.varianteDe;
   }
   ecrireRecette(r);
+  if (iconeForm) { sauverIcone("r:" + r.id, iconeForm); if (styleIcones() !== "perso") { ecrireLocal("fx-icones", "perso"); appliquerIcones(); } }
+  else if (iconeForm === null && PERSO["r:" + r.id]) effacerIcone("r:" + r.id);
+  iconeForm = undefined;
   vibrer("ajout");
   render();
   ouvrirFiche(r.id);
@@ -2409,7 +2427,7 @@ function ouvrirReglages() {
     <div class="fi-hd"><h2 class="titre-r" style="flex:1">Réglages</h2><button class="ib" data-act="fermer" aria-label="Fermer">${icone("x")}</button></div>
     <div class="sect">Apparence</div>
     <button class="reg" data-act="themes"><span>Thème</span><span class="val">${th[1]} ›</span></button>
-    <button class="reg" data-act="icones"><span>Icônes</span><span class="val">${lireLocal("fx-icones", "foodix") === "minecraft" ? "Minecraft" : "Foodix"} ›</span></button>
+    <button class="reg" data-act="icones"><span>Icônes</span><span class="val">${styleIcones() === "perso" ? "Perso" : "Foodix"} ›</span></button>
     <div class="reg"><span>Animations</span><span class="seg">
       <button class="${anim === "completes" ? "on" : ""}" data-act="anim" data-v="completes">Complètes</button>
       <button class="${anim === "simples" ? "on" : ""}" data-act="anim" data-v="simples">Simples</button></span></div>
@@ -2443,11 +2461,13 @@ function ouvrirThemes() {
 }
 
 // Icônes : style de CET appareil (comme le thème) ; les textures, elles, sont synchronisées
-const mcActif = () => lireLocal("fx-icones", "foodix") === "minecraft" && Object.keys(MC.tex).length > 0;
-function appliquerIcones() { MC.actif = mcActif(); }
+// « perso » = mes icônes d'atelier, sinon les textures Minecraft, sinon Foodix (l'ancien réglage « minecraft » vaut « perso »)
+const styleIcones = () => lireLocal("fx-icones", "foodix") === "foodix" ? "foodix" : "perso";
+const mcActif = () => styleIcones() === "perso" && Object.keys(MC.tex).length > 0;
+function appliquerIcones() { MC.actif = mcActif(); MC.perso = styleIcones() === "perso"; }
 function ouvrirIcones() {
   const c = lireLocal("fx-icones", "foodix"), n = Object.keys(MC.tex).length;
-  const choix = [["foodix", "Foodix", ""], ["minecraft", "Minecraft", n ? "" : "Importer d'abord des textures"]];
+  const choix = [["foodix", "Foodix", "Dessins de base"], ["perso", "Perso", "Mes icônes, sinon Minecraft"]];
   $("#modal").innerHTML = `<div class="voile" data-act="fermer-fond"><div class="fiche" role="dialog" aria-label="Icônes">
     <button class="retour" data-act="reglages">‹ Réglages</button>
     <h2 class="titre-r">Icônes</h2>
@@ -2490,7 +2510,7 @@ async function importerTextures(fichiers) {
   if (!n) return toast("Aucune texture trouvée");
   MC.tex = Object.assign({}, MC.tex, neuf);
   sauverTextures();
-  if (lireLocal("fx-icones", "foodix") !== "minecraft") ecrireLocal("fx-icones", "minecraft");  // on vient d'importer : on veut voir le résultat
+  if (styleIcones() !== "perso") ecrireLocal("fx-icones", "perso");  // on vient d'importer : on veut voir le résultat
   appliquerIcones(); render(); ouvrirIcones();
   toast(n + " texture" + (n > 1 ? "s" : "") + " importée" + (n > 1 ? "s" : ""));
 }
@@ -2877,7 +2897,7 @@ function confirmerImport(el) {
   const neuves = Object.fromEntries(bq.filter(l => l.tex).map(l => [l.mc, l.tex]));
   if (Object.keys(neuves).length) {
     MC.tex = Object.assign({}, MC.tex, neuves); sauverTextures();
-    if (lireLocal("fx-icones", "foodix") !== "minecraft") ecrireLocal("fx-icones", "minecraft");  // les images du fichier ne s'affichent qu'en style Minecraft
+    if (styleIcones() !== "perso") ecrireLocal("fx-icones", "perso");  // les images du fichier ne s'affichent qu'en style Minecraft
     appliquerIcones();
   }
   const b = fusionBanque(bq, false, mode);  // après les recettes : les ingrédients des nouvelles recettes sont déjà connus
@@ -3364,6 +3384,7 @@ document.addEventListener("click", e => {
     case "nouvelle": nouvelle(); break;
     case "menu3": $("#menu3").hidden = !$("#menu3").hidden; break;
     case "modifier": modifier(); break;
+    case "form-icone": atelierFormulaire(); break;
     case "rec-icone": { const id = $("#modal").dataset.recette, r = S.recettes.find(x => x.id === id); if (r) atelierPour("r:" + id, r.nom, r, () => ouvrirFiche(id)); break; }
     case "ing-atelier": { const e = banque().find(x => x.cle === S.bq.detail); fermerIconesIng(); if (e) atelierPour("i:" + e.cle, e.court || e.nom, null, majBanque); break; }
     case "dupliquer": dupliquer(); break;
@@ -3618,6 +3639,7 @@ if ("serviceWorker" in navigator && !MODE_DEMO && location.protocol === "https:"
 // Mode démo uniquement : accès pour les tests automatiques (préparer et vérifier un fichier Excel)
 if (MODE_DEMO) window.foodixTest = { S, lireBanque, fusionBanque, banque, classeurRecettes, lireRecettes, fusion, render, candidats, articles, cocher, masquer, dejaPris, estMasque, menuEnCours, listeEnCours, repasListe, renderCourses };
 
+appliquerIcones();
 if (MODE_DEMO) demarrerDemo(); else demarrerFirebase();
 
 // Le placard replié/ouvert reste comme on l'a laissé quand la liste se redessine
