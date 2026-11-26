@@ -353,7 +353,7 @@ function dishType(r){
 function dishImg(r, px = 40) {
   const pe = MC.perso && !persoOff && PERSO["r:" + r.id]; if (pe) return persoBalise(pe, px, "dish");
   if (MC.actif) {
-    const n = norm(r.nom || r.id.replace(/-/g, " ")), m = MC_PLAT.find(([re]) => re.test(n));
+    const n = norm(r.nom || (r.id || "").replace(/-/g, " ")), m = MC_PLAT.find(([re]) => re.test(n));
     const t = r.mc && MC.tex[r.mc] ? r.mc : m && MC.tex[m[1]] ? m[1] : MC_TYPE[dishType(r)];
     if (MC.tex[t]) return mcBalise(t, px, "px dish");
   }
