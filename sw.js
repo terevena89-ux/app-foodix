@@ -4,7 +4,7 @@
 // même sans réseau. (Les données, elles, sont gérées par Firebase.)
 // À CHAQUE NOUVELLE VERSION : changer le numéro ci-dessous.
 // =========================================================
-const CACHE = "foodix-v1.2.1";
+const CACHE = "foodix-v1.2.2";
 // Bibliothèques à version fixe (Firebase, ExcelJS, polices) : cache à part, jamais effacé par une mise à jour.
 // Avant 1.2.0 elles partaient avec l'ancien cache : sans réseau juste après une mise à jour, l'appli ne s'ouvrait plus.
 const LIBS = "foodix-libs";
@@ -13,7 +13,7 @@ const LIBS_DEPART = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.
 
 // Fichiers de l'appli à garder dès l'installation
 const FICHIERS = [
-  "./", "index.html", "style.css", "app.js", "champs-mobile.js", "notes-idees.js", "pixel.js", "atelier.js", "excel-style.js", "firebase-config.js",
+  "./", "index.html", "theme.js", "style.css", "app.js", "champs-mobile.js", "notes-idees.js", "pixel.js", "atelier.js", "excel-style.js", "firebase-config.js",
   "manifest.json", "icones/icone.svg", "icones/icone-192.png", "icones/icone-512.png", "icones/icone-maskable-512.png"
 ];
 
@@ -61,7 +61,8 @@ self.addEventListener("fetch", e => {
 
   if (FIXES.includes(url.hostname)) {
     e.respondWith(
-      caches.match(req).then(copie => copie || fetch(req).then(rep => {
+      // Copie « opaque » (gardée avant 1.2.2) refusée pour une demande vérifiée (ExcelJS avec empreinte) : on la redemande
+      caches.match(req).then(copie => copie && !(copie.type === "opaque" && req.mode === "cors") ? copie : fetch(req).then(rep => {
         if (rep.ok || rep.type === "opaque") {   // une erreur passagère ne doit pas rester gardée pour toujours
           const clone = rep.clone();
           caches.open(LIBS).then(c => c.put(req, clone));

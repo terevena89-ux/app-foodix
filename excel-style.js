@@ -6,6 +6,8 @@
 
 // Bibliothèque ExcelJS, version fixe (pour que rien ne casse un jour).
 const EXCELJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+// Empreinte du fichier (celle publiée par cdnjs) : si le fichier servi a été modifié, le navigateur refuse de le lancer
+const EXCELJS_SRI = "sha512-dlPw+ytv/6JyepmelABrgeYgHI0O+frEwgfnPdXDTOIZz+eDgfW07QXG02/O8COfivBdGNINy+Vex+lYmJ5rxw==";
 
 // Couleurs communes (format ARGB : FF + code couleur)
 const COULEURS = {
@@ -23,6 +25,7 @@ export function chargerExcelJS() {
   return new Promise((ok, ko) => {
     const s = document.createElement("script");
     s.src = EXCELJS_URL;
+    s.integrity = EXCELJS_SRI; s.crossOrigin = "anonymous";
     s.onload = () => ok(window.ExcelJS);
     s.onerror = () => ko(new Error("Impossible de charger ExcelJS (pas de réseau ?)"));
     document.head.appendChild(s);

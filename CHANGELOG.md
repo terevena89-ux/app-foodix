@@ -1,5 +1,15 @@
 # Foodix — journal des nouveautés
 
+## 1.2.2 — 2026-11-27
+Fin des correctifs de l'audit : suppression de recette (B6, B7, E9) et sécurité (A6, A7, A8, A9).
+- Supprimer une recette retire aussi son icône perso et ses propositions du menu (« Annuler » remet tout). Le nombre de propositions ne compte plus les recettes disparues.
+- Enregistrer une recette sans ingrédient ou avec un nom déjà pris : un message prévient, un 2e appui sur Enregistrer confirme.
+- Liste des sites autorisés (CSP) : seul le code de l'appli, de Firebase et d'ExcelJS peut se lancer. Le réglage du thème passe dans un petit fichier `theme.js`.
+- ExcelJS vérifié par son empreinte avant d'être lancé.
+- Textes et images reçus de la base mieux contrôlés (apostrophes, images en data: seulement).
+- Se déconnecter efface aussi la copie des données gardée sur l'appareil (refusé tant que des modifs attendent le réseau).
+- `.gitignore` : fichiers de test et rapports jamais publiés par erreur.
+
 ## 1.2.1 — 2026-11-27
 Suite des correctifs de l'audit (A4, A5, B3, B5, C2, E3, E10, F1, F2).
 - Réglages › Excel : la ligne Exporter dit quand a eu lieu le dernier export. Au-delà de 30 jours (ou jamais), petit rappel au lancement, une fois par semaine au plus.

@@ -16,7 +16,7 @@
 const FB = "https://www.gstatic.com/firebasejs/12.4.0/";
 let initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut,
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, deleteField;
+  collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, deleteField, terminate, clearIndexedDbPersistence;
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
 import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, MC, mcCherche, PERSO, brut } from "./pixel.js";
@@ -24,7 +24,7 @@ import { ouvrirAtelier, fermerAtelier, atelierOuvert } from "./atelier.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.2.1";
+const VERSION = "1.2.2";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -294,15 +294,17 @@ function ecouter() {
     // Passage du tableau « banque » à la carte « bqm » (1.2.0), une fois, sur une copie venue du serveur
     if (!estObj(d.bqm) && Array.isArray(d.banque) && !snap.metadata.fromCache) sauverBanque();
   }, err => console.error(err)));
+  // Images reçues : seulement des images en data: (jamais une adresse ou du code glissé dans un src)
+  const estImage = v => typeof v === "string" && v.startsWith("data:image/");
   arrets.push(onSnapshot(collTextures(), snap => {
     const tex = {};
-    snap.docs.forEach(d => Object.assign(tex, d.data().tex || {}));
+    snap.docs.forEach(d => Object.entries(d.data().tex || {}).forEach(([k, v]) => { if (estImage(v)) tex[k] = v; }));
     nbMorceaux = Math.max(nbMorceaux, snap.docs.length);
     if (JSON.stringify(tex) !== JSON.stringify(MC.tex)) { MC.tex = tex; appliquerIcones(); rerendre(); }
   }, err => console.error(err)));
   arrets.push(onSnapshot(collIcones(), snap => {
     const recu = {};
-    snap.docs.forEach(d => { const x = d.data(); if (x.cle && x.src) recu[x.cle] = x; });
+    snap.docs.forEach(d => { const x = d.data(); if (x.cle && estImage(x.src)) recu[x.cle] = x; });
     if (JSON.stringify(recu) !== JSON.stringify(PERSO)) { Object.keys(PERSO).forEach(k => delete PERSO[k]); Object.assign(PERSO, recu); rerendre(); }
   }, err => console.error(err)));
   arrets.push(onSnapshot(refAvantImport(), snap => { S.avantImport = snap.exists() ? snap.data() : null; }, err => console.error(err)));
@@ -314,7 +316,7 @@ async function chargerFirebase() {
   const [a, au, fs] = await Promise.all(["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map(f => import(FB + f)));
   ({ initializeApp } = a);
   ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } = au);
-  ({ initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, deleteField } = fs);
+  ({ initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, deleteField, terminate, clearIndexedDbPersistence } = fs);
 }
 
 async function demarrerFirebase() {
@@ -346,6 +348,15 @@ function ecranSansAcces(err) {
     <div class="vide-act">${refus ? "" : `<button class="btn pri" data-act="recharger">Réessayer</button>`}<button class="btn${refus ? " pri" : ""}" data-act="deconnexion">Changer de compte</button></div></div>`;
 }
 
+// Déconnexion : efface aussi la copie des données gardée sur l'appareil. Pas tant que des modifs attendent d'être envoyées (elles seraient perdues).
+async function deconnecter() {
+  if (enAttente && S.pret) return toast("Des modifs ne sont pas encore envoyées : attends le réseau");
+  fermer(); S.pret = false;
+  arrets.splice(0).forEach(f => f());
+  try { await signOut(auth); await terminate(db); await clearIndexedDbPersistence(db); } catch (e) { console.error(e); }
+  location.reload();
+}
+
 async function seConnecter(btn) {
   const fournisseur = new GoogleAuthProvider();
   btn.disabled = true;
@@ -361,7 +372,7 @@ async function seConnecter(btn) {
 /* ---------- 3. Utilitaires ---------- */
 
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const icone = (nom, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24"><use href="#i-${nom}"/></svg>`;
 function lireLocal(k, defaut) { try { return localStorage.getItem(k) || defaut; } catch (e) { return defaut; } }
 function ecrireLocal(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* stockage bloqué : vaut pour cette fois */ } }
@@ -476,7 +487,7 @@ function render() {
   if (estPC()) { renderCote(); renderRecettes(); renderPanneau(); majCadre(); return; }
   const m = menuEnCours();
   const titres = {
-    menu: ["Menu", S.propo.repas.length ? S.propo.repas.length + " proposition" + (S.propo.repas.length > 1 ? "s" : "") : ""],
+    menu: ["Menu", nbPropo() ? nbPropo() + " proposition" + (nbPropo() > 1 ? "s" : "") : ""],
     courses: ["Liste de courses", m ? "du " + new Date(m.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : ""],
     recettes: ["Recettes", S.recettes.length ? S.recettes.length + " recette" + (S.recettes.length > 1 ? "s" : "") : ""]
   };
@@ -558,7 +569,7 @@ function renderCote() {
 
 function renderPanneau() {
   if (!estPC()) return;
-  const m = menuEnCours(), n = S.propo.repas.length;
+  const m = menuEnCours(), n = nbPropo();
   const sous = S.ponglet === "menu" ? (n ? n + " proposition" + (n > 1 ? "s" : "") : "")
     : (m ? "du " + new Date(m.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "");
   $("#p-tete").innerHTML = `<span class="seg">${[["courses", "Liste"], ["menu", "Menu"]].map(([k, t]) =>
@@ -604,6 +615,8 @@ appliquerPC();
 const menuEnCours = () => S.menus[S.menus.length - 1] || null;
 const listeArchive = () => S.menus.length > 1 ? S.menus[S.menus.length - 2] : null;
 const recette = id => S.recettes.find(r => r.id === id);
+// Compte affiché : sans les propositions dont la recette a été supprimée (ailleurs, ou avant 1.2.2)
+const nbPropo = () => S.propo.repas.filter(p => recette(p.id)).length;
 const estPlat = r => /plat complet|principal/.test(norm(r.categorie));
 // Bases (sous-recettes) : une recette de catégorie « Base », appelée dans une autre en écrivant son nom entre crochets : [Pâte brisée maison].
 // Un seul niveau (les crochets dans une base sont lus comme un ingrédient normal). Jamais proposées dans le menu.
@@ -2017,15 +2030,22 @@ function finFicheIng() {
 }
 
 // Supprime tout de suite, avec « Annuler » pendant quelques secondes
+// Supprimer : part aussi son icône perso (sinon reprise par une future recette du même id) et ses propositions du menu
 function supprimer() {
   const r = S.recettes.find(x => x.id === $("#modal").dataset.recette);
   if (!r) return;
+  const cle = "r:" + r.id, ico = PERSO[cle], propoAvant = S.propo.repas.slice();
   S.recettes = S.recettes.filter(x => x !== r);
   effacerRecette(r.id);
+  if (ico) effacerIcone(cle);
+  S.propo.repas = S.propo.repas.filter(p => p.id !== r.id);
+  if (S.propo.repas.length !== propoAvant.length) sauverPropo();
   fermer(); render();
   toast("Recette supprimée", () => {
     S.recettes.push(r);
     ecrireRecette(r);
+    if (ico) sauverIcone(cle, ico);
+    if (S.propo.repas.length !== propoAvant.length) { S.propo.repas = propoAvant; sauverPropo(); }
     render();
   });
 }
@@ -2335,9 +2355,21 @@ function lireFormulaire() {
   return r;
 }
 
+// Recette sans ingrédient ou nom déjà pris : on prévient, et un 2e appui sur Enregistrer (dans les 8 s) confirme
+let aConfirmer = null;
 function enregistrer() {
   const r = lireFormulaire();
   if (!r.nom) { toast("Il faut un nom"); $("#f-nom").focus(); return; }
+  const doute = S.recettes.some(x => x.id !== r.id && norm(x.nom) === norm(r.nom)) ? "Ce nom existe déjà"
+    : !(r.ingredients || []).length ? "Aucun ingrédient" : null;
+  if (doute) {
+    const cle = doute + "|" + norm(r.nom);
+    if (!aConfirmer || aConfirmer.cle !== cle || Date.now() - aConfirmer.t > 8000) {
+      aConfirmer = { cle, t: Date.now() };
+      vibrer("retire"); return toast(doute + " : touche encore Enregistrer pour confirmer");
+    }
+  }
+  aConfirmer = null;
   if (!r.id) {
     // Nouvelle recette : identifiant tiré du nom, sans doublon
     r.id = nouvelId(r.nom);
@@ -3469,7 +3501,7 @@ document.addEventListener("click", e => {
       break;
     }
     case "connexion": seConnecter(el); break;
-    case "deconnexion": fermer(); S.pret = false; signOut(auth); break;
+    case "deconnexion": deconnecter(); break;
     case "recharger": location.reload(); break;
     case "aller-recettes": changerOnglet("recettes"); break;
     case "reglages": ouvrirReglages(); break;

@@ -8,7 +8,7 @@ import { ICONES, ingImg, dishImg, dishType, MC, mcIng, mcCherche, norm, parseIte
 
 const $a = s => document.querySelector("#atelier " + s);
 const ic = n => `<svg class="ic" viewBox="0 0 24 24"><use href="#i-${n}"/></svg>`;
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const srcDe = html => (String(html).match(/src="([^"]+)"/) || [])[1];
 
 /* ---------- Couleurs ---------- */

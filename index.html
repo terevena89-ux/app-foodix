@@ -2,6 +2,10 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<!-- CSP : liste des sites d'où l'appli a le droit de charger du code et vers lesquels elle peut envoyer des données.
+     Si une faille laissait passer du code étranger, il ne pourrait ni se lancer ni envoyer les données ailleurs.
+     Firebase : gstatic (code), googleapis (base + connexion), firebaseapp / accounts.google (fenêtre de connexion), apis.google (outil de connexion). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://www.gstatic.com https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; frame-src https://mes-applis-8bbd7.firebaseapp.com https://accounts.google.com; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <!-- Pas de zoom (ni pincer, ni double-toucher) : l'appli est calée sur la largeur du téléphone -->
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Foodix</title>
@@ -13,17 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<script>
-  // Thème et animations choisis sur CET appareil, appliqués avant l'affichage (évite un flash blanc).
-  // « auto » (par défaut) : suit le réglage clair / sombre du téléphone ou du PC.
-  (function () {
-    var t = 'auto', a = 'completes';
-    try { t = localStorage.getItem('fx-theme') || 'auto'; a = localStorage.getItem('fx-anim') || 'completes'; } catch (e) { /* stockage bloqué */ }
-    var sombre = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.dataset.theme = t === 'auto' ? (sombre ? 'sombre' : 'clair') : t;
-    document.documentElement.dataset.anim = a;
-  })();
-</script>
+<script src="theme.js"></script>
 </head>
 <body>
 <header>
