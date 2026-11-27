@@ -24,7 +24,7 @@ import { ouvrirAtelier, fermerAtelier, atelierOuvert } from "./atelier.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -270,8 +270,8 @@ function ecouter() {
   arrets.push(onSnapshot(collRecettes(), { includeMetadataChanges: true }, snap => {
     majSynchro(snap.metadata);
     const recu = snap.docs.map(d => d.data());
-    if (JSON.stringify(recu) !== JSON.stringify(S.recettes)) { S.recettes = recu; migrerTags(); rerendre(); }
-    if (!S.pret) { S.pret = true; render(); }
+    if (JSON.stringify(recu) !== JSON.stringify(S.recettes)) { S.recettes = recu; if (!snap.metadata.fromCache) migrerTags(); rerendre(); }   // migrations : jamais sur une copie locale, elle peut être périmée
+    if (!S.pret) { S.pret = true; render(); setTimeout(rappelExport, 3000); }
   }, err => { console.error(err); if (!S.pret) ecranSansAcces(err); else toast("Accès refusé aux données"); }));
   arrets.push(onSnapshot(collMenus(), snap => {
     const recu = snap.docs.map(d => d.data()).sort((a, b) => a.cree - b.cree);
@@ -288,7 +288,7 @@ function ecouter() {
     if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours) || stable(carteBanque(bq)) !== stable(carteBanque(S.banque))
       || JSON.stringify(pr) !== JSON.stringify(S.propo) || JSON.stringify(hi) !== JSON.stringify(S.histo)) {
       S.prefs = p; S.toujours = tj; S.banque = bq; S.propo = pr; S.histo = hi;
-      migrerToujours();
+      if (!snap.metadata.fromCache) migrerToujours();
       rerendre();
     }
     // Passage du tableau « banque » à la carte « bqm » (1.2.0), une fois, sur une copie venue du serveur
@@ -323,7 +323,7 @@ async function demarrerFirebase() {
     // Pas de réseau à la toute première ouverture, ou serveurs de Google injoignables
     $("#titre").textContent = "Foodix";
     $("#main").innerHTML = `<div class="vide">Impossible de joindre le serveur.<br>Vérifie le réseau.
-      <div><button class="btn pri" onclick="location.reload()">Réessayer</button></div></div>`;
+      <div class="vide-act"><button class="btn pri" data-act="recharger">Réessayer</button></div></div>`;
     return;
   }
   const app = initializeApp(firebaseConfig);
@@ -354,7 +354,7 @@ async function seConnecter(btn) {
   } catch (e) {
     // Fenêtre de connexion bloquée : on passe par une redirection
     if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, fournisseur);
-    else if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") toast("Connexion impossible (" + e.code + ")");
+    else if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") { console.error(e); toast(e.code === "auth/network-request-failed" ? "Pas de réseau, réessaie" : "Connexion impossible, réessaie"); }
   } finally { btn.disabled = false; }
 }
 
@@ -368,6 +368,14 @@ function ecrireLocal(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 
 const parNom = (a, b) => a.nom.localeCompare(b.nom, "fr");
 // Identifiant tiré du nom : « Bœuf bourguignon » -> « boeuf-bourguignon » (jamais de « / »)
 const idDe = nom => norm(nom).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "recette";
+// Nouvelle recette : suffixe au hasard, sinon deux « Tarte » créées hors ligne sur deux appareils prenaient le même id (la 2e écrasait la 1re)
+function nouvelId(nom) {
+  let id;
+  do id = idDe(nom) + "-" + Math.random().toString(36).slice(2, 6); while (S.recettes.some(x => x.id === id));
+  return id;
+}
+// « Annuler » : repartir de la liste du moment (une synchro a pu remplacer l'objet gardé dans la fonction)
+const actuel = m => S.menus.find(x => x.id === m.id) || m;
 
 // Message en bas de l'écran ; annuler = fonction appelée si on touche « Annuler »
 let toastT;
@@ -750,22 +758,29 @@ function accepter(i, choixFait) {
   voler($(`.rp.propo [data-repas="${i}"] img`) || $("#modal .fi-hd img"));
   const m = listeEnCours();
   S.propo.repas.splice(i, 1);
-  m.repas.push(repasListe(x));
+  const r = repasListe(x);
+  m.repas.push(r);
   sauverPropo(); ecrireMenu(m); fermer(); render();
-  toast("Ajouté à la liste", () => { m.repas.pop(); S.propo.repas.splice(i, 0, x); sauverPropo(); ecrireMenu(m); render(); });
+  toast("Ajouté à la liste", () => { ecrireMenu(enleverRepas(m, [r])); S.propo.repas.splice(i, 0, x); sauverPropo(); render(); });
 }
 function accepterTout(choixFait) {
   const l = S.propo.repas; if (!l.length) return;
   if (!choixFait) return demanderBases(l, () => accepterTout(true));
-  const m = listeEnCours(), n = m.repas.length;
+  const m = listeEnCours(), ajoutes = l.map(repasListe);
   vibrer("gros");
   document.querySelectorAll(".rp.propo .rp-btn img").forEach((img, k) => voler(img, k * 90));
-  l.forEach(x => m.repas.push(repasListe(x)));
+  m.repas.push(...ajoutes);
   S.propo.repas = [];
   sauverPropo(); ecrireMenu(m); render();
-  toast(l.length + " plat" + (l.length > 1 ? "s" : "") + " dans la liste", () => { m.repas.splice(n); S.propo.repas = l; sauverPropo(); ecrireMenu(m); render(); });
+  toast(l.length + " plat" + (l.length > 1 ? "s" : "") + " dans la liste", () => { ecrireMenu(enleverRepas(m, ajoutes)); S.propo.repas = l; sauverPropo(); render(); });
 }
 
+// Annuler un ajout : retire ces plats de la liste du moment (les derniers du même id), pas « les n derniers » d'une copie périmée
+function enleverRepas(m, ajoutes) {
+  const mm = actuel(m);
+  ajoutes.forEach(r => { const k = mm.repas.findLastIndex(y => y.id === r.id && (y.side || null) === r.side); if (k >= 0) mm.repas.splice(k, 1); });
+  return mm;
+}
 // Un plat qui entre dans la liste : { id, side, fait, achete: [bases achetées toutes prêtes] }
 const repasListe = x => { const o = { id: x.id, side: x.side || null, fait: false }; if (x.sides) o.sides = x.sides; if (x.achete && x.achete.length) o.achete = x.achete; if (x.choix) o.choix = x.choix; return o; };
 
@@ -832,7 +847,7 @@ function renderMenu() {
       <span class="pas"><span class="l">${icone("users")}</span><button data-act="pers" data-v="-1" aria-label="Moins de personnes">−</button><b class="num">${p.pers}</b><button data-act="pers" data-v="1" aria-label="Plus de personnes">+</button></span>
       <span class="spacer"></span><button class="btn pri" data-act="nouveau-menu">${icone("shuffle")}Nouveau menu</button></div>
     <div class="defile">${pastille("vege", "leaf", "Végé")}${pastille("rapide", "clock", "Rapide")}${pastille("avance", "box", "Lunchbox")}${pastille("invites", "glass", "Invités")}</div>`;
-  if (!S.recettes.length) { zl().innerHTML = `<div class="vide">Ajoute d’abord des recettes (onglet Recettes).</div>`; return; }
+  if (!S.recettes.length) { zl().innerHTML = `<div class="vide">Pas encore de recettes pour tirer un menu.<div class="vide-act"><button class="btn pri" data-act="aller-recettes">${icone("book")}Aller aux recettes</button></div></div>`; return; }
   const infos = (r, s) => `${dishImg(r, 30)}<span class="txt"><span class="nm">${esc(r.nom)}</span>${s ? `<span class="side">+ ${esc(s)}</span>` : ""}</span>
         <span class="ri">${r.favori ? icone("star", "fav") : ""}${r.vege ? icone("leaf", "acc") : ""}</span>`;
   const propos = pr.map((x, i) => {
@@ -1029,8 +1044,7 @@ function assemblerAuMenu() {
 function assemblerGarder() {
   const { princ, accs } = repasAssemble(), p = recette(princ), as = accs.map(recette).filter(Boolean); if (!p || !as.length) return;
   const nom = nomAssemble(p, as);
-  let id = idDe(nom), n = 2;
-  while (S.recettes.some(x => x.id === id)) id = idDe(nom) + "-" + n++;
+  const id = nouvelId(nom);
   const r = { id, nom, categorie: "Plat complet", assemble: true, portions: p.portions || 2, ingredients: [p, ...as].map(x => "[" + x.nom + "]"), ingredientsSource: "app",
     favori: false, vege: !!(p.vege && as.every(x => x.vege)), prep: false, date: false };
   ["saison", "origine"].forEach(k => { if (p[k]) r[k] = p[k]; });
@@ -1183,7 +1197,7 @@ function definirDispo(cle, v) {
   const avant = m.dispo[cle];
   if (avant === v) delete m.dispo[cle]; else m.dispo[cle] = v;
   ecrireMenu(m); renderCourses();
-  if (m.dispo[cle] === "oui") { toast("Au placard", () => { if (avant) m.dispo[cle] = avant; else delete m.dispo[cle]; ecrireMenu(m); renderCourses(); }); }
+  if (m.dispo[cle] === "oui") { toast("Au placard", () => { const mm = actuel(m); mm.dispo = mm.dispo || {}; if (avant) mm.dispo[cle] = avant; else delete mm.dispo[cle]; ecrireMenu(mm); renderCourses(); }); }
 }
 // Menu « ⋯ » des Courses : Parcourir, Nouvelle liste, Précédente
 function menuCourses(btn) {
@@ -1191,7 +1205,8 @@ function menuCourses(btn) {
   const b = btn.getBoundingClientRect(), m = document.createElement("div");
   m.id = "menu-long"; m.className = "menu-tri menu-long";
   m.innerHTML = `<button data-act="parcourir">${icone("grid")}<span>Parcourir</span></button><button data-act="nouvelle-liste">${icone("file-plus")}<span>Nouvelle liste</span></button>`
-    + (listeArchive() ? `<button data-act="archive">${icone("history")}<span>Liste précédente</span></button>` : "");
+    + (listeArchive() ? `<button data-act="archive">${icone("history")}<span>Liste précédente</span></button>` : "")
+    + `<button data-act="banque">${icone("carrot")}<span>Banque d'ingrédients</span></button>`;   // sur le tel, seul autre accès : appui long sur l'onglet Recettes
   document.body.appendChild(m);
   m.style.left = Math.max(8, b.right - m.offsetWidth) + "px"; m.style.top = (b.bottom + 6) + "px";
   vibrer("pas");
@@ -1293,7 +1308,7 @@ function masquer(cle) {
   const e = articles(m).find(x => x.cle === cle);
   m.masques = Object.assign({}, m.masques, { [cle]: e ? marque(e) : true });
   vibrer("retire"); ecrireMenu(m); renderCourses();
-  toast("Ingrédient retiré", () => { delete m.masques[cle]; ecrireMenu(m); flip(zid() + " .it", renderCourses); });
+  toast("Ingrédient retiré", () => { const mm = actuel(m); mm.masques = Object.assign({}, mm.masques); delete mm.masques[cle]; ecrireMenu(mm); flip(zid() + " .it", renderCourses); });
 }
 function remettreMasques() {
   const m = menuEnCours(); if (!m) return;
@@ -1304,7 +1319,7 @@ function retirerArticle(nom) {
   const i = (m.ajouts || []).indexOf(nom); if (i < 0) return;
   m.ajouts.splice(i, 1); vibrer("retire");
   ecrireMenu(m); renderCourses();
-  toast("Article retiré", () => { m.ajouts.splice(i, 0, nom); ecrireMenu(m); renderCourses(); });
+  toast("Article retiré", () => { const mm = actuel(m); mm.ajouts = mm.ajouts || []; if (!mm.ajouts.includes(nom)) mm.ajouts.splice(Math.min(i, mm.ajouts.length), 0, nom); ecrireMenu(mm); renderCourses(); });
 }
 
 /* ---------- 4 ter bis. Nouvelle liste et liste précédente ---------- */
@@ -2325,9 +2340,7 @@ function enregistrer() {
   if (!r.nom) { toast("Il faut un nom"); $("#f-nom").focus(); return; }
   if (!r.id) {
     // Nouvelle recette : identifiant tiré du nom, sans doublon
-    let id = idDe(r.nom), n = 2;
-    while (S.recettes.some(x => x.id === id)) id = idDe(r.nom) + "-" + n++;
-    r.id = id;
+    r.id = nouvelId(r.nom);
     S.recettes.push(r);
   } else {
     S.recettes = S.recettes.map(x => x.id === r.id ? r : x);
@@ -2493,7 +2506,7 @@ function ouvrirReglages() {
     <div class="sect">Idées</div>
     <button class="reg" data-act="idees"><span>Notes</span><span class="val">›</span></button>
     <div class="sect">Excel</div>
-    <button class="reg" data-act="exporter"><span>${icone("download")} Exporter</span><span class="val">›</span></button>
+    <button class="reg" data-act="exporter"><span>${icone("download")} Exporter</span><span class="val">${depuisExport()} ›</span></button>
     <label class="reg"><span>${icone("upload")} Importer</span><span class="val">›</span><input type="file" id="fichier" accept=".xlsx" hidden></label>
     <div id="imp"></div>
     ${S.avantImport && Array.isArray(S.avantImport.recettes) ? `<button class="reg" data-act="restaurer-import"><span>${icone("history")} Restaurer avant l'import</span><span class="val">${dateCourte(S.avantImport.quand)} ›</span></button>` : ""}
@@ -2660,10 +2673,22 @@ async function classeurRecettes() {
   if (fams.length) ajouterFeuille(wb, "Familles", [{ header: "Famille", key: "famille", width: 20 }, { header: "Variantes", key: "variantes", width: 36 }, { header: "Ingrédients communs", key: "communs", width: 90 }], fams, { hauteur: HAUTEUR_XL, figer: 1 });
   return wb;
 }
+// Date du dernier export (par appareil) : seule vraie sauvegarde hors de Firebase, d'où le rappel au-delà de 30 jours
+const JOUR = 864e5;
+const joursDepuisExport = () => { const t = +lireLocal("fx-dernier-export", 0); return t ? Math.floor((Date.now() - t) / JOUR) : null; };
+function depuisExport() {
+  const j = joursDepuisExport();
+  return j === null ? "jamais" : j === 0 ? "aujourd'hui" : j === 1 ? "hier" : "il y a " + j + " j";
+}
+function rappelExport() {
+  if (MODE_DEMO || !S.recettes.length) return;
+  const j = joursDepuisExport(), vu = +lireLocal("fx-rappel-export", 0);
+  if ((j === null || j > 30) && Date.now() - vu > 7 * JOUR) { ecrireLocal("fx-rappel-export", String(Date.now())); toast(j === null ? "Pense à exporter une copie Excel" : "Dernier export Excel il y a " + j + " jours"); }
+}
 async function exporter(btn) {
   btn.disabled = true;
-  try { await telechargerClasseur(await classeurRecettes(), NOM_APPLI); toast("Fichier téléchargé"); }
-  catch (e) { toast("Export impossible : " + (e && e.message || e)); }
+  try { await telechargerClasseur(await classeurRecettes(), NOM_APPLI); ecrireLocal("fx-dernier-export", String(Date.now())); toast("Fichier téléchargé"); const v = btn.querySelector(".val"); if (v) v.textContent = depuisExport() + " ›"; }
+  catch (e) { console.error(e); toast("Export impossible, réessaie"); }
   finally { btn.disabled = false; }
 }
 
@@ -2948,7 +2973,7 @@ async function importerFichier(fichier) {
     const bouton = (m, titre, cls = "") => `<button class="btn imp-mode ${cls}" data-act="confirmer-import" data-mode="${m}"><b>${titre}</b><small>${detail(m)}</small></button>`;
     box.innerHTML = `<div class="imp-modes">${bouton("ajout", "Ajouter le nouveau", "pri")}${bouton("fusion", "Fusionner")}${bouton("remplacer", "Tout remplacer", "danger-btn")}</div>`;
   } catch (e) {
-    box.innerHTML = `<div class="infos">Impossible de lire ce fichier (${esc(e && e.message || e)}).</div>`;
+    box.innerHTML = `<div class="infos">Impossible de lire ce fichier. Est-ce bien un export Excel de Foodix ?</div>`;
   }
 }
 function confirmerImport(el) {
@@ -3446,6 +3471,7 @@ document.addEventListener("click", e => {
     case "connexion": seConnecter(el); break;
     case "deconnexion": fermer(); S.pret = false; signOut(auth); break;
     case "recharger": location.reload(); break;
+    case "aller-recettes": changerOnglet("recettes"); break;
     case "reglages": ouvrirReglages(); break;
     case "themes": ouvrirThemes(); break;
     case "icones": ouvrirIcones(); break;

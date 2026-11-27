@@ -1,5 +1,17 @@
 # Foodix — journal des nouveautés
 
+## 1.2.1 — 2026-11-27
+Suite des correctifs de l'audit (A4, A5, B3, B5, C2, E3, E10, F1, F2).
+- Réglages › Excel : la ligne Exporter dit quand a eu lieu le dernier export. Au-delà de 30 jours (ou jamais), petit rappel au lancement, une fois par semaine au plus.
+- Deux recettes de même nom créées hors ligne sur deux appareils ne s'écrasent plus (identifiant avec un petit suffixe).
+- « Annuler » (ajout au menu, article retiré, au placard) repart de la liste du moment : il n'efface plus une modif arrivée entre-temps.
+- Anciennes conversions de données : plus jamais lancées sur une copie locale périmée.
+- Courses › ⋯ : accès direct à la Banque d'ingrédients.
+- Messages plus clairs (pas de réseau, fichier illisible) ; menu sans recettes : bouton « Aller aux recettes ».
+- Écran de chargement : lignes grises qui pulsent au lieu de « Chargement… ».
+- Thème sombre sur PC : palette ardoise commune (au lieu du vert-gris).
+- Hors ligne : l'icône Android est aussi gardée en copie.
+
 ## 1.2.0 — 2026-11-27
 Correctifs de l'audit du 2026-11-27 (A1, A2, B1, B2, E2).
 - Synchro : une coche, un ajout ou un réglage d'article n'envoie plus que ce qui a changé. Une modif faite hors ligne sur le téléphone n'efface plus ce qui a été ajouté entre-temps sur le PC. La banque est rangée autrement dans la base (passage automatique, une fois).

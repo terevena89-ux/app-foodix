@@ -4,7 +4,7 @@
 // même sans réseau. (Les données, elles, sont gérées par Firebase.)
 // À CHAQUE NOUVELLE VERSION : changer le numéro ci-dessous.
 // =========================================================
-const CACHE = "foodix-v1.2.0";
+const CACHE = "foodix-v1.2.1";
 // Bibliothèques à version fixe (Firebase, ExcelJS, polices) : cache à part, jamais effacé par une mise à jour.
 // Avant 1.2.0 elles partaient avec l'ancien cache : sans réseau juste après une mise à jour, l'appli ne s'ouvrait plus.
 const LIBS = "foodix-libs";
@@ -14,7 +14,7 @@ const LIBS_DEPART = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.
 // Fichiers de l'appli à garder dès l'installation
 const FICHIERS = [
   "./", "index.html", "style.css", "app.js", "champs-mobile.js", "notes-idees.js", "pixel.js", "atelier.js", "excel-style.js", "firebase-config.js",
-  "manifest.json", "icones/icone.svg", "icones/icone-192.png", "icones/icone-512.png"
+  "manifest.json", "icones/icone.svg", "icones/icone-192.png", "icones/icone-512.png", "icones/icone-maskable-512.png"
 ];
 
 // IMPORTANT : GitHub autorise le téléphone à garder chaque fichier 10 minutes

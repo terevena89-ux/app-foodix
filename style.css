@@ -98,6 +98,11 @@ main { overflow-x: clip; padding: 0 16px calc(104px + env(safe-area-inset-bottom
 .vide { text-align: center; color: var(--discret); padding: 48px 16px; }
 .vide .btn { margin-top: 14px; }
 .vide-act { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+/* Chargement : lignes grises qui pulsent (coupées par « Animations simples » et « moins d'animations ») */
+.squelette { display: grid; gap: 10px; padding: 16px 12px; }
+.squelette i { display: block; height: 46px; border-radius: 12px; background: var(--creux); animation: pulse 1.1s ease-in-out infinite alternate; }
+.squelette i:nth-child(2) { width: 82%; } .squelette i:nth-child(4) { width: 64%; }
+@keyframes pulse { from { opacity: 1; } to { opacity: .45; } }
 
 /* ---------- Boutons, pastilles, champs ---------- */
 .btn { border: 1px solid var(--trait); background: var(--carte); border-radius: 10px; height: 42px; padding: 0 14px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
@@ -525,9 +530,10 @@ body.pc {
   max-width: none; height: 100vh; overflow: hidden; font-size: 13.5px;
   display: grid; grid-template-columns: var(--lc, 210px) minmax(0, 1fr) 0; grid-template-rows: 100vh;
 }
+/* Sombre PC (1.2.1) : la palette commune ardoise (body.pc clair la redéfinit, il faut donc la remettre), seule la barre de gauche change */
 :root[data-theme="sombre"] body.pc {
-  --fond: #151A16; --carte: #1B211C; --creux: #242C25; --encre: #EBEBE8; --discret: #97A096; --trait: #29312A;
-  --side: #18261C; --side-encre: #E4EBDD; --side-discret: #8FA38C;
+  --fond: #171C24; --carte: #1F2531; --creux: #262D3B; --encre: #DFE4EC; --discret: #8B95A7; --trait: #2B3342;
+  --side: #1B2430; --side-encre: #DFE4EC; --side-discret: #8B95A7;
 }
 body.pc.p-vis { grid-template-columns: var(--lc, 210px) minmax(0, 1fr) var(--lp, 380px); }
 body.pc > header, body.pc > #tabs { display: none; }
