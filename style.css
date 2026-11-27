@@ -97,6 +97,7 @@ header {
 main { overflow-x: clip; padding: 0 16px calc(104px + env(safe-area-inset-bottom, 0px)); }
 .vide { text-align: center; color: var(--discret); padding: 48px 16px; }
 .vide .btn { margin-top: 14px; }
+.vide-act { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
 /* ---------- Boutons, pastilles, champs ---------- */
 .btn { border: 1px solid var(--trait); background: var(--carte); border-radius: 10px; height: 42px; padding: 0 14px; font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
@@ -163,6 +164,10 @@ select.chip { appearance: none; -webkit-appearance: none; padding-right: 22px; f
 .sect { font: 800 11px var(--texte); text-transform: uppercase; letter-spacing: .07em; color: var(--discret); margin: 6px 0 -4px; }
 .reg { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 40px; padding: 6px 10px; border: 1px solid var(--trait); border-radius: 8px; background: var(--fond); text-align: left; }
 .reg .val { color: var(--discret); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+label.reg { cursor: pointer; }
+#imp:empty { display: none; }
+.reg.sur { border-color: var(--danger); }
+.reg.sur .val { color: var(--danger); font-weight: 800; }
 .seg { display: flex; gap: 2px; background: var(--creux); padding: 2px; border-radius: 7px; }
 .seg button { border: 0; background: none; padding: 4px 9px; border-radius: 5px; font-size: 12.5px; font-weight: 700; color: var(--discret); }
 .seg button.on { background: var(--carte); color: var(--encre); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
@@ -286,11 +291,10 @@ input.chip.autre { border-style: solid; color: var(--encre); outline: none; widt
 .it .q { font-weight: 800; white-space: nowrap; }
 .it .ib { width: 38px; height: 38px; margin-right: -8px; }
 .it .ib .ic { width: 15px; height: 15px; }
-/* Croix « retirer » des ingrédients des recettes : seulement avec une souris, au survol de la ligne
-   (au doigt, on glisse). Elle garde sa place même cachée, pour que la quantité ne saute pas. */
-.it .souris { display: none; }
+/* Croix « retirer » : toujours visible au doigt (1.2.0, plus de glisser) ; avec une souris, au survol de la ligne.
+   Cachée, elle garde sa place pour que la quantité ne saute pas. */
 @media (hover: hover) and (pointer: fine) {
-  .it .souris { display: grid; visibility: hidden; }
+  .it .souris { visibility: hidden; }
   .it:hover .souris, .it .souris:focus-visible { visibility: visible; }
 }
 .it.fait .nm, .it.fait .q { text-decoration: line-through; color: var(--discret); }
@@ -409,13 +413,8 @@ button.dr:active, .dr-l:active, .dr-b:active { background: var(--creux); }
   background: linear-gradient(currentColor, currentColor) left 56% / 0 1.6px no-repeat; transition: background-size .28s ease-out, color .2s; }
 .it.fait .nm { background-size: 100% 1.6px; }
 .it .q, .it img { transition: opacity .2s, color .2s; }
-/* Glisser un article vers la gauche : le bandeau rouge « Retirer » apparaît derrière */
+/* Ligne d’article (support de la croix « retirer ») */
 .it { position: relative; background: var(--fond); }
-.it.glisse-g::after { content: "Retirer"; position: absolute; left: 100%; top: 0; bottom: 0; width: 100vw; display: flex; align-items: center; padding-left: 18px;
-  background: color-mix(in srgb, var(--danger) calc(35% + var(--g, 0) * 65%), var(--fond)); color: #fff; font-weight: 800; font-size: 14px; }
-:root[data-theme="sombre"] .it.glisse-g::after { color: #3b0d0b; }
-.it.pret::after { letter-spacing: .02em; }
-.astuce { text-align: center; color: var(--discret); font-size: 12px; opacity: .7; margin: 18px 0 4px; }
 .lien-btn.remettre { display: flex; margin: 4px auto 0; }
 /* Nouveau menu : les propositions arrivent l'une après l'autre */
 .repas.cascade .rp { animation: arrive .42s cubic-bezier(.22, .9, .25, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
@@ -591,7 +590,6 @@ body.pc #pzone .it { background: transparent; min-height: 38px; padding: 2px 0; 
 body.pc #pzone .it .cb { width: 20px; height: 20px; border-radius: 5px !important; }
 body.pc #pzone .it .cb .ic { width: 13px; height: 13px; }
 body.pc #pzone .defile { flex-wrap: wrap; overflow: visible; margin: 0 0 10px; padding: 2px 0 4px; }
-body.pc #pzone .astuce { display: none; }
 
 /* Fiche et formulaire de recette : à la place de la colonne de droite */
 body.pc #modal.lateral .voile { left: auto; width: var(--lp, 380px); z-index: 6; padding: 0; align-items: stretch; background: none; animation: none; }

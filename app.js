@@ -16,7 +16,7 @@
 const FB = "https://www.gstatic.com/firebasejs/12.4.0/";
 let initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut,
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch;
+  collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, deleteField;
 import { firebaseConfig } from "./firebase-config.js";
 import { chargerExcelJS, ajouterFeuille, telechargerClasseur, lireClasseur } from "./excel-style.js";
 import { norm, parseItem, keyOf, keyOfAncien, aisleOf, auPlacard, rayonMenage, aisleLabel, AISLE_ORDER, AISLES_FOOD, RAYONS_MENAGE, ICONES, fmtQty, ingImg, dishImg, MC, mcCherche, PERSO, brut } from "./pixel.js";
@@ -24,7 +24,7 @@ import { ouvrirAtelier, fermerAtelier, atelierOuvert } from "./atelier.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.1.2";
+const VERSION = "1.2.0";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -65,6 +65,7 @@ const S = {
   bq: { ouvert: false, onglet: "ing", rec: false, placard: false, detail: null, suppr: null, scroll: 0 },  // écran de la banque (voir 4 quater)
   cp: null,                               // mode Compléter (voir 7 ter)
   idees: "",                              // Réglages › Notes : idées d'amélioration (synchronisées)
+  avantImport: null,                      // copie de secours d'avant le dernier import : { quand, mode, recettes, banque }
   onglet: lireLocal("fx-onglet", "courses"),
   // filtres de l'écran Recettes
   f: { q: "", cats: [], saisons: [], origines: [], preps: [], prix: [], temps: [], diff: [], fav: false, vege: false, saison: false, avance: false, invites: false }
@@ -83,12 +84,35 @@ const collRecettes = () => collection(db, "users", uid, NOM_APPLI, "donnees", "r
 const collMenus = () => collection(db, "users", uid, NOM_APPLI, "donnees", "menus");
 const refDonnees = () => doc(db, "users", uid, NOM_APPLI, "donnees");
 
+// On n'envoie que ce qui a changé depuis la dernière version connue (merge + deleteField) :
+// « la dernière modif gagne » joue ainsi case par case, et une coche hors ligne sur le tel
+// n'efface plus un article ajouté entre-temps sur le PC (audit A1).
+const estObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+const stable = v => JSON.stringify(v, (k, x) => estObj(x) ? Object.keys(x).sort().reduce((o, c) => (o[c] = x[c], o), {}) : x);  // Firestore ne rend pas les clés dans le même ordre
+const copie = v => JSON.parse(JSON.stringify(v));
+function difference(avant, apres) {
+  const p = {};
+  Object.keys(apres).forEach(k => {
+    const a = avant[k], b = apres[k];
+    if (b === undefined) return;
+    if (estObj(a) && estObj(b)) { const sous = difference(a, b); if (Object.keys(sous).length) p[k] = sous; }
+    else if (stable(a) !== stable(b)) p[k] = b;
+  });
+  Object.keys(avant).forEach(k => { if (apres[k] === undefined) p[k] = deleteField(); });
+  return p;
+}
+
+const menusConnus = {};   // id -> dernière version de la liste reçue du serveur ou envoyée
 function ecrireMenu(m) {
   m.maj = Date.now();
   if (MODE_DEMO) return sauverDemo();
-  setDoc(doc(collMenus(), m.id), m).catch(erreurEcriture);
+  const avant = menusConnus[m.id];
+  menusConnus[m.id] = copie(m);
+  const ref = doc(collMenus(), m.id);
+  (avant ? setDoc(ref, difference(avant, m), { merge: true }) : setDoc(ref, m)).catch(erreurEcriture);
 }
 function effacerMenu(id) {
+  delete menusConnus[id];
   if (MODE_DEMO) return sauverDemo();
   deleteDoc(doc(collMenus(), id)).catch(erreurEcriture);
 }
@@ -111,10 +135,16 @@ function sauverIdees(texte) {
   if (MODE_DEMO) return sauverDemo();
   setDoc(refDonnees(), { idees: texte }, { merge: true }).catch(erreurEcriture);
 }
-// Banque d'ingrédients. On écrit aussi « toujours » (vidé) : l'ancien réglage est repris dans la banque.
+// Banque d'ingrédients : en base, une carte « bqm » { clé : article } (avant 1.2.0 : un tableau « banque »,
+// réécrit en bloc). En mémoire, S.banque reste un tableau. On écrit aussi « toujours » (vidé, voir migrerToujours).
+let banqueConnue = null;
+const carteBanque = l => Object.fromEntries(l.map(b => [cleStockee(b) || norm(b.nom) || "?", b]));
 function sauverBanque() {
   if (MODE_DEMO) return sauverDemo();
-  setDoc(refDonnees(), { banque: S.banque, toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
+  const apres = carteBanque(S.banque);
+  const bqm = banqueConnue ? difference(banqueConnue, apres) : apres;
+  banqueConnue = copie(apres);
+  setDoc(refDonnees(), { bqm, banque: deleteField(), toujours: S.toujours }, { merge: true }).catch(erreurEcriture);
 }
 
 // Textures Minecraft : document à part (users/{uid}/app-foodix/donnees/textures/mc), lourd et rarement modifié,
@@ -184,6 +214,16 @@ function ecrireRecettes(liste) {
   }
 }
 
+// Copie de secours prise juste avant chaque import Excel (Réglages › Excel › Restaurer).
+// Une seule, synchronisée, dans un document à part (limite Firestore : 1 Mo par document).
+const refAvantImport = () => doc(db, "users", uid, NOM_APPLI, "donnees", "sauvegardes", "avant-import");
+function sauverAvantImport(c) {
+  if (MODE_DEMO) { try { localStorage.setItem("fx-demo-avant-import", JSON.stringify(c)); return true; } catch (e) { return false; } }
+  if (JSON.stringify(c).length > 800000) return false;   // accents = 2 octets : on garde de la marge
+  setDoc(refAvantImport(), c).catch(erreurEcriture);
+  return true;
+}
+
 // Mode démo : tout est recopié dans le navigateur après chaque modification
 function sauverDemo() {
   try { localStorage.setItem("fx-demo", JSON.stringify({ recettes: S.recettes, menus: S.menus, prefs: S.prefs, toujours: S.toujours, banque: S.banque, idees: S.idees, propo: S.propo, histo: S.histo })); } catch (e) { /* plein ou bloqué */ }
@@ -203,6 +243,7 @@ function demarrerDemo() {
   S.idees = d.idees || "";
   try { MC.tex = JSON.parse(localStorage.getItem("fx-demo-tex")) || {}; } catch (e) { MC.tex = {}; }
   try { Object.assign(PERSO, JSON.parse(localStorage.getItem("fx-demo-icones")) || {}); } catch (e) { /* rien de gardé */ }
+  try { S.avantImport = JSON.parse(localStorage.getItem("fx-demo-avant-import")); } catch (e) { S.avantImport = null; }
   appliquerIcones();
   uid = "demo";
   S.compte = "Mode démo (données sur cet appareil seulement)";
@@ -231,22 +272,27 @@ function ecouter() {
     const recu = snap.docs.map(d => d.data());
     if (JSON.stringify(recu) !== JSON.stringify(S.recettes)) { S.recettes = recu; migrerTags(); rerendre(); }
     if (!S.pret) { S.pret = true; render(); }
-  }, err => { console.error(err); toast("Accès refusé aux données"); }));
+  }, err => { console.error(err); if (!S.pret) ecranSansAcces(err); else toast("Accès refusé aux données"); }));
   arrets.push(onSnapshot(collMenus(), snap => {
     const recu = snap.docs.map(d => d.data()).sort((a, b) => a.cree - b.cree);
+    recu.forEach(m => { menusConnus[m.id] = copie(m); });
     if (JSON.stringify(recu) !== JSON.stringify(S.menus)) { S.menus = recu; rerendre(); }
   }, err => console.error(err)));
-  arrets.push(onSnapshot(refDonnees(), snap => {
+  arrets.push(onSnapshot(refDonnees(), { includeMetadataChanges: true }, snap => {   // metadata : pour savoir quand la copie vient du serveur
     const d = snap.exists() ? snap.data() : {};
     const p = Object.assign({}, PREFS_DEFAUT, d.prefs);
-    const tj = d.toujours || [], bq = d.banque || [], pr = lirePropo(d.propo), hi = (d.histo || []).map(x => x.ids || []);
+    const tj = d.toujours || [], pr = lirePropo(d.propo), hi = (d.histo || []).map(x => x.ids || []);
+    const bq = estObj(d.bqm) ? Object.values(d.bqm) : Array.isArray(d.banque) ? d.banque : [];
+    banqueConnue = estObj(d.bqm) ? copie(d.bqm) : null;
     S.idees = d.idees || ""; NotesIdees.maj(S.idees); // un autre appareil a pu changer les notes
-    if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours) || JSON.stringify(bq) !== JSON.stringify(S.banque)
+    if (JSON.stringify(p) !== JSON.stringify(S.prefs) || JSON.stringify(tj) !== JSON.stringify(S.toujours) || stable(carteBanque(bq)) !== stable(carteBanque(S.banque))
       || JSON.stringify(pr) !== JSON.stringify(S.propo) || JSON.stringify(hi) !== JSON.stringify(S.histo)) {
       S.prefs = p; S.toujours = tj; S.banque = bq; S.propo = pr; S.histo = hi;
       migrerToujours();
       rerendre();
     }
+    // Passage du tableau « banque » à la carte « bqm » (1.2.0), une fois, sur une copie venue du serveur
+    if (!estObj(d.bqm) && Array.isArray(d.banque) && !snap.metadata.fromCache) sauverBanque();
   }, err => console.error(err)));
   arrets.push(onSnapshot(collTextures(), snap => {
     const tex = {};
@@ -259,15 +305,16 @@ function ecouter() {
     snap.docs.forEach(d => { const x = d.data(); if (x.cle && x.src) recu[x.cle] = x; });
     if (JSON.stringify(recu) !== JSON.stringify(PERSO)) { Object.keys(PERSO).forEach(k => delete PERSO[k]); Object.assign(PERSO, recu); rerendre(); }
   }, err => console.error(err)));
+  arrets.push(onSnapshot(refAvantImport(), snap => { S.avantImport = snap.exists() ? snap.data() : null; }, err => console.error(err)));
 }
 
 // Va chercher les 3 morceaux de Firebase (appli, connexion, base de données).
-// Une fois venus, le « gardien » hors ligne (sw.js) en garde une copie pour toujours.
+// Une fois venus, le « gardien » hors ligne (sw.js) en garde une copie (cache « foodix-libs », gardé d’une version à l’autre).
 async function chargerFirebase() {
   const [a, au, fs] = await Promise.all(["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map(f => import(FB + f)));
   ({ initializeApp } = a);
   ({ getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } = au);
-  ({ initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch } = fs);
+  ({ initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, deleteField } = fs);
 }
 
 async function demarrerFirebase() {
@@ -290,6 +337,13 @@ async function demarrerFirebase() {
     S.compte = user.email || user.displayName || "";
     ecouter();
   });
+}
+
+// Première lecture refusée (autre compte Google, règles changées, session expirée) : avant 1.2.0, « Chargement… » sans fin
+function ecranSansAcces(err) {
+  const refus = err && err.code === "permission-denied";
+  $("#main").innerHTML = `<div class="vide">${refus ? `Ce compte n'a pas accès aux données.<br><small>${esc(S.compte)}</small>` : "Lecture des données impossible."}
+    <div class="vide-act">${refus ? "" : `<button class="btn pri" data-act="recharger">Réessayer</button>`}<button class="btn${refus ? " pri" : ""}" data-act="deconnexion">Changer de compte</button></div></div>`;
 }
 
 async function seConnecter(btn) {
@@ -1119,7 +1173,6 @@ function renderCourses() {
   if (panier.length) html += `<details class="rayon placard panier${cp}" ${S.panierOuvert ? "open" : ""}><summary>${icone("right")}Dans le panier (${panier.length})</summary>${tri(panier).map(ligne).join("")}</details>`;
   if (nbMasques) html += `<button class="lien-btn remettre" data-act="remettre-masques">${icone("refresh")}${nbMasques} ingrédient${nbMasques > 1 ? "s" : ""} retiré${nbMasques > 1 ? "s" : ""} · remettre</button>`;
   zl().innerHTML = ajout + (html || `<div class="vide">Liste vide.<br>Ajoute des articles ci-dessus, ou des plats depuis l'onglet Menu.</div>`);
-  if (html) zl().insertAdjacentHTML("beforeend", `<div class="astuce">Glisse un article vers la gauche pour le retirer</div>`);
   finir();
 }
 
@@ -2440,9 +2493,10 @@ function ouvrirReglages() {
     <div class="sect">Idées</div>
     <button class="reg" data-act="idees"><span>Notes</span><span class="val">›</span></button>
     <div class="sect">Excel</div>
-    <div class="reg" style="justify-content:flex-start"><button class="btn" data-act="exporter">Exporter</button>
-      <label class="btn">Importer<input type="file" id="fichier" accept=".xlsx" hidden></label></div>
+    <button class="reg" data-act="exporter"><span>${icone("download")} Exporter</span><span class="val">›</span></button>
+    <label class="reg"><span>${icone("upload")} Importer</span><span class="val">›</span><input type="file" id="fichier" accept=".xlsx" hidden></label>
     <div id="imp"></div>
+    ${S.avantImport && Array.isArray(S.avantImport.recettes) ? `<button class="reg" data-act="restaurer-import"><span>${icone("history")} Restaurer avant l'import</span><span class="val">${dateCourte(S.avantImport.quand)} ›</span></button>` : ""}
     <div class="sect">Compte</div>
     <div class="reg"><span class="sub" style="overflow:hidden;text-overflow:ellipsis">${esc(S.compte)}</span>${MODE_DEMO ? "" : `<button class="btn" data-act="deconnexion">Se déconnecter</button>`}</div>
     <div class="reg"><span>Synchro</span><span id="sync" class="sync"></span></div>` : ""}
@@ -2851,6 +2905,25 @@ async function imagesVersTextures(bq) {
   }
 }
 
+// Un onglet absent du fichier ne touche à rien : avant 1.2.0, « Tout remplacer » sans onglet Recettes effaçait toutes les recettes.
+const fusionRecettesSi = (lignes, simuler, mode) => lignes.length ? fusion(lignes, simuler, mode) : { ajout: 0, maj: 0, suppr: 0 };
+const fusionBanqueSi = (bq, simuler, mode) => bq.length ? fusionBanque(bq, simuler, mode) : { ajout: 0, maj: 0, retire: 0, efface: 0 };
+
+// Réglages › Excel › Restaurer : remet les recettes et la banque d'avant le dernier import (2e appui pour confirmer)
+const dateCourte = t => new Date(t).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function restaurerAvantImport(el) {
+  const s = S.avantImport; if (!s || !Array.isArray(s.recettes)) return;
+  if (!el.dataset.sur) { el.dataset.sur = "1"; el.classList.add("sur"); el.querySelector(".val").textContent = "Confirmer ›"; return; }
+  const garde = new Set(s.recettes.map(r => r.id));
+  const aSuppr = S.recettes.filter(r => !garde.has(r.id));
+  S.recettes = copie(s.recettes);
+  ecrireRecettes(S.recettes);
+  aSuppr.forEach(r => effacerRecette(r.id));
+  S.banque = copie(s.banque || []); sauverBanque();
+  fermer(); render();
+  toast("Recettes et banque remises au " + dateCourte(s.quand));
+}
+
 // Après lecture : un résumé par mode et trois boutons. « Tout remplacer » demande un 2e appui (bouton rouge avec le décompte).
 async function importerFichier(fichier) {
   const box = $("#imp");
@@ -2861,7 +2934,7 @@ async function importerFichier(fichier) {
     if (!lignes.length && !bq.length) { box.innerHTML = `<div class="infos">Aucune recette trouvée (il faut une colonne « Nom »).</div>`; return; }
     await imagesVersTextures(bq);
     const res = {};
-    ["ajout", "fusion", "remplacer"].forEach(m => { res[m] = { r: fusion(lignes, true, m), b: fusionBanque(bq, true, m) }; });
+    ["ajout", "fusion", "remplacer"].forEach(m => { res[m] = { r: fusionRecettesSi(lignes, true, m), b: fusionBanqueSi(bq, true, m) }; });
     importEnAttente = { lignes, bq, res };
     const n = (x, un, plusieurs) => x + " " + (x > 1 ? plusieurs : un);
     const detail = m => {
@@ -2892,7 +2965,10 @@ function confirmerImport(el) {
     el.innerHTML = `<b>Confirmer</b><small>${t.length ? t.join(", ") : "Tout remplacer"}</small>`;
     return;
   }
-  const r = lignes.length || mode === "remplacer" ? fusion(lignes, false, mode) : { ajout: 0, maj: 0, suppr: 0 };
+  const avant = { quand: Date.now(), mode, recettes: copie(S.recettes), banque: copie(S.banque) };
+  if (!sauverAvantImport(avant)) return toast("Copie de secours impossible : import annulé");
+  S.avantImport = avant;
+  const r = fusionRecettesSi(lignes, false, mode);
   // Nouvelles textures venues des images : enregistrées avant la banque qui les cite (sauf « ajout » : articles connus non touchés)
   const neuves = Object.fromEntries(bq.filter(l => l.tex).map(l => [l.mc, l.tex]));
   if (Object.keys(neuves).length) {
@@ -2900,7 +2976,7 @@ function confirmerImport(el) {
     if (styleIcones() !== "perso") ecrireLocal("fx-icones", "perso");  // les images du fichier ne s'affichent qu'en style Minecraft
     appliquerIcones();
   }
-  const b = fusionBanque(bq, false, mode);  // après les recettes : les ingrédients des nouvelles recettes sont déjà connus
+  const b = fusionBanqueSi(bq, false, mode);  // après les recettes : les ingrédients des nouvelles recettes sont déjà connus
   importEnAttente = null;
   fermer(); render();
   const t = [`${r.ajout + r.maj} recettes`];
@@ -2909,7 +2985,7 @@ function confirmerImport(el) {
   toast("Import terminé : " + t.join(", "));
 }
 
-/* ---------- 7 bis. Gestes au doigt : changer d'onglet, retirer un article ---------- */
+/* ---------- 7 bis. Gestes au doigt : changer d’onglet ---------- */
 const ORDRE_ONGLETS = ["courses", "recettes", "menu"];
 // Change d'onglet : la page part d'un côté et la nouvelle arrive de l'autre (depuisX = où le doigt l'avait laissée)
 function changerOnglet(tab, depuisX = 0) {
@@ -2931,56 +3007,7 @@ function changerOnglet(tab, depuisX = 0) {
   };
 }
 
-// Un doigt qui glisse vers la gauche sur un article de la liste : il suit le doigt, et passé un tiers de l'écran il est retiré.
-// On ne touche à rien dans les champs, les rangées de pastilles qui défilent, les fenêtres et la banque.
-let geste = null;
-document.addEventListener("touchstart", e => {
-  geste = null;
-  if (e.touches.length !== 1 || !S.pret || $("#modal").innerHTML || S.bq.ouvert || $("#cp-ecran")) return;
-  const t = e.target;
-  if (t.closest("header, #tabs, .toast, #modal, input, textarea, select, .defile, .pastilles, .sugg, .deroul, .poignee")) return;
-  const p = e.touches[0], it = t.closest(".it");
-  if (!it) return;   // plus de glisser pour changer d'onglet (1.0.1) : seulement retirer un article
-  geste = { x0: p.clientX, y0: p.clientY, dx: 0, t0: Date.now(), mode: null, it, seuil: false };
-}, { passive: true });
-document.addEventListener("touchmove", e => {
-  if (!geste) return;
-  const p = e.touches[0], dx = p.clientX - geste.x0, dy = p.clientY - geste.y0;
-  if (!geste.mode) {
-    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { geste = null; return; }   // on fait défiler : pas un glissement
-    if (Math.abs(dx) < 12) return;
-    if (dx > 0) { geste = null; return; }
-    geste.mode = "article";
-    geste.it.classList.add("glisse-g");
-  }
-  e.preventDefault();
-  geste.dx = dx;
-  const w = innerWidth;
-  const x = Math.min(0, dx);
-  geste.it.style.transform = `translateX(${x}px)`;
-  geste.it.style.setProperty("--g", Math.min(1, -x / (w * .33)));
-  const passe = -x > w * .33;
-  if (passe !== geste.seuil) { geste.seuil = passe; if (passe) vibrer("seuil"); geste.it.classList.toggle("pret", passe); }
-}, { passive: false });
-function finGeste() {
-  const g = geste; geste = null;
-  if (!g || !g.mode) return;
-  const w = innerWidth, rapide = Math.abs(g.dx) > 60 && Date.now() - g.t0 < 250;
-  const el = g.it;
-  if (-g.dx > w * .33 || (rapide && g.dx < 0)) {
-    const fin = () => { const a = el.dataset.ajout; a ? retirerArticle(a) : masquer(el.dataset.k); };
-    if (!animOK()) return fin();
-    el.animate([{ transform: el.style.transform }, { transform: `translateX(${-w}px)` }], { duration: 160, easing: "ease-in", fill: "forwards" }).onfinish = () => {
-      el.animate([{ height: el.offsetHeight + "px" }, { height: "0px", minHeight: "0px", paddingTop: 0, paddingBottom: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" }).onfinish = fin;
-    };
-  } else {
-    el.classList.remove("pret");
-    el.animate([{ transform: el.style.transform }, { transform: "none" }], { duration: 220, easing: RESSORT }).onfinish = () => { el.style.transform = ""; el.classList.remove("glisse-g"); };
-    el.style.transform = "";
-  }
-}
-document.addEventListener("touchend", finGeste);
-document.addEventListener("touchcancel", finGeste);
+// 1.2.0 : plus de glisser pour retirer un article (partait trop facilement en magasin) : croix sur chaque ligne.
 
 // Fermer une fenêtre en douceur : elle redescend, le fond s'éclaircit (si rien d'autre ne s'est ouvert entre-temps)
 function fermerDoux() {
@@ -3418,6 +3445,7 @@ document.addEventListener("click", e => {
     }
     case "connexion": seConnecter(el); break;
     case "deconnexion": fermer(); S.pret = false; signOut(auth); break;
+    case "recharger": location.reload(); break;
     case "reglages": ouvrirReglages(); break;
     case "themes": ouvrirThemes(); break;
     case "icones": ouvrirIcones(); break;
@@ -3429,6 +3457,7 @@ document.addEventListener("click", e => {
     case "anim": ecrireLocal("fx-anim", el.dataset.v); document.documentElement.dataset.anim = el.dataset.v; ouvrirReglages(); break;
     case "exporter": exporter(el); break;
     case "confirmer-import": confirmerImport(el); break;
+    case "restaurer-import": restaurerAvantImport(el); break;
     case "favori": basculerFavori(); break;
     case "var-menu": { const vm = $("#var-menu"); if (vm) { vm.hidden = !vm.hidden; vibrer("pas"); } break; }
     case "trier": ouvrirTri(el); break;

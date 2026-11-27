@@ -4,7 +4,12 @@
 // même sans réseau. (Les données, elles, sont gérées par Firebase.)
 // À CHAQUE NOUVELLE VERSION : changer le numéro ci-dessous.
 // =========================================================
-const CACHE = "foodix-v1.1.2";
+const CACHE = "foodix-v1.2.0";
+// Bibliothèques à version fixe (Firebase, ExcelJS, polices) : cache à part, jamais effacé par une mise à jour.
+// Avant 1.2.0 elles partaient avec l'ancien cache : sans réseau juste après une mise à jour, l'appli ne s'ouvrait plus.
+const LIBS = "foodix-libs";
+const FB = "https://www.gstatic.com/firebasejs/12.4.0/";   // même version que dans app.js
+const LIBS_DEPART = ["firebase-app.js", "firebase-auth.js", "firebase-firestore.js"].map(f => FB + f);
 
 // Fichiers de l'appli à garder dès l'installation
 const FICHIERS = [
@@ -19,15 +24,29 @@ self.addEventListener("install", e => {
   e.waitUntil(
     caches.open(CACHE)
       .then(c => c.addAll(FICHIERS.map(f => new Request(f, { cache: "reload" }))))
+      .then(() => rangerLibs().catch(() => {}))   // sans réseau pour gstatic : pas grave, elles viendront à l'usage
       .then(() => self.skipWaiting())
   );
 });
 
-// Supprime les copies des anciennes versions
+// Reprend les bibliothèques déjà gardées dans les anciens caches, puis va chercher celles qui manquent
+async function rangerLibs() {
+  const libs = await caches.open(LIBS);
+  for (const nom of await caches.keys()) {
+    if (nom === LIBS || nom === CACHE) continue;
+    const vieux = await caches.open(nom);
+    for (const req of await vieux.keys()) {
+      if (FIXES.includes(new URL(req.url).hostname) && !(await libs.match(req))) await libs.put(req, await vieux.match(req));
+    }
+  }
+  await Promise.all(LIBS_DEPART.map(async u => { if (!(await libs.match(u))) await libs.add(u); }));
+}
+
+// Supprime les copies des anciennes versions (sauf les bibliothèques)
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(noms => Promise.all(noms.filter(n => n !== CACHE).map(n => caches.delete(n))))
+      .then(noms => Promise.all(noms.filter(n => n !== CACHE && n !== LIBS).map(n => caches.delete(n))))
       .then(() => self.clients.claim())
   );
 });
@@ -43,8 +62,10 @@ self.addEventListener("fetch", e => {
   if (FIXES.includes(url.hostname)) {
     e.respondWith(
       caches.match(req).then(copie => copie || fetch(req).then(rep => {
-        const clone = rep.clone();
-        caches.open(CACHE).then(c => c.put(req, clone));
+        if (rep.ok || rep.type === "opaque") {   // une erreur passagère ne doit pas rester gardée pour toujours
+          const clone = rep.clone();
+          caches.open(LIBS).then(c => c.put(req, clone));
+        }
         return rep;
       }))
     );

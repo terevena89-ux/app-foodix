@@ -1,5 +1,14 @@
 # Foodix — journal des nouveautés
 
+## 1.2.0 — 2026-11-27
+Correctifs de l'audit du 2026-11-27 (A1, A2, B1, B2, E2).
+- Synchro : une coche, un ajout ou un réglage d'article n'envoie plus que ce qui a changé. Une modif faite hors ligne sur le téléphone n'efface plus ce qui a été ajouté entre-temps sur le PC. La banque est rangée autrement dans la base (passage automatique, une fois).
+- Import Excel : un fichier sans onglet Recettes (ou sans onglet Ingrédients) ne touche plus aux recettes (ou à la banque), même en « Tout remplacer ».
+- Réglages › Excel : une copie est gardée juste avant chaque import ; « Restaurer avant l'import » remet les recettes et la banque comme avant (2e appui pour confirmer). Exporter / Importer en lignes de réglages.
+- Hors ligne : Firebase est gardé dans un cache à part, qui n'est plus effacé à chaque mise à jour (l'appli s'ouvre sans réseau juste après une mise à jour). Une erreur passagère du serveur n'est plus gardée en cache.
+- Compte sans accès aux données : message « Ce compte n'a pas accès » avec « Changer de compte », au lieu de « Chargement… » sans fin.
+- Courses : plus de glisser pour retirer un article ; une croix sur chaque ligne, au doigt comme à la souris (avec « Annuler »).
+
 ## 1.1.2 — 2026-11-26
 - Nouvelle recette (bouton « + », appui long sur Recettes) : le formulaire ne s'ouvrait plus en style d'icônes Perso / Minecraft (l'icône du plat cherchait un nom encore vide).
 
