@@ -1,5 +1,15 @@
 # Foodix — journal des nouveautés
 
+## 1.2.3 — 2026-11-27
+Chantier CSS de l'audit (C1, F3, F4, F6, F7, G2, G3).
+- Cases à cocher : une seule taille partout (24 px ; 22 px en affichage compact, 20 px sur PC), et une zone de toucher plus large que le dessin.
+- Liste de courses : toucher le nom d'un article ne fait plus rien, seule la case coche. L'appui long sur le nom ouvre sa fiche.
+- Petits titres en capitales : une seule taille partout.
+- Retour gris sous le doigt sur les lignes et réglages ; sur PC, lignes plus serrées et ligne sous la souris grisée.
+- Animations « Simples » : plus rien ne bouge, mais les couleurs changent en fondu très court.
+- Boutons de la fiche recette à la même hauteur que les autres.
+- Code : le style du formulaire de recette, empilé en 3 couches, est réuni en une seule (aucun changement visible).
+
 ## 1.2.2 — 2026-11-27
 Fin des correctifs de l'audit : suppression de recette (B6, B7, E9) et sécurité (A6, A7, A8, A9).
 - Supprimer une recette retire aussi son icône perso et ses propositions du menu (« Annuler » remet tout). Le nombre de propositions ne compte plus les recettes disparues.

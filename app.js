@@ -24,7 +24,7 @@ import { ouvrirAtelier, fermerAtelier, atelierOuvert } from "./atelier.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.2.2";
+const VERSION = "1.2.3";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés
@@ -3357,8 +3357,6 @@ document.addEventListener("click", e => {
   if (coche) return cocher(coche.dataset.coche, coche);
   const sugg = t.closest("[data-sugg]");
   if (!t.closest(".ajout-art")) fermerSuggArt();
-  const artF = t.closest("[data-art-fiche]");
-  if (artF) return ouvrirArtFiche(artF.dataset.artFiche);
   const artR = t.closest("[data-art-rayon]");
   if (artR) return rangerArt(artR.dataset.artRayon);
   const artB = t.closest("[data-art-banque]");
@@ -3591,6 +3589,8 @@ appuiLong(".barre-r [data-bascule]", el => {
   setTimeout(() => bu.remove(), 1800);
 });
 appuiLong(".bq-t[data-bq-ouvrir]", commanderBanque);
+// Courses : toucher le nom d'un article ne fait rien (seule la case coche, choix du propriétaire) ; l'appui long ouvre sa fiche
+appuiLong(".it [data-art-fiche]", el => ouvrirArtFiche(el.dataset.artFiche));
 // Appui long sur l'onglet Recettes : Ingrédients (la banque) et Nouvelle recette
 appuiLong('#tabs button[data-tab="recettes"]', el => {
   const b = el.getBoundingClientRect(), m = document.createElement("div");

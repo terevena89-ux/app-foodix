@@ -4,7 +4,7 @@
 // même sans réseau. (Les données, elles, sont gérées par Firebase.)
 // À CHAQUE NOUVELLE VERSION : changer le numéro ci-dessous.
 // =========================================================
-const CACHE = "foodix-v1.2.2";
+const CACHE = "foodix-v1.2.3";
 // Bibliothèques à version fixe (Firebase, ExcelJS, polices) : cache à part, jamais effacé par une mise à jour.
 // Avant 1.2.0 elles partaient avec l'ancien cache : sans réseau juste après une mise à jour, l'appli ne s'ouvrait plus.
 const LIBS = "foodix-libs";
