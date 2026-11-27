@@ -141,6 +141,35 @@ noix:["","","   BB  BB","  BbbBBbbB","  BbbBBbbB","   BB  BB","","  BB   BB"," B
 bouteille:["     SS","     kk","     yy","    yyyy","   yyyyyy","   ywyyyy","   yyyyyY","   yyyyyY","   yyyyyY","   YYYYYY"],
 pot:["","    BBBB","   BBBBBB","   wwwwww","  wyyyyyyw","  wyyyyyyw","  wywwwwyw","  wyyyyyyw","   wwwwww"],
 sachet:["","    WWWW","   wwwwww","  wwwwwwww","  wwbbbbww","  wwbwwbww","  wwbbbbww","  wwwwwwwW","  wwwwwwwW","   WWWWWW"],
+// Ajouts 2026-11-27 : dessins pour les ingrédients qui tombaient sur « sachet »
+banane:["          B","         yB","         yY","        yyY","       yyyY","      yyyYY","    yyyyyY","  yyyyyyYY"," kyyyyyYY","  YYYYY"],
+fraise:["","    gGgG","   gGGGGg","  rrrrrrrr","  rcrrrcrR","  rrrrrrrR","   rcrrcrR","   rrrrrR","    rcrR","     RR"],
+cerise:["       G","      GG","     G  G","    G    G","   G     G","  rrr   rrr"," rwrrr rwrrr"," rrrrR rrrrR"," rrrrR rrrrR","  RRR   RRR"],
+raisin:["      G","     Gg","  uu uu uu"," uwuuwuuwuU","  uU uU uU","   uu uu","  uwuuwuU","   uU uU","    uu","   uwuU","    UU"],
+orange:["      g","     gG","   oooooo","  oooooooO"," oowoooooOO"," oooooooooO"," ooooooooOO"," ooooooooOO","  ooooooOO","   OOOOOO"],
+poire:["     B","     Bg","    vvv","    vvvG","   vvvvG","  vwvvvvG","  vvvvvvG"," vvvvvvvvG"," vvvvvvvvG","  vvvvvvG","   GGGG"],
+ananas:["   G g G","    GgG","   gGgGg","    yYy","   yYyYy","  yYyYyYY","  YyYyYyY","  yYyYyYY","  YyYyYyY","   yYyYY","    YYY"],
+pasteque:["","","",""," rrrrrrrrrr"," rrkrrrrkrr","  rrrrkrrr","  wrrrrrrw","   wwrrww","   GwwwwG","    GGGG"],
+kiwi:["","   bbbbbb","  bvvvvvvb"," bvvkvvkvvb"," bvvvwwvvvb"," bvkvwwvkvb"," bvvvwwvvvb"," bvvkvvkvvb","  bvvvvvvb","   bbbbbb"],
+brocoli:["","   gg gg","  gGggGggg"," gggGgggGgg"," gGgggGgggG","  GgGGgGGG","    vvv","    vvv","   vvvvv","   vvvvv"],
+asperge:["   G G G","   g g g","   g g g","   v g v","   v v v","  lllllll","   v v v","   v v v","   v v v","   v v v"],
+mais:["         G","        GG","      yyyG","     yYyyG","    yyYyG","   yYyyG","  yyYyG","  yYyG"," GyyG"," GGG"],
+radis:["    g  g","     gG","     G","   rrrr","  rwrrrrR","  rrrrrR","   rrrrR","    rRR","     w","     w"],
+artichaut:["","     G","    gGg","   gGvGg","  gGvGvGg","  GvGvGvG","  gGvGvGg","   GgGgG","    GGG","     G","     G"],
+bacon:["",""," P  PPP  PP"," PPwwPPwwPP"," ppPPppPPpp"," wwPPwwPPww"," PPppPPppPP"," PP  PPP  P"],
+anneau:["","","   tttt","  tbbbbt"," tb    bt"," tb    bt"," tb    bt","  tbbbbt","   tttt"],
+moule:["","","   kkkkkk","  kSkkkkkkk"," kkSSkkkkkkk"," kSoooooooSk"," kooooooooSk","  kSSSSSSkk","   kkkkkk"],
+croissant:["","","","    bttb","  ttbttbtt"," tbttbbttbt"," bt  bb  tb"," t        t"],
+biscuit:["","   tttttt","  ttBtttttt"," ttttttBttt"," tBtttttttb"," ttttBttttb"," tttttttBtb","  tBttttbb","   bbbbbb"],
+paquet:["","   WWWWWW","  wwwwwwWW","  wwwwwwWW","  wlllllWW","  wlwwwlWW","  wlllllWW","  wwwwwwWW","  wwwwwwWW","  WWWWWWW"],
+tablette:["","  BbBBbBBb","  BBBBBBBB","  BbBBbBBb","  BBBBBBBB","  rrrrrrrr","  rwwwwwwR","  rrrrrrrR","  rrrrrrrR","  RRRRRRRR"],
+tasse:["","    w  w","     w  w","    w  w","  wwwwwww","  wBBBBBwWW","  wwwwwwwW W","  wwwwwwwWW","  wwwwwwww","   WWWWWW"],
+canette:["","   SSSSSS","  ssssssss","  rrrrrrrR","  rwrrrrrR","  rwwwwwrR","  rwrrrrrR","  rrrrrrrR","  ssssssss","   SSSSSS"],
+cube:["","","    cccccc","   cccccccC","  YYYYYYYCC","  YyyyyyYCC","  YyyyyyYCC","  YyyyyyYC","  YYYYYYYC"],
+glace:["    pppp","   pwppppP","   pppppPP","   cccccCC","   ccwccCC","   tbtbtbt","    btbtb","    tbtbt","     btb","     tb","      t"],
+pizza:[""," bbbbbbbbbb"," tyyryyyyrt","  yyyyryyt","  tyryyyyt","   yyyyrt","   tyyyyt","    yryt","    tyt","     t"],
+frites:["  y  y y","  yy yYy y","  yYyyyYyy","  yyYyYyyY","  rrrrrrrR","  rwwwwwrR","  rrrrrrrR","   rrrrrR","   rrrrrR","    RRRR"],
+rouleau:["","","","   cccccccc","  CcCcccccc"," CcCcccccccc"," CCcCccccccC"," CcCccccccC","  CcCcccccC","   CCCCCCC"],
 };
 const DISH={
 plate:["","","","","","","      1221","    12113121","   1312112131","  121131211312"," ww2113121211ww","wwww12111121wwww","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
@@ -155,9 +184,59 @@ wrap:["","","","","","      cccccc","    cc1213ccc","   c1121312ccC","  c1123121
 sauce:["","","","","","","    wwwwwwww","   w11111111w","   w12111211w","   wwwwwwwwww","   wwwwwwwwwW","    WWWWWWWW"],
 roast:["","","","","     bbbbb","   bbtttttbb","  btttttttttb"," btttwtttttttb"," bttttttttttbww","wwbbbbbbbbbbbwww","wwwwwwwwwwwwwwwW"," WWWWWWWWWWWWWW"],
 fish:["","","","","","","    1111111   1","  111111111111 1"," 1k1111111111111","  22222222222 22","wwww2222222wwwww","wwwwwwwwwwwwwwwW"," WWWWWWWWWWWWWW"],
+// Ajouts 2026-11-27 : plats qui tombaient sur l'assiette par défaut
+pasta:["","","","","      tYttYt","    tYtt11tYt","   ttY1121tYtt","  tYtt1213ttYt","  ttYtt11tYttt"," wwtYttYttYtYww","wwwwYttYttYtwwww","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
+noodles:["","           B","          B  B","         B  B","        B  B","       B  B","  tttYt2tttY1t"," rttYt1tYtt2tYr"," rrrrrrrrrrrrrr"," rrrrrrrrrrrrRR","  rrrrrrrrrrRR","   rrrrrrrRRR","     RRRRRR"],
+rice:["","","","","","      cccc","    cccCcccc","   cc1cccc2cc","  cccccc3ccccc","  ccc2cccCc1cc"," wwcccccccccccww","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
+puree:["","","","","","      1111","    11111111","   111yyyy1111","  11111yy111111"," ww11111111111ww","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
+frites:["","    y  y  y","   yY y Yy y","   yYyyyYyYy","   yyYyYyyYy","   yYyyYyyYy","  rrrrrrrrrrR","  rwwwwwwwwwR","  rrrrrrrrrrR","   rrrrrrrrR","   rrrrrrrrR","    rrrrrrR","    RRRRRRR"],
+viande:["","","","","","    111111","   12111111  gG","  1121111211 gg","  11112111121Gg","   1111111111"," ww          gww","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
+saucisses:["","","","","","  PPPPPPPPPP"," PPpPPPPPPPPR","  RRRRRRRRRR","   PPPPPPPPPP","  PPpPPPPPPPPR","   RRRRRRRRRR","wwww22222222wwww","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
+pane:["","","","","","    oooo  ooo","   oOoooo oOooo","   oooOoo ooooO","  ooo  ooOooo","  oOooo OoooO  y","   OOO   OOO  yy","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
+pizza:["","     bbbbbb","   bbttttttbb","  btyyryyyyytb"," btyyyyygyyrytb"," btyryyyyyyyytb"," btyyyyy1yyrytb"," btyyryyyyyyytb"," btygyyyyyryytb","  btyyyyryyytb","   bbttttttbb","     bbbbbb"],
+farci:["","","       GG","     RRrrRR","    RrrrrrrR","","   rr111111rr","  rrr121121rrr","  rrrr1111rrrR","  rrrrrrrrrrRR","   rrrrrrrrRR","wwwwwrrrrrRRwwwW","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
+jar:["","    SSSSSSSS","    SSSSSSSS","   llllllllll","  l1112111211l","  l1211121121L","  l1121112111L","  l2111211121L","  l1112111211L","  l1211121121L","  l1121112111L","   LLLLLLLLLL"],
+galette:["","","","","","     tttttttt","   ttbtttbttttt","  tttttttbttbttb","   bbbbbbbbbbbb","    tttbttttbttt","  ttbtttttbttttb","   bbbbbbbbbbbb","wwwwwwwwwwwwwwwW"," WwwwwwwwwwwwwW","  WWWWWWWWWWWW"],
 };
 const ING_SPR=[
  [/vaisselle|lessive|adoucissant|savon|javel|nettoyant|detartrant|desinfectant|produit wc|multi-usage/,"bouteille",{y:"l",Y:"L"}],
+ // Ajouts 2026-11-27 (avant les règles générales : l'ordre compte, ex. « pruneau » avant « prune », « poire » ≠ « poireau »)
+ [/poelee de legumes/,"sachet",{w:"l",W:"L",b:"g"}],[/fruits rouges/,"sachet",{w:"l",W:"L",b:"r"}],[/frite/,"frites"],[/pizza surgel/,"pizza"],
+ [/glacon/,"cube",{Y:"L",y:"l",c:"w",C:"W"}],[/^glace/,"glace"],[/bouillon|(^| )cube/,"cube"],
+ [/abricot sec/,"noix",{B:"O",b:"o"}],[/pruneau|datte/,"raisin",{u:"B",U:"k",w:"b"}],[/raisins? sec/,"raisin",{u:"B",U:"k",w:"b"}],
+ [/banane/,"banane"],[/fraise/,"fraise"],[/framboise/,"fraise",{r:"p",R:"P",c:"w"}],[/(^| )mure|myrtille/,"raisin",{u:"U",U:"k"}],
+ [/groseille/,"cerise",{G:"g"}],[/cerise/,"cerise"],[/(^| )raisin/,"raisin"],[/eau de fleur/,"bouteille",{y:"w",Y:"W"}],
+ [/^jus d'orange/,"lait",{l:"o"}],[/^jus de pomme/,"lait",{l:"y"}],[/^jus/,"lait",{l:"r"}],
+ [/orange|clementine|mandarine/,"orange"],[/pamplemousse/,"orange",{o:"p",O:"P"}],[/poire( |$)/,"poire"],[/ananas/,"ananas"],
+ [/pasteque/,"pasteque"],[/kiwi/,"kiwi"],[/mangue/,"pomme",{r:"o",R:"r"}],[/abricot|nectarine/,"pomme",{r:"o",R:"O"}],
+ [/prune|figue|fruit de la passion/,"pomme",{r:"u",R:"U"}],[/litchi/,"pomme",{r:"p",R:"P"}],[/rhubarbe/,"asperge",{v:"r",g:"p",G:"g",l:"w"}],
+ [/coeur d'artichaut/,"boite",{r:"g"}],[/artichaut/,"artichaut"],[/asperge/,"asperge"],[/celeri-rave|celeri rave/,"patate",{t:"c",b:"C"}],[/celeri|citronnelle/,"asperge",{v:"v",g:"g",l:"w"}],
+ [/brocoli/,"brocoli"],[/(^| )radis/,"radis"],[/mais doux|epi de mais/,"mais"],[/(^| )mais( |$)/,"boite",{r:"y"}],
+ [/graines de fenouil|cardamome|girofle|curcuma|garam|gingembre en poudre|ras el hanout|sumac/,"pot",{y:"o",Y:"O"}],[/origan/,"pot",{y:"g",Y:"G"}],
+ [/gingembre/,"patate",{t:"C",b:"b"}],[/panais/,"carotte",{o:"c",O:"C"}],[/fenouil/,"oignon",{t:"v",b:"g"}],[/endive/,"courgette",{g:"c",G:"v"}],
+ [/citrouille/,"tomate",{r:"o",R:"O"}],[/cresson|mache|blette/,"salade",{g:"G",G:"k"}],[/frisee/,"salade",{g:"v"}],[/pak choi/,"salade",{G:"w"}],
+ [/cerfeuil|laurier|romarin/,"herbe"],[/pleurote/,"champignon",{B:"W",b:"c"}],[/shiitake/,"champignon",{b:"B",B:"k"}],
+ [/pois gourmand|haricots? verts?( |$)/,"courgette"],[/legumes de saison/,"carotte"],
+ [/bacon|pancetta/,"bacon"],[/bavette|entrecote/,"viande"],[/calamar/,"anneau"],[/agneau/,"poulet",{b:"R",t:"P",W:"w"}],[/lapin/,"poulet"],
+ [/maquereau en conserve|anchois|sardine/,"boite",{r:"L"}],[/colin|dorade|lieu/,"poisson"],[/truite fum/,"poisson",{s:"p",S:"P"}],
+ [/truite/,"poisson",{s:"v",S:"G"}],[/maquereau/,"poisson",{s:"L",S:"S"}],[/gambas/,"crevette"],[/(^| )moule/,"moule"],
+ [/saint-jacques/,"oeuf",{c:"w",C:"W"}],[/saucisson/,"saucisse",{P:"R",p:"w",R:"B"}],[/cordon bleu/,"poulet"],
+ [/brie|camembert/,"fromage",{y:"c",Y:"C",c:"w"}],[/emmental|comte|halloumi/,"fromage"],[/mimolette/,"fromage",{y:"o",Y:"O"}],
+ [/gorgonzola/,"fromage",{y:"w",Y:"W",c:"g"}],[/burrata/,"oeuf",{c:"w",C:"W"}],[/faisselle|mascarpone|ricotta|skyr|petit-suisse/,"pot",{y:"w",B:"l"}],
+ [/pate a pizza|pate feuilletee|pate sablee|feuille de brick/,"rouleau"],[/croissant/,"croissant"],[/brioche/,"patate",{t:"o",b:"O"}],
+ [/biscotte/,"biscuit",{B:"b"}],[/biscuits? aperitif/,"sachet",{w:"o",W:"O",b:"y"}],[/chips/,"sachet",{w:"y",W:"Y",b:"r"}],[/biscuit/,"biscuit"],
+ [/chocolat noir|chocolat au lait|^chocolat/,"tablette"],[/pepite/,"noix",{B:"k",b:"B"}],[/capres|pois casse/,"noix",{B:"G",b:"v"}],[/graines de courge/,"noix",{B:"G",b:"v"}],
+ [/poudre d'amande/,"paquet",{l:"t"}],[/amande/,"noix",{B:"b",b:"t"}],[/noisette/,"noix",{B:"B",b:"b"}],[/pistache/,"noix",{B:"G",b:"v"}],[/(^| )pignon/,"noix",{B:"t",b:"c"}],
+ [/coquillette|fusilli|lasagne|linguine|macaroni|penne|g?h?nocchi/,"pates"],[/boulgour|quinoa/,"riz",{w:"c",W:"C"}],[/polenta/,"riz",{w:"y",W:"Y"}],
+ [/^farine|maizena/,"paquet"],[/cacao/,"paquet",{w:"B",W:"k",l:"t"}],[/^cereale|muesli|flocons/,"paquet",{w:"y",W:"Y",l:"r"}],
+ [/sucre vanille|gelatine|levure/,"sachet"],[/cassonnade|sucre roux/,"paquet",{w:"t",W:"b",l:"B"}],[/^sucre/,"paquet",{l:"r"}],
+ [/confiture/,"pot",{y:"R"}],[/pate a tartiner|creme de marron|fond de veau/,"pot",{y:"B"}],[/pesto/,"pot",{y:"g"}],[/tapenade/,"pot",{y:"k"}],
+ [/harissa/,"pot",{y:"r"}],[/miso/,"pot",{y:"t"}],[/compote/,"pot",{y:"v"}],[/^pate$/,"pot",{y:"p"}],
+ [/ketchup|sriracha|tabasco/,"bouteille",{y:"r",Y:"R"}],[/^sirop/,"bouteille",{y:"O",Y:"B"}],[/extrait de vanille/,"bouteille",{y:"B",Y:"k"}],
+ [/mirin/,"bouteille",{y:"c",Y:"C"}],[/huile d'olive/,"bouteille",{y:"v",Y:"G"}],[/huile de sesame/,"bouteille",{y:"O",Y:"B"}],[/vinaigre/,"bouteille",{y:"u",Y:"U"}],
+ [/(^| )biere/,"bouteille",{y:"o",Y:"O"}],[/rhum/,"bouteille",{y:"O",Y:"B"}],[/porto/,"bouteille",{y:"U",Y:"k"}],[/eau plate/,"bouteille",{y:"l",Y:"L"}],
+ [/(^| )cola/,"canette"],[/limonade/,"canette",{r:"y",R:"Y"}],[/eau gazeuse/,"canette",{r:"l",R:"L"}],
+ [/cafe/,"tasse"],[/(^| )the( |$)/,"tasse",{B:"o"}],[/tisane/,"tasse",{B:"g"}],[/wrap/,"pain"],
  [/pommes? de terre|patate/,"patate"],[/chataigne/,"patate",{t:"b",b:"B"}],[/petit(s)? poi/,"noix",{B:"G",b:"g"}],[/pois chiche/,"noix",{B:"b",b:"t"}],
  [/lentille/,"noix",{B:"G",b:"v"}],[/olive/,"noix",{B:"k",b:"G"}],[/tomate/,"tomate"],[/poivron|piment/,"poivron"],[/betterave/,"tomate",{r:"u",R:"U"}],
  [/potimarron|courges?( |$)/,"tomate",{r:"o",R:"O"}],[/oignon|echalote/,"oignon"],[/(^| )ail( |$)/,"ail"],[/carotte/,"carotte"],[/aubergine/,"courgette",{g:"u",G:"U"}],
@@ -180,7 +259,10 @@ const ING_SPR=[
 const ICONES={tomate:"Tomate",poivron:"Poivron",oignon:"Oignon",ail:"Ail",carotte:"Carotte",courgette:"Courgette",champignon:"Champignon",patate:"Pomme de terre",
   salade:"Salade",herbe:"Herbes",pomme:"Pomme",citron:"Citron",avocat:"Avocat",oeuf:"Œuf",fromage:"Fromage",lait:"Lait",beurre:"Beurre",pot:"Pot",
   poulet:"Poulet",viande:"Viande",saucisse:"Saucisse",poisson:"Poisson",crevette:"Crevette",boite:"Conserve",pates:"Pâtes",riz:"Riz",pain:"Pain",
-  noix:"Noix, graines",bouteille:"Bouteille",sachet:"Sachet"};
+  noix:"Noix, graines",bouteille:"Bouteille",sachet:"Sachet",
+  banane:"Banane",fraise:"Fraise",cerise:"Cerise",raisin:"Raisin",orange:"Agrume",poire:"Poire",ananas:"Ananas",pasteque:"Pastèque",kiwi:"Kiwi",
+  brocoli:"Brocoli",asperge:"Asperge",mais:"Maïs",radis:"Radis",artichaut:"Artichaut",bacon:"Bacon",anneau:"Calamar",moule:"Moule",croissant:"Croissant",
+  biscuit:"Biscuit",paquet:"Paquet",tablette:"Chocolat",tasse:"Tasse",canette:"Canette",cube:"Cube",glace:"Glace",pizza:"Pizza",frites:"Frites",rouleau:"Pâte à dérouler"};
 const spriteCache=new Map();
 function drawGrid(rows, size, map={}, fill=[]){
   const cv=document.createElement("canvas"); cv.width=cv.height=size; const cx=cv.getContext("2d");
@@ -333,18 +415,32 @@ function ingImg(name, px=22, icone, mc, menage){
   return `<img class="px" src="${spriteCache.get(key)}" width="${px}" height="${px}" alt="">`;
 }
 function dishType(r){
-  const n=r.id, c=norm(r.categorie);
+  // id avec tirets (« poulet-roti ») : remis en mots, sinon les règles à espace ne marchaient pas
+  const n=norm((r.nom||"")+" "+String(r.id||"").replace(/-/g," ")), c=norm(r.categorie);
   if(/burger/.test(n)) return "burger";
-  if(/sandwich|croque/.test(n)) return "sandwich";
-  if(/wrap|rouleau|nems/.test(n)) return "wrap";
-  if(/gratin|grattin|croziflette|hachi|parmentier|dauphinois|ravioles|brandade|raviolis/.test(n)) return "gratin";
+  if(/sandwich|croque|banh mi/.test(n)) return "sandwich";
+  if(/wrap|rouleau|nems|banh cuon/.test(n)) return "wrap";
+  if(/pizza/.test(n)) return "pizza";
+  if(/gratin|grattin|croziflette|tartiflette|hachi|parmentier|dauphinois|ravioles|brandade|raviolis|lasagne|moussaka/.test(n)) return "gratin";
   if(/quiche|cake|tarte/.test(n)) return "tart";
-  if(/sauce|mayo|beurre blanc|marinade|bearnaise|houmous|tzatziki|fromage blanc|rillette/.test(n)||/sauce/.test(c)) return "sauce";
-  if(/salade|taboule|coleslaw|bowls/.test(n)) return "salad";
-  if(/soupe|pho|curry|chili|blanquette|bourguignon|pot-au-feu|couscous|petit sale|lentille|ratatouille/.test(n)) return "bowl";
-  if(/omelette|oeuf|chakchouka|poelee|rissol|champignon|epinard|fondue/.test(n)) return "pan";
-  if(/poulet roti|magret|filet mignon/.test(n)) return "roast";
+  if(/salade|taboule|coleslaw|bowls|tomate.mozza|betterave|peche au thon|concombre|avocat/.test(n)) return "salad";
+  if(/rillette/.test(n)) return "sauce";
+  if(/nouille|pad thai|mi xao|bo bun|ramen/.test(n)) return "noodles";
+  if(/(^| )pates?( |$)|orzo|gnocchi|mac n cheese|spaghetti|tagliatelle/.test(n)) return "pasta";
+  if(/sauce|mayo|beurre blanc|marinade|bearnaise|houmous|tzatziki|fromage blanc|rillette|guacamole/.test(n)||/sauce/.test(c)) return "sauce";
+  if(/soupe|pho|curry|chili|blanquette|bourguignon|pot.au.feu|couscous|petit sale|lentille|ratatouille|cassoulet|minestrone|dahl|rougail|osso/.test(n)) return "bowl";
+  if(/frite/.test(n)) return "frites";
+  if(/nugget|cordon bleu|milanaise|mozza frit|dauphine/.test(n)) return "pane";
+  if(/farci/.test(n)) return "farci";
+  if(/pickle/.test(n)) return "jar";
+  if(/galette|pains plats|crepe/.test(n)) return "galette";
+  if(/omelette|oeuf|chakchouka|poelee|rissol|champignon|epinard|fondue|chataigne|petits pois|mangue/.test(n)) return "pan";
+  if(/poulet roti|magret|confit de canard/.test(n)) return "roast";
   if(/poisson|saumon|morue/.test(n)) return "fish";
+  if(/chippo|merguez|saucisse|boudin|chipolata/.test(n)) return "saucisses";
+  if(/puree|aligot|ecrase/.test(n)) return "puree";
+  if(/porc|filet mignon|lapin|steak|marine|escalope|boeuf|veau/.test(n)) return "viande";
+  if(/riz|risotto|paela|paella|semoule|pilaf/.test(n)) return "rice";
   return "plate";
 }
 

@@ -24,7 +24,7 @@ import { ouvrirAtelier, fermerAtelier, atelierOuvert } from "./atelier.js";
 
 /* ---------- 1. Réglages de base ---------- */
 
-const VERSION = "1.2.3";
+const VERSION = "1.2.4";
 const NOM_APPLI = "app-foodix"; // dossier dans Firestore et début du nom des fichiers Excel
 
 // Les échelles de 1 à 3 et leurs libellés

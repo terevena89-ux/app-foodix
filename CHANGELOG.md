@@ -1,5 +1,12 @@
 # Foodix — journal des nouveautés
 
+## 1.2.4 — 2026-11-27
+Icônes Foodix manquantes.
+- Ingrédients : 28 nouveaux dessins (banane, fraise, cerise, raisin, agrume, poire, ananas, pastèque, kiwi, brocoli, asperge, maïs, radis, artichaut, bacon, calamar, moule, croissant, biscuit, paquet, chocolat, tasse, canette, cube, glace, pizza, frites, pâte à dérouler), aussi au choix à la main. Environ 190 ingrédients qui tombaient sur le sachet ont maintenant leur icône (dessins réutilisés ou recolorés).
+- Icônes fausses corrigées : huile d'olive, cordon bleu, jus de pomme, chocolat au lait, vinaigre de riz, sardines, haricot vert, noix de Saint-Jacques…
+- Recettes : 12 nouveaux plats (pâtes, nouilles, riz, purée, frites, viande en sauce, saucisses, pané, pizza, farci, bocal, galettes) ; 79 recettes quittent l'assiette par défaut.
+- Les recettes à identifiant avec tirets (Poulet rôti, Petit salé…) sont de nouveau reconnues.
+
 ## 1.2.3 — 2026-11-27
 Chantier CSS de l'audit (C1, F3, F4, F6, F7, G2, G3).
 - Cases à cocher : une seule taille partout (24 px ; 22 px en affichage compact, 20 px sur PC), et une zone de toucher plus large que le dessin.
